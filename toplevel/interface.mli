@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,6 +15,8 @@ type verbose = bool
 
 (** The type of coqtop goals *)
 type goal = {
+  goal_id : string;
+  (** Unique goal identifier *)
   goal_hyp : string list;
   (** List of hypotheses *)
   goal_ccl : string;
@@ -27,17 +29,23 @@ type evar = {
 }
 
 type status = {
-  status_path : string option;
+  status_path : string list;
   (** Module path of the current proof *)
   status_proofname : string option;
-  (** Current proof name. [None] if no proof is in progress *)
+  (** Current proof name. [None] if no focussed proof is in progress *)
+  status_allproofs : string list;
+  (** List of all pending proofs. Order is not significant *)
+  status_statenum : int;
+  (** A unique id describing the state of coqtop *)
+  status_proofnum : int;
+  (** An id describing the state of the current proof. *)
 }
 
 type goals = {
   fg_goals : goal list;
   (** List of the focussed goals *)
-  bg_goals : goal list;
-  (** List of the background goals *)
+  bg_goals : (goal list * goal list) list;
+  (** Zipper representing the unfocussed background goals *)
 }
 
 type hint = (string * string) list
@@ -62,6 +70,39 @@ type option_state = Goptionstyp.option_state = {
   (** The current value of the option *)
 }
 
+type search_constraint =
+(** Whether the name satisfies a regexp (uses Ocaml Str syntax) *)
+| Name_Pattern of string
+(** Whether the object type satisfies a pattern *)
+| Type_Pattern of string
+(** Whether some subtype of object type satisfies a pattern *)
+| SubType_Pattern of string
+(** Whether the object pertains to a module *)
+| In_Module of string list
+(** Bypass the Search blacklist *)
+| Include_Blacklist
+
+(** A list of search constraints; the boolean flag is set to [false] whenever
+    the flag should be negated. *)
+type search_flags = (search_constraint * bool) list
+
+(** A named object in Coq. [coq_object_qualid] is the shortest path defined for 
+    the user. [coq_object_prefix] is the missing part to recover the fully 
+    qualified name, i.e [fully_qualified = coq_object_prefix + coq_object_qualid].
+    [coq_object_object] is the actual content of the object. *)
+type 'a coq_object = {
+  coq_object_prefix : string list;
+  coq_object_qualid : string list;
+  coq_object_object : 'a;
+}
+
+type coq_info = {
+  coqtop_version : string;
+  protocol_version : string;
+  release_date : string;
+  compile_date : string;
+}
+
 (** * Coq answers to CoqIde *)
 
 type location = (int * int) option (* start and end of the error *)
@@ -69,19 +110,3 @@ type location = (int * int) option (* start and end of the error *)
 type 'a value =
   | Good of 'a
   | Fail of (location * string)
-
-(** * The structure that coqtop should implement *)
-
-type handler = {
-  interp : raw * verbose * string -> string;
-  rewind : int -> int;
-  goals : unit -> goals option;
-  evars : unit -> evar list option;
-  hints : unit -> (hint list * hint) option;
-  status : unit -> status;
-  get_options : unit -> (option_name * option_state) list;
-  set_options : (option_name * option_value) list -> unit;
-  inloadpath : string -> bool;
-  mkcases : string -> string list list;
-  handle_exn : exn -> location * string;
-}

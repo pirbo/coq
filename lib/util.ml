@@ -499,6 +499,9 @@ let list_map4 f l1 l2 l3 l4 =
   in
   map (l1,l2,l3,l4)
 
+let list_map_to_array f l =
+  Array.of_list (List.map f l)
+
 let rec list_smartfilter f l = match l with
     [] -> l
   | h::tl ->
@@ -708,6 +711,12 @@ let list_map_filter_i f =
 	match f i x with None -> l' | Some y -> y::l'
   in aux 0
 
+let list_filter_along f filter l =
+  snd (list_filter2 (fun b c -> f b) (filter,l))
+
+let list_filter_with filter l =
+  list_filter_along (fun x -> x) filter l
+
 let list_subset l1 l2 =
   let t2 = Hashtbl.create 151 in
   List.iter (fun x -> Hashtbl.add t2 x ()) l2;
@@ -741,7 +750,7 @@ let list_split_when p =
   split_when_loop []
 
 (* [list_split_by p l] splits [l] into two lists [(l1,l2)] such that elements of
-   [l1] satisfy [p] and elements of [l2] do not *)
+   [l1] satisfy [p] and elements of [l2] do not; order is preserved *)
 let list_split_by p =
   let rec split_by_loop = function
   | []   -> ([],[])
@@ -899,6 +908,14 @@ let rec list_cartesians_filter op init ll =
 (* Drop the last element of a list *)
 
 let rec list_drop_last = function [] -> assert false | hd :: [] -> [] | hd :: tl -> hd :: list_drop_last tl
+
+(* Factorize lists of pairs according to the left argument *)
+let rec list_factorize_left = function
+  | (a,b)::l ->
+      let al,l' = list_split_by (fun (a',b) -> a=a') l in
+      (a,(b::List.map snd al)) :: list_factorize_left l'
+  | [] ->
+      []
 
 (* Arrays *)
 
@@ -1216,6 +1233,12 @@ let array_rev_to_list a =
   let rec tolist i res =
     if i >= Array.length a then res else tolist (i+1) (a.(i) :: res) in
   tolist 0 []
+
+let array_filter_along f filter v =
+  Array.of_list (list_filter_along f filter (Array.to_list v))
+
+let array_filter_with filter v =
+  Array.of_list (list_filter_with filter (Array.to_list v))
 
 (* Stream *)
 

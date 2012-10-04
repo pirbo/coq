@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -264,6 +264,7 @@ let destMeta c = match kind_of_term c with
   | _ -> invalid_arg "destMeta"
 
 let isMeta c = match kind_of_term c with Meta _ -> true | _ -> false
+let isMetaOf mv c = match kind_of_term c with Meta mv' -> mv = mv' | _ -> false
 
 (* Destructs a variable *)
 let destVar c = match kind_of_term c with
@@ -322,6 +323,7 @@ let isCast c = match kind_of_term c with Cast _ -> true | _ -> false
 
 (* Tests if a de Bruijn index *)
 let isRel c = match kind_of_term c with Rel _ -> true | _ -> false
+let isRelN n c = match kind_of_term c with Rel n' -> n = n' | _ -> false
 
 (* Tests if a variable *)
 let isVar c = match kind_of_term c with Var _ -> true | _ -> false

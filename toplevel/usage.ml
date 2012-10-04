@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -32,6 +32,8 @@ let print_usage_channel co command =
 \n  -nois                  start with an empty state\
 \n  -outputstate f         write state in file f.coq\
 \n  -compat X.Y            provides compatibility support for Coq version X.Y\
+\n  -verbose-compat-notations  be warned when using compatibility notations\
+\n  -no-compat-notations   get an error when using compatibility notations\
 \n\
 \n  -load-ml-object f      load ML object file f\
 \n  -load-ml-source f      load ML file f\

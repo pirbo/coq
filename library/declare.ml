@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -116,7 +116,7 @@ let open_constant i ((sp,kn),_) =
     Nametab.push (Nametab.Exactly i) sp (ConstRef con)
 
 let exists_name id =
-  variable_exists id or Global.exists_label (label_of_id id)
+  variable_exists id or Global.exists_objlabel (label_of_id id)
 
 let check_exists sp =
   let id = basename sp in

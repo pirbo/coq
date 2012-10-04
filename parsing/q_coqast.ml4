@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -273,6 +273,11 @@ let mlexpr_of_message_token = function
   | Tacexpr.MsgInt n -> <:expr< Tacexpr.MsgInt $mlexpr_of_int n$ >>
   | Tacexpr.MsgIdent id -> <:expr< Tacexpr.MsgIdent $mlexpr_of_hyp id$ >>
 
+let mlexpr_of_debug = function
+  | Tacexpr.Off -> <:expr< Tacexpr.Off >>
+  | Tacexpr.Debug -> <:expr< Tacexpr.Debug >>
+  | Tacexpr.Info -> <:expr< Tacexpr.Info >>
+
 let rec mlexpr_of_atomic_tactic = function
   (* Basic tactics *)
   | Tacexpr.TacIntroPattern pl ->
@@ -338,11 +343,13 @@ let rec mlexpr_of_atomic_tactic = function
                 (mlexpr_of_pair mlexpr_of_occ_constr mlexpr_of_name) cl$ >>
   | Tacexpr.TacGeneralizeDep c ->
       <:expr< Tacexpr.TacGeneralizeDep $mlexpr_of_constr c$ >>
-  | Tacexpr.TacLetTac (na,c,cl,b) ->
+  | Tacexpr.TacLetTac (na,c,cl,b,e) ->
       let na = mlexpr_of_name na in
       let cl = mlexpr_of_clause_pattern cl in
       <:expr< Tacexpr.TacLetTac $na$ $mlexpr_of_constr c$ $cl$
-	      $mlexpr_of_bool b$ >>
+	      $mlexpr_of_bool b$
+	      (mlexpr_of_option (mlexpr_of_located mlexpr_of_intro_pattern) e)
+      >>
 
   (* Derived basic tactics *)
   | Tacexpr.TacSimpleInductionDestruct (isrec,h) ->
@@ -350,13 +357,15 @@ let rec mlexpr_of_atomic_tactic = function
                   $mlexpr_of_quantified_hypothesis h$ >>
   | Tacexpr.TacInductionDestruct (isrec,ev,l) ->
       <:expr< Tacexpr.TacInductionDestruct $mlexpr_of_bool isrec$ $mlexpr_of_bool ev$
-	$mlexpr_of_pair (mlexpr_of_list (mlexpr_of_triple
-	  (mlexpr_of_list mlexpr_of_induction_arg)
-	  (mlexpr_of_option mlexpr_of_constr_with_binding)
-	  (mlexpr_of_pair
-	    (mlexpr_of_option (mlexpr_of_located mlexpr_of_intro_pattern))
-	    (mlexpr_of_option (mlexpr_of_located mlexpr_of_intro_pattern)))))
-	  (mlexpr_of_option mlexpr_of_clause) l$ >>
+	$mlexpr_of_triple
+	(mlexpr_of_list
+	   (mlexpr_of_pair
+	      mlexpr_of_induction_arg
+	      (mlexpr_of_pair
+		 (mlexpr_of_option (mlexpr_of_located mlexpr_of_intro_pattern))
+		 (mlexpr_of_option (mlexpr_of_located mlexpr_of_intro_pattern)))))
+	(mlexpr_of_option mlexpr_of_constr_with_binding)
+	(mlexpr_of_option mlexpr_of_clause) l$ >>
 
   (* Context management *)
   | Tacexpr.TacClear (b,l) ->
@@ -399,15 +408,17 @@ let rec mlexpr_of_atomic_tactic = function
   | Tacexpr.TacTransitivity c -> <:expr< Tacexpr.TacTransitivity $mlexpr_of_option mlexpr_of_constr c$ >>
 
   (* Automation tactics *)
-  | Tacexpr.TacAuto (n,lems,l) ->
+  | Tacexpr.TacAuto (debug,n,lems,l) ->
+      let d = mlexpr_of_debug debug in
       let n = mlexpr_of_option (mlexpr_of_or_var mlexpr_of_int) n in
       let lems = mlexpr_of_list mlexpr_of_constr lems in
       let l = mlexpr_of_option (mlexpr_of_list mlexpr_of_string) l in
-      <:expr< Tacexpr.TacAuto $n$ $lems$ $l$ >>
-  | Tacexpr.TacTrivial (lems,l) ->
+      <:expr< Tacexpr.TacAuto $d$ $n$ $lems$ $l$ >>
+  | Tacexpr.TacTrivial (debug,lems,l) ->
+      let d = mlexpr_of_debug debug in
       let l = mlexpr_of_option (mlexpr_of_list mlexpr_of_string) l in
       let lems = mlexpr_of_list mlexpr_of_constr lems in
-      <:expr< Tacexpr.TacTrivial $lems$ $l$ >>
+      <:expr< Tacexpr.TacTrivial $d$ $lems$ $l$ >>
 
   | _ -> failwith "Quotation of atomic tactic expressions: TODO"
 

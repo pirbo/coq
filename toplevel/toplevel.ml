@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -367,9 +367,6 @@ let do_vernac () =
 
 let rec loop () =
   Sys.catch_break true;
-  (* ensure we have a command separator object (DOT) so that the first
-     command can be reseted. *)
-  Lib.mark_end_of_command();
   try
     reset_input_buffer stdin top_buffer;
     while true do do_vernac() done

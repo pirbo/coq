@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -72,9 +72,59 @@ let show_node () =
       could, possibly, be cleaned away. (Feb. 2010) *)
   ()
 
+(* indentation code for Show Script, initially contributed
+   by D. de Rauglaudre *)
+
+let indent_script_item ((ng1,ngl1),nl,beginend,ppl) (cmd,ng) =
+  (* ng1 : number of goals remaining at the current level (before cmd)
+     ngl1 : stack of previous levels with their remaining goals
+     ng : number of goals after the execution of cmd
+     beginend : special indentation stack for { } *)
+  let ngprev = List.fold_left (+) ng1 ngl1 in
+  let new_ngl =
+    if ng > ngprev then
+      (* We've branched *)
+      (ng - ngprev + 1, ng1 - 1 :: ngl1)
+    else if ng < ngprev then
+      (* A subgoal have been solved. Let's compute the new current level
+	 by discarding all levels with 0 remaining goals. *)
+      let _ = assert (ng = ngprev - 1) in
+      let rec loop = function
+	| (0, ng2::ngl2) -> loop (ng2,ngl2)
+	| p -> p
+      in loop (ng1-1, ngl1)
+    else
+      (* Standard case, same goal number as before *)
+      (ng1, ngl1)
+  in
+  (* When a subgoal have been solved, separate this block by an empty line *)
+  let new_nl = (ng < ngprev)
+  in
+  (* Indentation depth *)
+  let ind = List.length ngl1
+  in
+  (* Some special handling of bullets and { }, to get a nicer display *)
+  let pred n = max 0 (n-1) in
+  let ind, nl, new_beginend = match cmd with
+    | VernacSubproof _ -> pred ind, nl, (pred ind)::beginend
+    | VernacEndSubproof -> List.hd beginend, false, List.tl beginend
+    | VernacBullet _ -> pred ind, nl, beginend
+    | _ -> ind, nl, beginend
+  in
+  let pp =
+    (if nl then fnl () else mt ()) ++
+    (hov (ind+1) (str (String.make ind ' ') ++ Ppvernac.pr_vernac cmd))
+  in
+  (new_ngl, new_nl, new_beginend, pp :: ppl)
+
 let show_script () =
-  (* spiwack: show_script is currently not working *)
-  ()
+  let prf = Pfedit.get_current_proof_name () in
+  let cmds = Backtrack.get_script prf in
+  let _,_,_,indented_cmds =
+    List.fold_left indent_script_item ((1,[]),false,[],[]) cmds
+  in
+  let indented_cmds = List.rev (indented_cmds) in
+  msgnl (v 0 (Util.prlist_with_sep Pp.fnl (fun x -> x) indented_cmds))
 
 let show_thesis () =
      msgnl (anomaly "TODO" )
@@ -91,7 +141,16 @@ let show_prooftree () =
   (* Spiwack: proof tree is currently not working *)
   ()
 
-let print_subgoals () = if_verbose (fun () -> msg (pr_open_subgoals ())) ()
+let enable_goal_printing = ref true
+
+let print_subgoals () =
+  if !enable_goal_printing && is_verbose ()
+  then msg (pr_open_subgoals ())
+
+let try_print_subgoals () =
+  Pp.flush_all();
+  try print_subgoals () with Proof_global.NoCurrentProof | UserError _ -> ()
+
 
   (* Simulate the Intro(s) tactic *)
 
@@ -149,7 +208,7 @@ let show_match id =
     str "| " ++ hov 1 (prlist_with_sep spc str l) ++ str " =>"
   in
   msg (v 1 (str "match # with" ++ fnl () ++
-	    prlist_with_sep fnl pr_branch patterns ++ fnl ()))
+	    prlist_with_sep fnl pr_branch patterns ++ fnl () ++ str "end" ++ fnl ()))
 
 (* "Print" commands *)
 
@@ -301,6 +360,11 @@ let smart_global r =
     Dumpglob.add_glob (Genarg.loc_of_or_by_notation loc_of_reference r) gr;
     gr
 
+let dump_global r =
+  try
+    let gr = Smartlocate.smart_global r in
+    Dumpglob.add_glob (Genarg.loc_of_or_by_notation loc_of_reference r) gr
+  with _ -> ()
 (**********)
 (* Syntax *)
 
@@ -341,7 +405,7 @@ let vernac_definition (local,k) (loc,id as lid) def hook =
           | None -> None
           | Some r ->
 	      let (evc,env)= get_current_context () in
- 		Some (interp_redexp env evc r) in
+ 		Some (snd (interp_redexp env evc r)) in
 	let ce,imps = interp_definition bl red_option c typ_opt in
 	declare_definition id (local,k) ce imps hook)
 
@@ -357,14 +421,21 @@ let vernac_start_proof kind l lettop hook =
 	(str "Let declarations can only be used in proof editing mode.");
   start_proof_and_print (Global, Proof kind) l hook
 
+let qed_display_script = ref true
+
 let vernac_end_proof = function
-  | Admitted -> admit ()
+  | Admitted ->
+    Backtrack.mark_unreachable [Pfedit.get_current_proof_name ()];
+    admit ()
   | Proved (is_opaque,idopt) ->
-    if not !Flags.print_emacs then if_verbose show_script ();
-    match idopt with
+    let prf = Pfedit.get_current_proof_name () in
+    if is_verbose () && !qed_display_script then (show_script (); msg (fnl()));
+    begin match idopt with
     | None -> save_named is_opaque
     | Some ((_,id),None) -> save_anonymous is_opaque id
     | Some ((_,id),Some kind) -> save_anonymous_with_strength kind is_opaque id
+    end;
+    Backtrack.mark_unreachable [prf]
 
   (* A stupid macro that should be replaced by ``Exact c. Save.'' all along
      the theories [??] *)
@@ -372,8 +443,10 @@ let vernac_end_proof = function
 let vernac_exact_proof c =
   (* spiwack: for simplicity I do not enforce that "Proof proof_term" is
      called only at the begining of a proof. *)
-    by (Tactics.exact_proof c);
-      save_named true
+  let prf = Pfedit.get_current_proof_name () in
+  by (Tactics.exact_proof c);
+  save_named true;
+  Backtrack.mark_unreachable [prf]
 
 let vernac_assumption kind l nl=
   let global = fst kind = Global in
@@ -441,9 +514,21 @@ let vernac_cofixpoint l =
     List.iter (fun ((lid, _, _, _), _) -> Dumpglob.dump_definition lid false "def") l;
   do_cofixpoint l
 
-let vernac_scheme = Indschemes.do_scheme
+let vernac_scheme l =
+  if Dumpglob.dump () then
+    List.iter (fun (lid, s) ->
+	       Option.iter (fun lid -> Dumpglob.dump_definition lid false "def") lid;
+	       match s with
+	       | InductionScheme (_, r, _)
+	       | CaseScheme (_, r, _) 
+	       | EqualityScheme r -> dump_global r) l;
+  Indschemes.do_scheme l
 
-let vernac_combined_scheme = Indschemes.do_combined_scheme
+let vernac_combined_scheme lid l =
+  if Dumpglob.dump () then
+    (Dumpglob.dump_definition lid false "def";
+     List.iter (fun lid -> dump_global (Genarg.AN (Ident lid))) l);
+ Indschemes.do_combined_scheme lid l
 
 (**********************)
 (* Modules            *)
@@ -723,28 +808,14 @@ let vernac_chdir = function
 (********************)
 (* State management *)
 
-let abort_refine f x =
-  if Pfedit.refining() then delete_all_proofs ();
-  f x
-  (* used to be: error "Must save or abort current goal first" *)
+let vernac_write_state file =
+  Pfedit.delete_all_proofs ();
+  States.extern_state file
 
-let vernac_write_state file = abort_refine States.extern_state file
+let vernac_restore_state file =
+  Pfedit.delete_all_proofs ();
+  States.intern_state file
 
-let vernac_restore_state file = abort_refine States.intern_state file
-
-
-(*************)
-(* Resetting *)
-
-let vernac_reset_name id = abort_refine Lib.reset_name id
-
-let vernac_reset_initial () = abort_refine Lib.reset_initial ()
-
-let vernac_back n = Lib.back n
-
-let vernac_backto n = Lib.reset_label n
-
-(* see also [vernac_backtrack] which combines undoing and resetting *)
 (************)
 (* Commands *)
 
@@ -1174,6 +1245,7 @@ let vernac_check_may_eval redexp glopt rc =
   let module P = Pretype_errors in
   let (sigma, env) = get_current_context_of_args glopt in
   let sigma', c = interp_open_constr sigma env rc in
+  let sigma' = Evarconv.consider_remaining_unif_problems env sigma' in
   let j =
     try
       Evarutil.check_evars env sigma sigma' c;
@@ -1186,13 +1258,15 @@ let vernac_check_may_eval redexp glopt rc =
 	if !pcoq <> None then (Option.get !pcoq).print_check env j
 	else msg (print_judgment env j)
     | Some r ->
-	let redfun = fst (reduction_of_red_expr (interp_redexp env sigma' r)) in
+        Tacinterp.dump_glob_red_expr r;
+        let (sigma',r_interp) = interp_redexp env sigma' r in
+	let redfun = fst (reduction_of_red_expr r_interp) in
 	if !pcoq <> None
 	then (Option.get !pcoq).print_eval redfun env sigma' rc j
 	else msg (print_eval redfun env sigma' rc j)
 
 let vernac_declare_reduction locality s r =
-  declare_red_expr locality s (interp_redexp (Global.env()) Evd.empty r)
+  declare_red_expr locality s (snd (interp_redexp (Global.env()) Evd.empty r))
 
   (* The same but avoiding the current goal context if any *)
 let vernac_global_check c =
@@ -1243,8 +1317,10 @@ let vernac_print = function
       pp (Notation.pr_scope (Constrextern.without_symbols pr_lglob_constr) s)
   | PrintVisibility s ->
       pp (Notation.pr_visibility (Constrextern.without_symbols pr_lglob_constr) s)
-  | PrintAbout qid -> msg (print_about qid)
-  | PrintImplicit qid -> msg (print_impargs qid)
+  | PrintAbout qid -> 
+    msg (print_about qid)
+  | PrintImplicit qid -> 
+    dump_global qid; msg (print_impargs qid)
   | PrintAssumptions (o,r) ->
       (* Prints all the axioms and section variables used by a term *)
       let cstr = constr_of_global (smart_global r) in
@@ -1310,15 +1386,87 @@ let vernac_locate = function
   | LocateTactic qid -> print_located_tactic qid
   | LocateFile f -> locate_file f
 
+(****************)
+(* Backtracking *)
+
+(** NB: these commands are now forbidden in non-interactive use,
+    e.g. inside VernacLoad, VernacList, ... *)
+
+let vernac_backto lbl =
+  try
+    let lbl' = Backtrack.backto lbl in
+    if lbl <> lbl' then
+      Pp.msg_warning
+	(str "Actually back to state "++ Pp.int lbl' ++ str ".");
+    try_print_subgoals ()
+  with Backtrack.Invalid -> error "Invalid backtrack."
+
+let vernac_back n =
+  try
+    let extra = Backtrack.back n in
+    if extra <> 0 then
+      Pp.msg_warning
+	(str "Actually back by " ++ Pp.int (extra+n) ++ str " steps.");
+    try_print_subgoals ()
+  with Backtrack.Invalid -> error "Invalid backtrack."
+
+let vernac_reset_name id =
+  try
+    let globalized =
+      try
+	let gr = Smartlocate.global_with_alias (Ident id) in
+	Dumpglob.add_glob (fst id) gr;
+	true
+      with _ -> false in
+
+    if not globalized then begin
+       try begin match Lib.find_opening_node (snd id) with
+          | Lib.OpenedSection _ -> Dumpglob.dump_reference (fst id)
+              (string_of_dirpath (Lib.current_dirpath true)) "<>" "sec";
+          (* Might be nice to implement module cases, too.... *)
+          | _ -> ()
+       end with UserError _ -> ()
+    end;
+
+    if Backtrack.is_active () then
+      (Backtrack.reset_name id; try_print_subgoals ())
+    else
+      (* When compiling files, Reset is now allowed again
+	 as asked by A. Chlipala. we emulate a simple reset,
+	 that discards all proofs. *)
+      let lbl = Lib.label_before_name id in
+      Pfedit.delete_all_proofs ();
+      Pp.msg_warning (str "Reset command occurred in non-interactive mode.");
+      Lib.reset_label lbl
+  with Backtrack.Invalid | Not_found -> error "Invalid Reset."
+
+
+let vernac_reset_initial () =
+  if Backtrack.is_active () then
+    Backtrack.reset_initial ()
+  else begin
+    Pp.msg_warning (str "Reset command occurred in non-interactive mode.");
+    Lib.reset_label Lib.first_command_label
+  end
+
+(* For compatibility with ProofGeneral: *)
+
+let vernac_backtrack snum pnum naborts =
+  Backtrack.backtrack snum pnum naborts;
+  try_print_subgoals ()
+
+
 (********************)
 (* Proof management *)
 
 let vernac_abort = function
   | None ->
+      Backtrack.mark_unreachable [Pfedit.get_current_proof_name ()];
       delete_current_proof ();
       if_verbose message "Current goal aborted";
       if !pcoq <> None then (Option.get !pcoq).abort ""
   | Some id ->
+      Backtrack.mark_unreachable [snd id];
       delete_proof id;
       let s = string_of_id (snd id) in
       if_verbose message ("Goal "^s^" aborted");
@@ -1326,48 +1474,47 @@ let vernac_abort = function
 
 let vernac_abort_all () =
   if refining() then begin
+    Backtrack.mark_unreachable (Pfedit.get_all_proof_names ());
     delete_all_proofs ();
     message "Current goals aborted"
   end else
     error "No proof-editing in progress."
 
-let vernac_restart () = restart_proof(); print_subgoals ()
-
-  (* Proof switching *)
-
-let vernac_suspend = suspend_proof
-
-let vernac_resume = function
-  | None -> resume_last_proof ()
-  | Some id -> resume_proof id
+let vernac_restart () =
+  Backtrack.mark_unreachable [Pfedit.get_current_proof_name ()];
+  restart_proof(); print_subgoals ()
 
 let vernac_undo n =
-  undo n;
+  let d = Pfedit.current_proof_depth () - n in
+  Backtrack.mark_unreachable ~after:d [Pfedit.get_current_proof_name ()];
+  Pfedit.undo n; print_subgoals ()
+
+let vernac_undoto n =
+  Backtrack.mark_unreachable ~after:n [Pfedit.get_current_proof_name ()];
+  Pfedit.undo_todepth n;
   print_subgoals ()
-
-(* backtrack with [naborts] abort, then undo_todepth to [pnum], then
-   back-to state number [snum]. This allows to backtrack proofs and
-   state with one command (easier for proofgeneral). *)
-let vernac_backtrack snum pnum naborts =
-  for i = 1 to naborts do vernac_abort None done;
-  undo_todepth pnum;
-  vernac_backto snum;
-  Pp.flush_all();
-  (* there may be no proof in progress, even if no abort *)
-  (try print_subgoals () with Proof_global.NoCurrentProof | UserError _ -> ())
-
 
 let vernac_focus gln =
   let p = Proof_global.give_me_the_proof () in
-  match gln with
-    | None -> Proof.focus focus_command_cond () 1 p; print_subgoals ()
-    | Some n -> Proof.focus focus_command_cond () n p; print_subgoals ()
-
+  let n = match gln with None -> 1 | Some n -> n in
+  if n = 0 then
+    Util.error "Invalid goal number: 0. Goal numbering starts with 1."
+  else
+    Proof.focus focus_command_cond () n p; print_subgoals ()
 
   (* Unfocuses one step in the focus stack. *)
 let vernac_unfocus () =
   let p = Proof_global.give_me_the_proof () in
   Proof.unfocus command_focus p; print_subgoals ()
+
+(* Checks that a proof is fully unfocused. Raises an error if not. *)
+let vernac_unfocused () =
+  let p = Proof_global.give_me_the_proof () in
+  if Proof.unfocused p then
+    msg (str"The proof is indeed fully unfocused.")
+  else
+    error "The proof is not fully unfocused."
+
 
 (* BeginSubproof / EndSubproof. 
     BeginSubproof (vernac_subproof) focuses on the first goal, or the goal
@@ -1507,7 +1654,6 @@ let interp c = match c with
   | VernacRestoreState s -> vernac_restore_state s
 
   (* Resetting *)
-  | VernacRemoveName id -> Lib.remove_name id
   | VernacResetName id -> vernac_reset_name id
   | VernacResetInitial -> vernac_reset_initial ()
   | VernacBack n -> vernac_back n
@@ -1544,23 +1690,22 @@ let interp c = match c with
   | VernacAbort id -> vernac_abort id
   | VernacAbortAll -> vernac_abort_all ()
   | VernacRestart -> vernac_restart ()
-  | VernacSuspend -> vernac_suspend ()
-  | VernacResume id -> vernac_resume id
   | VernacUndo n -> vernac_undo n
-  | VernacUndoTo n -> undo_todepth n
+  | VernacUndoTo n -> vernac_undoto n
   | VernacBacktrack (snum,pnum,naborts) -> vernac_backtrack snum pnum naborts
   | VernacFocus n -> vernac_focus n
   | VernacUnfocus -> vernac_unfocus ()
+  | VernacUnfocused -> vernac_unfocused ()
   | VernacBullet b -> vernac_bullet b
   | VernacSubproof n -> vernac_subproof n
   | VernacEndSubproof -> vernac_end_subproof ()
   | VernacShow s -> vernac_show s
   | VernacCheckGuard -> vernac_check_guard ()
-  | VernacProof (None, None) -> ()
-  | VernacProof (Some tac, None) -> vernac_set_end_tac tac
-  | VernacProof (None, Some l) -> vernac_set_used_variables l
+  | VernacProof (None, None) -> print_subgoals ()
+  | VernacProof (Some tac, None) -> vernac_set_end_tac tac ; print_subgoals ()
+  | VernacProof (None, Some l) -> vernac_set_used_variables l ; print_subgoals ()
   | VernacProof (Some tac, Some l) -> 
-      vernac_set_end_tac tac; vernac_set_used_variables l
+      vernac_set_end_tac tac; vernac_set_used_variables l ; print_subgoals ()
   | VernacProofMode mn -> Proof_global.set_proof_mode mn
   (* Toplevel control *)
   | VernacToplevelControl e -> raise e

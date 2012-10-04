@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -220,9 +220,9 @@ let rec printable_body dir =
     state after the printing *)
 
 let print_modexpr' env mp mexpr =
-  States.with_state_protection (print_modexpr env mp []) mexpr
+  States.with_state_protection (fun e -> eval_ppcmds (print_modexpr env mp [] e)) mexpr
 let print_modtype' env mp mty =
-  States.with_state_protection (print_modtype env mp []) mty
+  States.with_state_protection (fun e -> eval_ppcmds (print_modtype env mp [] e)) mty
 
 let print_module' env mp with_body mb =
   let name = print_modpath [] mp in

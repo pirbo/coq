@@ -1022,7 +1022,7 @@ class configuration_box (tt : GData.tooltips) conf_struct =
 
   let rec make_tree iter conf_struct =
     (* box is not shown at first *)
-    let box = GPack.vbox ~packing:menu_box#add ~show:false () in
+    let box = GPack.vbox ~packing:(menu_box#pack ~expand:true) ~show:false () in
     let new_iter = match iter with
     | None -> tree#append ()
     | Some parent -> tree#append ~parent ()
@@ -1136,12 +1136,12 @@ let tabbed_box conf_struct_list buttons tooltips =
    to configure the various parameters. *)
 let edit ?(with_apply=true)
     ?(apply=(fun () -> ()))
-    title ?(width=400) ?(height=400)
+    title ?width ?height
     conf_struct =
   let dialog = GWindow.dialog
     ~position:`CENTER
     ~modal: true ~title: title
-    ~height ~width
+    ?height ?width
     ()
   in
   let tooltips = GData.tooltips () in

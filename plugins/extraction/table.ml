@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -842,6 +842,7 @@ let extract_constant_inline inline r ids s =
 let extract_inductive r s l optstr =
   check_inside_section ();
   let g = Smartlocate.global_with_alias r in
+  Dumpglob.add_glob (loc_of_reference r) g;
   match g with
     | IndRef ((kn,i) as ip) ->
 	let mib = Global.lookup_mind kn in

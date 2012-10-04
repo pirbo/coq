@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -119,13 +119,6 @@ let compile_files () =
 	   Vernac.compile v f)
       (List.rev !compile_list)
 
-let set_compat_version = function
-  | "8.3" -> compat_version := Some V8_3
-  | "8.2" -> compat_version := Some V8_2
-  | "8.1" -> warning "Compatibility with version 8.1 not supported."
-  | "8.0" -> warning "Compatibility with version 8.0 not supported."
-  | s -> error ("Unknown compatibility version \""^s^"\".")
-
 (*s options for the virtual machine *)
 
 let boxed_val = ref false
@@ -151,6 +144,9 @@ let warning s = msg_warning (str s)
 
 let ide_slave = ref false
 let filter_opts = ref false
+
+let verb_compat_ntn = ref false
+let no_compat_ntn = ref false
 
 let parse_args arglist =
   let glob_opt = ref false in
@@ -243,14 +239,21 @@ let parse_args arglist =
 
     | "-debug" :: rem -> set_debug (); parse rem
 
-    | "-compat" :: v :: rem -> set_compat_version v; parse rem
+    | "-compat" :: v :: rem ->
+        Flags.compat_version := get_compat_version v; parse rem
     | "-compat" :: []       -> usage ()
 
+    | "-verbose-compat-notations" :: rem -> verb_compat_ntn := true; parse rem
+    | "-no-compat-notations" :: rem -> no_compat_ntn := true; parse rem
+
     | "-vm" :: rem -> use_vm := true; parse rem
-    | "-emacs" :: rem -> Flags.print_emacs := true; Pp.make_pp_emacs(); parse rem
+    | "-emacs" :: rem ->
+	Flags.print_emacs := true; Pp.make_pp_emacs();
+	Vernacentries.qed_display_script := false;
+	parse rem
     | "-emacs-U" :: rem ->
 	warning "Obsolete option \"-emacs-U\", use -emacs instead.";	
-	Flags.print_emacs := true; Pp.make_pp_emacs(); parse rem
+	parse ("-emacs" :: rem)
 
     | "-unicode" :: rem -> add_require "Utf8_core"; parse rem
 
@@ -329,6 +332,9 @@ let init arglist =
       Mltop.init_known_plugins ();
       set_vm_opt ();
       engage ();
+      (* Be careful to set these variables after the inputstate *)
+      Syntax_def.set_verbose_compat_notations !verb_compat_ntn;
+      Syntax_def.set_compat_notations (not !no_compat_ntn);
       if (not !batch_mode|| !compile_list=[]) && Global.env_is_empty() then
         Option.iter Declaremods.start_library !toplevel_name;
       init_library_roots ();
@@ -350,7 +356,8 @@ let init arglist =
        Pp.ppnl (with_option raw_print Prettyp.print_full_pure_context ());
      Profile.print_profile ();
      exit 0);
-  Lib.declare_initial_state ()
+  (* We initialize the command history stack with a first entry *)
+  Backtrack.mark_command Vernacexpr.VernacNop
 
 let init_toplevel = init
 

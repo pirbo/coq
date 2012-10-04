@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -28,8 +28,6 @@ let image = ref ""
 
 (* coqc options *)
 
-let specification = ref false
-let keep = ref false
 let verbose = ref false
 
 (* Verifies that a string starts by a letter and do not contain
@@ -104,28 +102,21 @@ let parse_args () =
   let rec parse (cfiles,args) = function
     | [] ->
 	List.rev cfiles, List.rev args
-    | "-i" :: rem ->
-	specification := true ; parse (cfiles,args) rem
-    | "-t" :: rem ->
-	keep := true ; parse (cfiles,args) rem
     | ("-verbose" | "--verbose") :: rem ->
 	verbose := true ; parse (cfiles,args) rem
-    | "-boot" :: rem ->
-	Flags.boot := true;
-	parse (cfiles, "-boot"::args) rem
-    | "-byte" :: rem ->
-	binary := "coqtop.byte"; parse (cfiles,args) rem
-    | "-opt" :: rem ->
-	binary := "coqtop.opt"; parse (cfiles,args) rem
     | "-image" :: f :: rem ->
 	image := f; parse (cfiles,args) rem
     | "-image" :: [] ->
 	usage ()
+    | "-byte" :: rem ->
+       binary := "coqtop.byte"; parse (cfiles,args) rem
+    | "-opt" :: rem ->
+       binary := "coqtop.opt"; parse (cfiles,args) rem
     | "-libdir" :: _ :: rem ->
-        print_string "Warning: option -libdir deprecated\n"; flush stdout;
+        print_string "Warning: option -libdir deprecated and ignored\n"; flush stdout;
         parse (cfiles,args) rem
     | ("-db"|"-debugger") :: rem ->
-        print_string "Warning: option -db/-debugger deprecated\n";flush stdout;
+        print_string "Warning: option -db/-debugger deprecated and ignored\n";flush stdout;
         parse (cfiles,args) rem
 
     | ("-?"|"-h"|"-H"|"-help"|"--help") :: _ -> usage ()
@@ -150,7 +141,7 @@ let parse_args () =
     | "-R" :: s :: "-as" :: [] -> usage ()
     | "-R" :: s :: t :: rem -> parse (cfiles,t::s::"-R"::args) rem
 
-    | ("-notactics"|"-debug"|"-nolib"
+    | ("-notactics"|"-debug"|"-nolib"|"-boot"
       |"-batch"|"-nois"|"-noglob"|"-no-glob"
       |"-q"|"-full"|"-profile"|"-just-parsing"|"-echo" |"-unsafe"|"-quiet"
       |"-silent"|"-m"|"-xml"|"-v7"|"-v8"|"-beautify"|"-strict-implicit"

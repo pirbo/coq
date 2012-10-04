@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -81,8 +81,8 @@ let typecheck_params_and_fields id t ps nots fs =
   let newps = Evarutil.nf_rel_context_evar sigma newps in
   let newfs = Evarutil.nf_rel_context_evar sigma newfs in
   let ce t = Evarutil.check_evars env0 Evd.empty evars t in
-    List.iter (fun (n, b, t) -> Option.iter ce b; ce t) newps;
-    List.iter (fun (n, b, t) -> Option.iter ce b; ce t) newfs;
+    List.iter (fun (n, b, t) -> Option.iter ce b; ce t) (List.rev newps);
+    List.iter (fun (n, b, t) -> Option.iter ce b; ce t) (List.rev newfs);
     imps, newps, impls, newfs
 
 let degenerate_decl (na,b,t) =
@@ -263,7 +263,7 @@ let declare_structure finite infer id idbuild paramimpls params arity fieldimpls
   begin match  finite with
   | BiFinite ->
       if Termops.dependent (mkRel (nparams+1)) (it_mkProd_or_LetIn mkProp fields) then
-	error "Records declared with the keyword Record or Structure cannot be recursive. Maybe you meant to define an Inductive or CoInductive record."
+	error "Records declared with the keyword Record or Structure cannot be recursive. You can, however, define recursive records using the Inductive or CoInductive command."
   | _ -> ()
   end;
   let mie =

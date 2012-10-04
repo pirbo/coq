@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -414,10 +414,6 @@ let tclEVARS sigma gls = tclIDTAC {gls with sigma=sigma}
 
 let pp_info = ref (fun _ _ _ -> assert false)
 let set_info_printer f = pp_info := f
-
-let tclINFO (tac : tactic) gls =
-  msgnl (hov 0 (str "Warning: info is currently not working"));
-  tac gls
 
 (* Check that holes in arguments have been resolved *)
 

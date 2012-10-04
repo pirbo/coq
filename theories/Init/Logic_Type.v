@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -44,7 +44,7 @@ Section identity_is_a_congruence.
 
  Lemma not_identity_sym : notT (identity x y) -> notT (identity y x).
  Proof.
-  red in |- *; intros H H'; apply H; destruct H'; trivial.
+  red; intros H H'; apply H; destruct H'; trivial.
  Qed.
 
 End identity_is_a_congruence.
@@ -66,7 +66,7 @@ Defined.
 
 Hint Immediate identity_sym not_identity_sym: core v62.
 
-Notation refl_id := identity_refl (only parsing).
-Notation sym_id := identity_sym (only parsing).
-Notation trans_id := identity_trans (only parsing).
-Notation sym_not_id := not_identity_sym (only parsing).
+Notation refl_id := identity_refl (compat "8.3").
+Notation sym_id := identity_sym (compat "8.3").
+Notation trans_id := identity_trans (compat "8.3").
+Notation sym_not_id := not_identity_sym (compat "8.3").

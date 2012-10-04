@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -50,7 +50,7 @@ Definition swap_sumbool {A B} (x : { A } + { B }) : { B } + { A } :=
 
 Require Import Coq.Program.Program.
 
-Open Local Scope program_scope.
+Local Open Scope program_scope.
 
 (** Invert the branches. *)
 

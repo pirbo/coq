@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -67,8 +67,8 @@ let interp env isevars c tycon =
   let _ = isevars := Evarutil.nf_evar_map !isevars in
   let evd = consider_remaining_unif_problems env !isevars in
 (*   let unevd = undefined_evars evd in *)
-  let unevd' = Typeclasses.resolve_typeclasses ~onlyargs:true ~split:true ~fail:true env evd in
-  let unevd' = Typeclasses.resolve_typeclasses ~onlyargs:false ~split:true ~fail:false env unevd' in
+  let unevd' = Typeclasses.resolve_typeclasses ~filter:Subtac_utils.no_goals_or_obligations ~split:true ~fail:true env evd in
+  let unevd' = Typeclasses.resolve_typeclasses ~filter:Typeclasses.all_evars ~split:true ~fail:false env unevd' in
   let evm =  unevd' in
     isevars := unevd';
     nf_evar evm j.uj_val, nf_evar evm j.uj_type

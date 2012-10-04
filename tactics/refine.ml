@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -388,7 +388,7 @@ let rec tcc_aux subst (TH (c,mm,sgp) as _th) gl =
 
 let refine (evd,c) gl =
   let sigma = project gl in
-  let evd = Typeclasses.resolve_typeclasses ~onlyargs:true (pf_env gl) evd in
+  let evd = Typeclasses.resolve_typeclasses ~filter:Typeclasses.no_goals (pf_env gl) evd in
   let c = Evarutil.nf_evar evd c in
   let (evd,c) = Evarutil.evars_to_metas sigma (evd,c) in
   (* Relies on Cast's put on Meta's by evars_to_metas, because it is otherwise

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -68,12 +68,6 @@ val close_proof : unit ->
 			    Tacexpr.declaration_hook)
 
 exception NoSuchProof
-
-val suspend : unit -> unit
-val resume_last : unit -> unit
-
-val resume : Names.identifier -> unit
-(** @raise NoSuchProof if it doesn't find one. *)
 
 (** Runs a tactic on the current proof. Raises [NoCurrentProof] is there is 
    no current proof. *)

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -135,6 +135,10 @@ let cook_constant env r =
     (fun c -> abstract_constant_body (expmod_constr r.d_modlist c) hyps)
     cb.const_body
   in
+  let const_hyps =
+    Sign.fold_named_context (fun (h,_,_) hyps ->
+      List.filter (fun (id,_,_) -> id <> h) hyps)
+      hyps ~init:cb.const_hyps in
   let typ = match cb.const_type with
     | NonPolymorphicType t ->
 	let typ = abstract_constant_type (expmod_constr r.d_modlist t) hyps in
@@ -145,4 +149,4 @@ let cook_constant env r =
 	let j = make_judge (constr_of_def body) typ in
 	Typeops.make_polymorphic_if_constant_for_ind env j
   in
-  (body, typ, cb.const_constraints)
+  (body, typ, cb.const_constraints, const_hyps)

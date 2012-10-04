@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -53,7 +53,6 @@ let tclREPEAT_MAIN   = Refiner.tclREPEAT_MAIN
 let tclFIRST         = Refiner.tclFIRST
 let tclSOLVE         = Refiner.tclSOLVE
 let tclTRY           = Refiner.tclTRY
-let tclINFO          = Refiner.tclINFO
 let tclCOMPLETE      = Refiner.tclCOMPLETE
 let tclAT_LEAST_ONCE = Refiner.tclAT_LEAST_ONCE
 let tclFAIL          = Refiner.tclFAIL

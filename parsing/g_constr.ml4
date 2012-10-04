@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -30,6 +30,11 @@ let _ = List.iter Lexer.add_keyword constr_kw
 let mk_cast = function
     (c,(_,None)) -> c
   | (c,(_,Some ty)) -> CCast(join_loc (constr_loc c) (constr_loc ty), c, CastConv (DEFAULTcast, ty))
+
+let binders_of_names l =
+  List.map (fun (loc, na) ->
+    LocalRawAssum ([loc, na], Default Explicit,
+		   CHole (loc, Some (Evd.BinderType na)))) l
 
 let binders_of_lidents l =
   List.map (fun (loc, id) ->
@@ -95,15 +100,21 @@ let impl_ident_head =
 	      | _ -> err ())
 	| _ -> err ())
 
-let ident_colon =
-  Gram.Entry.of_parser "ident_colon"
+let name_colon =
+  Gram.Entry.of_parser "name_colon"
     (fun strm ->
       match get_tok (stream_nth 0 strm) with
 	| IDENT s ->
             (match get_tok (stream_nth 1 strm) with
               | KEYWORD ":" ->
                   stream_njunk 2 strm;
-                  Names.id_of_string s
+                  Name (Names.id_of_string s)
+              | _ -> err ())
+	| KEYWORD "_" ->
+          (match get_tok (stream_nth 1 strm) with
+              | KEYWORD ":" ->
+                  stream_njunk 2 strm;
+                  Anonymous
               | _ -> err ())
         | _ -> err ())
 
@@ -378,8 +389,7 @@ GEXTEND Gram
           [LocalRawAssum (id::idl,Default Explicit,c)]
 	(* binders factorized with open binder *)
       | id = name; idl = LIST0 name; bl = binders ->
-          let t = CHole (loc, Some (Evd.BinderType (snd id))) in
-          LocalRawAssum (id::idl,Default Explicit,t)::bl
+          binders_of_names (id::idl) @ bl
       | id1 = name; ".."; id2 = name ->
           [LocalRawAssum ([id1;(loc,Name ldots_var);id2],
 	                  Default Explicit,CHole (loc,None))]
@@ -421,8 +431,8 @@ GEXTEND Gram
     [ [ "!" ; c = operconstr LEVEL "200" -> (loc, Anonymous), true, c
       | "{"; id = name; "}"; ":" ; expl = [ "!" -> true | -> false ] ; c = operconstr LEVEL "200" ->
 	  id, expl, c
-      | iid=ident_colon ; expl = [ "!" -> true | -> false ] ; c = operconstr LEVEL "200" ->
-	  (loc, Name iid), expl, c
+      | iid=name_colon ; expl = [ "!" -> true | -> false ] ; c = operconstr LEVEL "200" ->
+	  (loc, iid), expl, c
       | c = operconstr LEVEL "200" ->
 	  (loc, Anonymous), false, c
     ] ]

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -71,14 +71,6 @@ let pf_get_new_ids ids gls =
   List.fold_right
     (fun id acc -> (next_ident_away id (acc@avoid))::acc)
     ids []
-
-let pf_interp_constr gls c =
-  let evc = project gls in
-  Constrintern.interp_constr evc (pf_env gls) c
-
-let pf_interp_type gls c =
-  let evc = project gls in
-  Constrintern.interp_type evc (pf_env gls) c
 
 let pf_global gls id = Constrintern.construct_reference (pf_hyps gls) id
 

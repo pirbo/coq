@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -21,8 +21,11 @@ open Reductionops
 open Pretype_errors
 open Retyping
 
-(* Expanding existential variables *)
-(* 1- flush_and_check_evars fails if an existential is undefined *)
+(****************************************************)
+(* Expanding/testing/exposing existential variables *)
+(****************************************************)
+
+(* flush_and_check_evars fails if an existential is undefined *)
 
 exception Uninstantiated_evar of existential_key
 
@@ -70,6 +73,82 @@ let nf_evars_undefined evm =
 
 let nf_evar_map evd = Evd.evars_reset_evd (nf_evars evd) evd
 let nf_evar_map_undefined evd = Evd.evars_reset_evd (nf_evars_undefined evd) evd
+
+(*-------------------*)
+(* Auxiliary functions for the conversion algorithms modulo evars
+ *)
+
+let has_undefined_evars_or_sorts evd t =
+  let rec has_ev t =
+    match kind_of_term t with
+    | Evar (ev,args) ->
+        (match evar_body (Evd.find evd ev) with
+        | Evar_defined c ->
+            has_ev c; Array.iter has_ev args
+        | Evar_empty ->
+	    raise NotInstantiatedEvar)
+    | Sort s when is_sort_variable evd s -> raise Not_found
+    | _ -> iter_constr has_ev t in
+  try let _ = has_ev t in false
+  with (Not_found | NotInstantiatedEvar) -> true
+
+let is_ground_term evd t =
+  not (has_undefined_evars_or_sorts evd t)
+
+let is_ground_env evd env =
+  let is_ground_decl = function
+      (_,Some b,_) -> is_ground_term evd b
+    | _ -> true in
+  List.for_all is_ground_decl (rel_context env) &&
+  List.for_all is_ground_decl (named_context env)
+(* Memoization is safe since evar_map and environ are applicative
+   structures *)
+let is_ground_env = memo1_2 is_ground_env
+
+(* Return the head evar if any *)
+
+exception NoHeadEvar
+
+let head_evar =
+  let rec hrec c = match kind_of_term c with
+    | Evar (evk,_)   -> evk
+    | Case (_,_,c,_) -> hrec c
+    | App (c,_)      -> hrec c
+    | Cast (c,_,_)   -> hrec c
+    | _              -> raise NoHeadEvar
+  in
+  hrec
+
+(* Expand head evar if any (currently consider only applications but I
+   guess it should consider Case too) *)
+
+let whd_head_evar_stack sigma c =
+  let rec whrec (c, l as s) =
+    match kind_of_term c with
+      | Evar (evk,args as ev) when Evd.is_defined sigma evk
+	  -> whrec (existential_value sigma ev, l)
+      | Cast (c,_,_) -> whrec (c, l)
+      | App (f,args) -> whrec (f, Array.fold_right (fun a l -> a::l) args l)
+      | _ -> s
+  in
+  whrec (c, [])
+
+let whd_head_evar sigma c = applist (whd_head_evar_stack sigma c)
+
+let noccur_evar evd evk c =
+  let rec occur_rec c = match kind_of_term c with
+  | Evar (evk',_ as ev') ->
+      (match safe_evar_value evd ev' with
+       | Some c -> occur_rec c
+       | None -> if evk = evk' then raise Occur)
+  | _ -> iter_constr occur_rec c
+  in
+  try occur_rec c; true with Occur -> false
+
+let normalize_evar evd ev =
+  match kind_of_term (whd_evar evd (mkEvar ev)) with
+  | Evar (evk,args) -> (evk,args)
+  | _ -> assert false
 
 (**********************)
 (* Creating new metas *)
@@ -125,6 +204,19 @@ let evars_to_metas sigma (emap, c) =
   let emap = nf_evar_map_undefined emap in
   let sigma',emap' = push_dependent_evars sigma emap in
   let sigma',emap' = push_duplicated_evars sigma' emap' c in
+  (* if an evar has been instantiated in [emap] (as part of typing [c])
+     then it is instantiated in [sigma]. *)
+  let repair_evars sigma emap =
+    fold_undefined begin fun ev _ sigma' ->
+      try
+	let info = find emap ev in
+	match evar_body info with
+	| Evar_empty -> sigma'
+	| Evar_defined body -> define ev body sigma'
+      with Not_found -> sigma'
+    end sigma sigma
+  in
+  let sigma' = repair_evars sigma' emap in
   let change_exist evar =
     let ty = nf_betaiota emap (existential_type emap evar) in
     let n = new_meta() in
@@ -140,6 +232,18 @@ let evars_to_metas sigma (emap, c) =
 let non_instantiated sigma =
   let listev = Evd.undefined_list sigma in
   List.map (fun (ev,evi) -> (ev,nf_evar_info sigma evi)) listev
+
+(************************)
+(* Manipulating filters *)
+(************************)
+
+let apply_subfilter filter subfilter =
+  fst (List.fold_right (fun oldb (l,filter) ->
+    if oldb then List.hd filter::l,List.tl filter else (false::l,filter))
+         filter ([], List.rev subfilter))
+
+let extract_subfilter initial_filter refined_filter =
+  snd (list_filter2 (fun b1 b2 -> b1) (initial_filter,refined_filter))
 
 (**********************)
 (* Creating new evars *)
@@ -157,192 +261,6 @@ let new_untyped_evar =
 (*------------------------------------*
  * functional operations on evar sets *
  *------------------------------------*)
-
-let new_evar_instance sign evd typ ?(src=(dummy_loc,InternalHole)) ?filter ?candidates instance =
-  assert
-    (let ctxt = named_context_of_val sign in
-     list_distinct (ids_of_named_context ctxt));
-  let newevk = new_untyped_evar() in
-  let evd = evar_declare sign newevk typ ~src:src ?filter ?candidates evd in
-  (evd,mkEvar (newevk,Array.of_list instance))
-
-(* Expand rels and vars that are bound to other rels or vars so that
-   dependencies in variables are canonically associated to the most ancient
-   variable in its family of aliased variables *)
-
-let compute_var_aliases sign =
-  List.fold_right (fun (id,b,c) aliases ->
-    match b with
-    | Some t ->
-        (match kind_of_term t with
-        | Var id' ->
-            let aliases_of_id =
-              try Idmap.find id' aliases with Not_found -> [] in
-            Idmap.add id (aliases_of_id@[t]) aliases
-	| _ ->
-            Idmap.add id [t] aliases)
-    | None -> aliases)
-    sign Idmap.empty
-
-let compute_rel_aliases var_aliases rels =
-  snd (List.fold_right (fun (_,b,t) (n,aliases) ->
-    (n-1,
-     match b with
-     | Some t ->
-         (match kind_of_term t with
-         | Var id' ->
-             let aliases_of_n =
-               try Idmap.find id' var_aliases with Not_found -> [] in
-             Intmap.add n (aliases_of_n@[t]) aliases
-         | Rel p ->
-             let aliases_of_n =
-               try Intmap.find (p+n) aliases with Not_found -> [] in
-             Intmap.add n (aliases_of_n@[mkRel (p+n)]) aliases
-         | _ ->
-             Intmap.add n [lift n t] aliases)
-     | None -> aliases))
-         rels (List.length rels,Intmap.empty))
-
-let make_alias_map env =
-  (* We compute the chain of aliases for each var and rel *)
-  let var_aliases = compute_var_aliases (named_context env) in
-  let rel_aliases = compute_rel_aliases var_aliases (rel_context env) in
-  (var_aliases,rel_aliases)
-
-let get_alias_chain_of aliases x = match kind_of_term x with
-  | Rel n -> (try Intmap.find n (snd aliases) with Not_found -> [])
-  | Var id -> (try Idmap.find id (fst aliases) with Not_found -> [])
-  | _ -> []
-
-let normalize_alias_opt aliases x =
-  match get_alias_chain_of aliases x with
-  | []  -> None
-  | a::_ when isRel a or isVar a -> Some a
-  | [_] -> None
-  | _::a::_ -> Some a
-
-let normalize_alias aliases x =
-  match normalize_alias_opt aliases x with
-  | Some a -> a
-  | None -> x
-
-let normalize_alias_var var_aliases id =
-  destVar (normalize_alias (var_aliases,Intmap.empty) (mkVar id))
-
-let extend_alias (_,b,_) (var_aliases,rel_aliases) =
-  let rel_aliases =
-    Intmap.fold (fun n l -> Intmap.add (n+1) (List.map (lift 1) l))
-      rel_aliases Intmap.empty in
-  let rel_aliases =
-    match b with
-    | Some t ->
-        (match kind_of_term t with
-        | Var id' ->
-            let aliases_of_binder =
-              try Idmap.find id' var_aliases with Not_found -> [] in
-	    Intmap.add 1 (aliases_of_binder@[t]) rel_aliases
-        | Rel p ->
-            let aliases_of_binder =
-              try Intmap.find (p+1) rel_aliases with Not_found -> [] in
-	    Intmap.add 1 (aliases_of_binder@[mkRel (p+1)]) rel_aliases
-        | _ ->
-            Intmap.add 1 [lift 1 t] rel_aliases)
-    | None -> rel_aliases in
-  (var_aliases, rel_aliases)
-
-let rec expansions_of_var aliases x =
-  match get_alias_chain_of aliases x with
-  | [] -> [x]
-  | a::_ as l when isRel a || isVar a -> x :: List.rev l
-  | _::l -> x :: List.rev l
-
-let expansion_of_var aliases x =
-  match get_alias_chain_of aliases x with
-  | [] -> x
-  | a::_ -> a
-
-let rec expand_vars_in_term_using aliases t = match kind_of_term t with
-  | Rel _ | Var _ ->
-      normalize_alias aliases t
-  | _ ->
-      map_constr_with_full_binders
-	extend_alias expand_vars_in_term_using aliases t
-
-let expand_vars_in_term env = expand_vars_in_term_using (make_alias_map env)
-
-let free_vars_and_rels_up_alias_expansion aliases c =
-  let acc1 = ref Intset.empty and acc2 = ref Idset.empty in
-  let rec frec (aliases,depth) c = match kind_of_term c with
-    | Rel _ | Var _ ->
-      let c = expansion_of_var aliases c in
-        (match kind_of_term c with
-        | Var id -> acc2 := Idset.add id !acc2
-        | Rel n -> if n >= depth+1 then acc1 := Intset.add (n-depth) !acc1
-        | _ -> 
-            (* not optimal: would need sharing if alias occurs more than once *)
-            frec (aliases,depth) c)
-    | Const _ | Ind _ | Construct _ ->
-        acc2 := List.fold_right Idset.add (vars_of_global (Global.env()) c) !acc2
-    | _ ->
-        iter_constr_with_full_binders
-          (fun d (aliases,depth) -> (extend_alias d aliases,depth+1))
-          frec (aliases,depth) c
-  in
-  frec (aliases,0) c;
-  (!acc1,!acc2)
-
-(* Knowing that [Gamma |- ev : T] and that [ev] is applied to [args],
- * [make_projectable_subst ev args] builds the substitution [Gamma:=args].
- * If a variable and an alias of it are bound to the same instance, we skip
- * the alias (we just use eq_constr -- instead of conv --, since anyway,
- * only instances that are variables -- or evars -- are later considered;
- * morever, we can bet that similar instances came at some time from
- * the very same substitution. The removal of aliased duplicates is
- * useful to ensure the uniqueness of a projection.
-*)
-
-let make_projectable_subst aliases sigma evi args =
-  let sign = evar_filtered_context evi in
-  let evar_aliases = compute_var_aliases sign in
-  let (_,full_subst,cstr_subst) =
-    List.fold_right
-      (fun (id,b,c) (args,all,cstrs) ->
-        match b,args with
-	| None, a::rest ->
-	    let a = whd_evar sigma a in
-	    let cstrs =
-	      let a',args = decompose_app_vect a in
-	      match kind_of_term a' with
-	      | Construct cstr ->
-		  let l = try Constrmap.find cstr cstrs with Not_found -> [] in
-		  Constrmap.add cstr ((args,id)::l) cstrs
-	      | _ -> cstrs in
-	    (rest,Idmap.add id [a,normalize_alias_opt aliases a,id] all,cstrs)
-	| Some c, a::rest ->
-	    let a = whd_evar sigma a in
-	    (match kind_of_term c with
-	    | Var id' ->
-		let idc = normalize_alias_var evar_aliases id' in
-		let sub = try Idmap.find idc all with Not_found -> [] in
-		if List.exists (fun (c,_,_) -> eq_constr a c) sub then
-		  (rest,all,cstrs)
-		else
-		  (rest,
-		   Idmap.add idc ((a,normalize_alias_opt aliases a,id)::sub) all,
-		   cstrs)
-	    | _ ->
-		(rest,Idmap.add id [a,normalize_alias_opt aliases a,id] all,cstrs))
-	| _ -> anomaly "Instance does not match its signature")
-      sign (array_rev_to_list args,Idmap.empty,Constrmap.empty) in
-  (full_subst,cstr_subst)
-
-let make_pure_subst evi args =
-  snd (List.fold_right
-    (fun (id,b,c) (args,l) ->
-      match args with
-	| a::rest -> (rest, (id,a)::l)
-	| _ -> anomaly "Instance does not match its signature")
-    (evar_filtered_context evi) (array_rev_to_list args,[]))
 
 (* [push_rel_context_to_named_context] builds the defining context and the
  * initial instance of an evar. If the evar is to be used in context
@@ -390,17 +308,38 @@ let push_rel_context_to_named_context env typ =
       (rel_context env) ~init:([], ids, env) in
   (named_context_val env, substl subst typ, inst_rels@inst_vars, subst)
 
+(*------------------------------------*
+ * Entry points to define new evars   *
+ *------------------------------------*)
+
+let default_source = (dummy_loc,InternalHole)
+
+let new_pure_evar evd sign ?(src=default_source) ?filter ?candidates typ =
+  let newevk = new_untyped_evar() in
+  let evd = evar_declare sign newevk typ ~src ?filter ?candidates evd in
+  (evd,newevk)
+
+let new_evar_instance sign evd typ ?src ?filter ?candidates instance =
+  assert (not !Flags.debug ||
+            list_distinct (ids_of_named_context (named_context_of_val sign)));
+  let evd,newevk = new_pure_evar evd sign ?src ?filter ?candidates typ in
+  (evd,mkEvar (newevk,Array.of_list instance))
+
 (* [new_evar] declares a new existential in an env env with type typ *)
 (* Converting the env into the sign of the evar to define *)
 
-let new_evar evd env ?(src=(dummy_loc,InternalHole)) ?filter ?candidates typ =
+let new_evar evd env ?src ?filter ?candidates typ =
   let sign,typ',instance,subst = push_rel_context_to_named_context env typ in
   let candidates = Option.map (List.map (substl subst)) candidates in
   let instance =
     match filter with
     | None -> instance
-    | Some filter -> snd (list_filter2 (fun b c -> b) (filter,instance)) in
-  new_evar_instance sign evd typ' ~src:src ?filter ?candidates instance
+    | Some filter -> list_filter_with filter instance in
+  new_evar_instance sign evd typ' ?src ?filter ?candidates instance
+
+let new_type_evar ?src ?filter evd env =
+  let evd', s = new_sort_variable evd in
+  new_evar evd' env ?src ?filter (mkSort s)
 
   (* The same using side-effect *)
 let e_new_evar evdref env ?(src=(dummy_loc,InternalHole)) ?filter ?candidates ty =
@@ -408,8 +347,56 @@ let e_new_evar evdref env ?(src=(dummy_loc,InternalHole)) ?filter ?candidates ty
   evdref := evd';
   ev
 
+(*------------------------------------*
+ * Restricting existing evars         *
+ *------------------------------------*)
+
+let restrict_evar_key evd evk filter candidates =
+  if filter = None && candidates = None then
+    evd,evk
+  else
+    let evi = Evd.find_undefined evd evk in
+    let oldfilter = evar_filter evi in
+    if filter = Some oldfilter && candidates = None then
+      evd,evk
+    else
+    let filter =
+      match filter with
+      | None -> evar_filter evi
+      | Some filter -> filter in
+    let candidates =
+      match candidates with None -> evi.evar_candidates | _ -> candidates in
+    let ccl = evi.evar_concl in
+    let sign = evar_hyps evi in
+    let src = evi.evar_source in
+    let evd,newevk = new_pure_evar evd sign ccl ~src ~filter ?candidates in
+    let ctxt = snd (list_filter2 (fun b c -> b) (filter,evar_context evi)) in
+    let id_inst = Array.of_list (List.map (fun (id,_,_) -> mkVar id) ctxt) in
+    Evd.define evk (mkEvar(newevk,id_inst)) evd,newevk
+
+(* Restrict an applied evar and returns its restriction in the same context *)
+let restrict_applied_evar evd (evk,argsv) filter candidates =
+  let evd,newevk = restrict_evar_key evd evk filter candidates in
+  let newargsv = match filter with
+  | None -> (* optim *) argsv
+  | Some filter ->
+      let evi = Evd.find evd evk in
+      let subfilter = extract_subfilter (evar_filter evi) filter in
+      array_filter_with subfilter argsv in
+  evd,(newevk,newargsv)
+
+(* Restrict an evar in the current evar_map *)
+let restrict_evar evd evk filter candidates =
+  fst (restrict_evar_key evd evk filter candidates)
+
+(* Restrict an evar in the current evar_map *)
+let restrict_instance evd evk filter argsv =
+  match filter with None -> argsv | Some filter ->
+  let evi = Evd.find evd evk in
+  array_filter_with (extract_subfilter (evar_filter evi) filter) argsv
+
 (* This assumes an evar with identity instance and generalizes it over only
-   the de Bruijn part of the context *)
+   the De Bruijn part of the context *)
 let generalize_evar_over_rels sigma (ev,args) =
   let evi = Evd.find sigma ev in
   let sign = named_context_of_val evi.evar_hyps in
@@ -418,135 +405,159 @@ let generalize_evar_over_rels sigma (ev,args) =
       if isRel a then (mkNamedProd_or_LetIn d c,a::inst) else x)
      (evi.evar_concl,[]) (Array.to_list args) sign
 
-(*------------------------------------*
- * operations on the evar constraints *
- *------------------------------------*)
+(***************************************)
+(* Managing chains of local definitons *)
+(***************************************)
 
-exception IllTypedFilter
+(* Expand rels and vars that are bound to other rels or vars so that
+   dependencies in variables are canonically associated to the most ancient
+   variable in its family of aliased variables *)
 
-let check_restricted_occur evd refine env filter constr =
-  let filter = Array.of_list filter in
-  let rec aux k c =
-    let c = whd_evar evd c in
+let compute_var_aliases sign =
+  List.fold_right (fun (id,b,c) aliases ->
+    match b with
+    | Some t ->
+        (match kind_of_term t with
+        | Var id' ->
+            let aliases_of_id =
+              try Idmap.find id' aliases with Not_found -> [] in
+            Idmap.add id (aliases_of_id@[t]) aliases
+	| _ ->
+            Idmap.add id [t] aliases)
+    | None -> aliases)
+    sign Idmap.empty
+
+let compute_rel_aliases var_aliases rels =
+  snd (List.fold_right (fun (_,b,t) (n,aliases) ->
+    (n-1,
+     match b with
+     | Some t ->
+         (match kind_of_term t with
+         | Var id' ->
+             let aliases_of_n =
+               try Idmap.find id' var_aliases with Not_found -> [] in
+             Intmap.add n (aliases_of_n@[t]) aliases
+         | Rel p ->
+             let aliases_of_n =
+               try Intmap.find (p+n) aliases with Not_found -> [] in
+             Intmap.add n (aliases_of_n@[mkRel (p+n)]) aliases
+         | _ ->
+             Intmap.add n [lift n t] aliases)
+     | None -> aliases))
+         rels (List.length rels,Intmap.empty))
+
+let make_alias_map env =
+  (* We compute the chain of aliases for each var and rel *)
+  let var_aliases = compute_var_aliases (named_context env) in
+  let rel_aliases = compute_rel_aliases var_aliases (rel_context env) in
+  (var_aliases,rel_aliases)
+
+let lift_aliases n (var_aliases,rel_aliases as aliases) =
+  if n = 0 then aliases else
+  (var_aliases,
+   Intmap.fold (fun p l -> Intmap.add (p+n) (List.map (lift n) l))
+     rel_aliases Intmap.empty)
+
+let get_alias_chain_of aliases x = match kind_of_term x with
+  | Rel n -> (try Intmap.find n (snd aliases) with Not_found -> [])
+  | Var id -> (try Idmap.find id (fst aliases) with Not_found -> [])
+  | _ -> []
+
+let normalize_alias_opt aliases x =
+  match get_alias_chain_of aliases x with
+  | []  -> None
+  | a::_ when isRel a or isVar a -> Some a
+  | [_] -> None
+  | _::a::_ -> Some a
+
+let normalize_alias aliases x =
+  match normalize_alias_opt aliases x with
+  | Some a -> a
+  | None -> x
+
+let normalize_alias_var var_aliases id =
+  destVar (normalize_alias (var_aliases,Intmap.empty) (mkVar id))
+
+let extend_alias (_,b,_) (var_aliases,rel_aliases) =
+  let rel_aliases =
+    Intmap.fold (fun n l -> Intmap.add (n+1) (List.map (lift 1) l))
+      rel_aliases Intmap.empty in
+  let rel_aliases =
+    match b with
+    | Some t ->
+        (match kind_of_term t with
+        | Var id' ->
+            let aliases_of_binder =
+              try Idmap.find id' var_aliases with Not_found -> [] in
+	    Intmap.add 1 (aliases_of_binder@[t]) rel_aliases
+        | Rel p ->
+            let aliases_of_binder =
+              try Intmap.find (p+1) rel_aliases with Not_found -> [] in
+	    Intmap.add 1 (aliases_of_binder@[mkRel (p+1)]) rel_aliases
+        | _ ->
+            Intmap.add 1 [lift 1 t] rel_aliases)
+    | None -> rel_aliases in
+  (var_aliases, rel_aliases)
+
+let expand_alias_once aliases x =
+  match get_alias_chain_of aliases x with
+  | []  -> None
+  | l -> Some (list_last l)
+
+let rec expansions_of_var aliases x =
+  match get_alias_chain_of aliases x with
+  | [] -> [x]
+  | a::_ as l when isRel a || isVar a -> x :: List.rev l
+  | _::l -> x :: List.rev l
+
+let expansion_of_var aliases x =
+  match get_alias_chain_of aliases x with
+  | [] -> x
+  | a::_ -> a
+
+let rec expand_vars_in_term_using aliases t = match kind_of_term t with
+  | Rel _ | Var _ ->
+      normalize_alias aliases t
+  | _ ->
+      map_constr_with_full_binders
+	extend_alias expand_vars_in_term_using aliases t
+
+let expand_vars_in_term env = expand_vars_in_term_using (make_alias_map env)
+
+let free_vars_and_rels_up_alias_expansion aliases c =
+  let acc1 = ref Intset.empty and acc2 = ref Idset.empty in
+  let cache_rel = ref Intset.empty and cache_var = ref Idset.empty in
+  let is_in_cache depth = function
+    | Rel n -> Intset.mem (n-depth) !cache_rel
+    | Var s -> Idset.mem s !cache_var
+    | _ -> false in
+  let put_in_cache depth = function
+    | Rel n -> cache_rel := Intset.add (n-depth) !cache_rel
+    | Var s -> cache_var := Idset.add s !cache_var
+    | _ -> () in
+  let rec frec (aliases,depth) c =
     match kind_of_term c with
-    | Var id ->
-      let idx = list_try_find_i (fun i (id', _, _) -> if id' = id then i else raise (Failure "")) 0 env in
-	if not filter.(idx)
-	then if refine then
-	  (filter.(idx) <- true; c)
-	else raise IllTypedFilter
-	else c
-    | _ -> map_constr_with_binders succ aux k c
+    | Rel _ | Var _ as ck ->
+      if is_in_cache depth ck then () else begin
+      put_in_cache depth ck;
+      let c = expansion_of_var aliases c in
+        match kind_of_term c with
+        | Var id -> acc2 := Idset.add id !acc2
+        | Rel n -> if n >= depth+1 then acc1 := Intset.add (n-depth) !acc1
+        | _ -> frec (aliases,depth) c end
+    | Const _ | Ind _ | Construct _ ->
+        acc2 := List.fold_right Idset.add (vars_of_global (Global.env()) c) !acc2
+    | _ ->
+        iter_constr_with_full_binders
+          (fun d (aliases,depth) -> (extend_alias d aliases,depth+1))
+          frec (aliases,depth) c
   in
-  let res = aux 0 constr in
-    Array.to_list filter, res
+  frec (aliases,0) c;
+  (!acc1,!acc2)
 
-(* We have a unification problem Σ; Γ |- ?e[u1..uq] = t : s where ?e is not yet
- * declared in Σ but yet known to be declarable in some context x1:T1..xq:Tq.
- * [define_evar_from_virtual_equation ... Γ Σ t (x1:T1..xq:Tq) .. (u1..uq) (x1..xq)]
- * declares x1:T1..xq:Tq |- ?e : s such that ?e[u1..uq] = t holds.
- *)
-
-let define_evar_from_virtual_equation define_fun env evd t_in_env sign filter inst_in_env
-    inst_in_sign =
-  let ty_t_in_env = Retyping.get_type_of env evd t_in_env in
-  let evd,evar_in_env = new_evar_instance sign evd ty_t_in_env ~filter inst_in_env in
-  let t_in_env = whd_evar evd t_in_env in
-  let evd = define_fun env evd (destEvar evar_in_env) t_in_env in
-  let evar_in_sign = mkEvar (fst (destEvar evar_in_env), Array.of_list inst_in_sign) in
-  (evd,whd_evar evd evar_in_sign)
-
-(* We have x1..xq |- ?e1 : τ and had to solve something like
- * Σ; Γ |- ?e1[u1..uq] = (...\y1 ... \yk ... c), where c is typically some
- * ?e2[v1..vn], hence flexible. We had to go through k binders and now
- * virtually have x1..xq, y1'..yk' | ?e1' : τ' and the equation
- * Γ, y1..yk |- ?e1'[u1..uq y1..yk] = c.
- * [materialize_evar Γ evd k (?e1[u1..uq]) τ'] extends Σ with the declaration
- * of ?e1' and returns both its instance ?e1'[x1..xq y1..yk] in an extension
- * of the context of e1 so that e1 can be instantiated by
- * (...\y1' ... \yk' ... ?e1'[x1..xq y1'..yk']),
- * and the instance ?e1'[u1..uq y1..yk] so that the remaining equation
- * ?e1'[u1..uq y1..yk] = c can be registered
- *
- * Note that, because invert_definition does not check types, we need to
- * guess the types of y1'..yn' by inverting the types of y1..yn along the
- * substitution u1..uq.
- *)
-
-let materialize_evar define_fun env evd k (evk1,args1) ty_in_env =
-  let evi1 = Evd.find_undefined evd evk1 in
-  let env1,rel_sign = env_rel_context_chop k env in
-  let sign1 = evar_hyps evi1 in
-  let filter1 = evar_filter evi1 in
-  let ids1 = List.map pi1 (named_context_of_val sign1) in
-  let inst_in_sign =
-    List.map mkVar (snd (list_filter2 (fun b id -> b) (filter1,ids1))) in
-  let (sign2,filter2,inst2_in_env,inst2_in_sign,_,evd,_) =
-    List.fold_right (fun (na,b,t_in_env as d) (sign,filter,inst_in_env,inst_in_sign,env,evd,avoid) ->
-      match b with
-      | None ->
-          let id = next_name_away na avoid in
-          let evd,t_in_sign =
-            define_evar_from_virtual_equation define_fun env evd t_in_env
-              sign filter inst_in_env inst_in_sign in
-          (push_named_context_val (id,None,t_in_sign) sign,true::filter,
-           (mkRel 1)::(List.map (lift 1) inst_in_env),
-           (mkRel 1)::(List.map (lift 1) inst_in_sign),
-           push_rel d env,evd,id::avoid)
-      | Some b ->
-          (sign,filter,
-           List.map (lift 1) inst_in_env,
-           List.map (lift 1) inst_in_sign,
-           push_rel d env,evd,avoid))
-      rel_sign
-      (sign1,filter1,Array.to_list args1,inst_in_sign,env1,evd,ids1)
-  in
-  let evd,ev2ty_in_sign =
-    define_evar_from_virtual_equation define_fun env evd ty_in_env
-      sign2 filter2 inst2_in_env inst2_in_sign in
-  let evd,ev2_in_sign =
-    new_evar_instance sign2 evd ev2ty_in_sign ~filter:filter2 inst2_in_sign in
-  let ev2_in_env = (fst (destEvar ev2_in_sign), Array.of_list inst2_in_env) in
-  (evd, ev2_in_sign, ev2_in_env)
-
-let subfilter env ccl filter newfilter args =
-  let vars = collect_vars ccl in
-  let (filter, _, _, newargs) =
-    List.fold_left2
-      (fun (filter, newl, args, newargs) oldf (n, _, _) ->
-       if oldf then
-	 let a, oldargs = match args with hd :: tl -> hd, tl | _ -> assert false in
-	   if Idset.mem n vars then
-	     (oldf :: filter, List.tl newl, oldargs, a :: newargs)
-	   else if List.hd newl then (true :: filter, List.tl newl, oldargs, a :: newargs)
-	   else (false :: filter, List.tl newl, oldargs, newargs)
-       else (oldf :: filter, newl, args, newargs))
-    ([], newfilter, args, []) filter env
-  in List.rev filter, List.rev newargs
-
-let restrict_upon_filter ?(refine=false) evd evi evk p args =
-  let filter = evar_filter evi in
-  let newfilter = List.map p args in
-  let env = evar_unfiltered_env evi in
-  let ccl = nf_evar evd evi.evar_concl in
-  let newfilter, newargs =
-    subfilter (named_context env) ccl filter newfilter args
-  in
-  if newfilter <> filter then
-    let (evd,newev) = new_evar evd env ~src:(evar_source evk evd)
-	~filter:newfilter ccl in
-    let evd = Evd.define evk newev evd in
-      evd,fst (destEvar newev), newargs
-  else
-    evd,evk,args
-
-let collect_vars c =
-  let rec collrec acc c =
-    match kind_of_term c with
-    | Var id -> list_add_set id acc
-    | _      -> fold_constr collrec acc c
-  in
-  collrec [] c
+(************************************)
+(* Removing a dependency in an evar *)
+(************************************)
 
 type clear_dependency_error =
 | OccurHypInSimpleClause of identifier option
@@ -593,7 +604,7 @@ let rec check_and_clear_in_constr evdref err ids c =
 		  (* Check if some id to clear occurs in the instance
 		     a of rid in ev and remember the dependency *)
 		  match
-		    List.filter (fun id -> List.mem id ids) (collect_vars a)
+		    List.filter (fun id -> List.mem id ids) (Idset.elements (collect_vars a))
 		  with
 		  | id :: _ -> (hy,ar,(rid,id)::ri)
 		  | _ ->
@@ -658,6 +669,255 @@ let clear_hyps_in_evi evdref hyps concl ids =
   in
   (nhyps,nconcl)
 
+(********************************)
+(* Managing pattern-unification *)
+(********************************)
+
+let rec expand_and_check_vars aliases = function
+  | [] -> []
+  | a::l when isRel a or isVar a ->
+      let a = expansion_of_var aliases a in
+      if isRel a or isVar a then a :: expand_and_check_vars aliases l
+      else raise Exit
+  | _ ->
+      raise Exit
+
+module Constrhash = Hashtbl.Make
+  (struct type t = constr
+	  let equal = eq_constr
+	  let hash = hash_constr
+   end)
+
+let rec constr_list_distinct l =
+  let visited = Constrhash.create 23 in
+  let rec loop = function
+    | h::t ->
+	if Constrhash.mem visited h then false
+	else (Constrhash.add visited h h; loop t)
+    | [] -> true
+  in loop l
+
+let get_actual_deps aliases l t =
+  if occur_meta_or_existential t then
+    (* Probably no restrictions on allowed vars in presence of evars *)
+    l
+  else
+    (* Probably strong restrictions coming from t being evar-closed *)
+    let (fv_rels,fv_ids) = free_vars_and_rels_up_alias_expansion aliases t in
+    List.filter (fun c ->
+      match kind_of_term c with
+      | Var id -> Idset.mem id fv_ids
+      | Rel n -> Intset.mem n fv_rels
+      | _ -> assert false) l
+
+let remove_instance_local_defs evd evk args =
+  let evi = Evd.find evd evk in
+  let rec aux = function
+  | (_,Some _,_)::sign, a::args -> aux (sign,args)
+  | (_,None,_)::sign, a::args -> a::aux (sign,args)
+  | [], [] -> []
+  | _ -> assert false in
+  aux (evar_filtered_context evi, args)
+
+(* Check if an applied evar "?X[args] l" is a Miller's pattern *)
+
+let find_unification_pattern_args env l t =
+  if List.for_all (fun x -> isRel x || isVar x) l (* common failure case *) then
+    let aliases = make_alias_map env in
+    match (try Some (expand_and_check_vars aliases l) with Exit -> None) with
+    | Some l as x when constr_list_distinct (get_actual_deps aliases l t) -> x
+    | _ -> None
+  else
+    None
+
+let is_unification_pattern_meta env nb m l t =
+  (* Variables from context and rels > nb are implicitly all there *)
+  (* so we need to be a rel <= nb *)
+  if List.for_all (fun x -> isRel x && destRel x <= nb) l then
+    match find_unification_pattern_args env l t with
+    | Some _ as x when not (dependent (mkMeta m) t) -> x
+    | _ -> None
+  else
+    None
+
+let is_unification_pattern_evar env evd (evk,args) l t =
+  if List.for_all (fun x -> isRel x || isVar x) l & noccur_evar evd evk t then
+    let args = remove_instance_local_defs evd evk (Array.to_list args) in
+    let n = List.length args in
+    match find_unification_pattern_args env (args @ l) t with
+    | Some l -> Some (list_skipn n l)
+    | _ -> None
+  else
+    None
+
+let is_unification_pattern_pure_evar env evd (evk,args) t =
+  is_unification_pattern_evar env evd (evk,args) [] t <> None
+
+let is_unification_pattern (env,nb) evd f l t =
+  match kind_of_term f with
+  | Meta m -> is_unification_pattern_meta env nb m l t
+  | Evar ev -> is_unification_pattern_evar env evd ev l t
+  | _ -> None
+
+(* From a unification problem "?X l = c", build "\x1...xn.(term1 l2)"
+   (pattern unification). It is assumed that l is made of rel's that
+   are distinct and not bound to aliases. *)
+(* It is also assumed that c does not contain metas because metas
+   *implicitly* depend on Vars but lambda abstraction will not reflect this
+   dependency: ?X x = ?1 (?1 is a meta) will return \_.?1 while it should
+   return \y. ?1{x\y} (non constant function if ?1 depends on x) (BB) *)
+let solve_pattern_eqn env l c =
+  let c' = List.fold_right (fun a c ->
+    let c' = subst_term (lift 1 a) (lift 1 c) in
+    match kind_of_term a with
+      (* Rem: if [a] links to a let-in, do as if it were an assumption *)
+      | Rel n ->
+          let d = map_rel_declaration (lift n) (lookup_rel n env) in
+          mkLambda_or_LetIn d c'
+      | Var id ->
+          let d = lookup_named id env in mkNamedLambda_or_LetIn d c'
+      | _ -> assert false)
+    l c in
+  (* Warning: we may miss some opportunity to eta-reduce more since c'
+     is not in normal form *)
+  whd_eta c'
+
+(*****************************************)
+(* Refining/solving unification problems *)
+(*****************************************)
+
+(* Knowing that [Gamma |- ev : T] and that [ev] is applied to [args],
+ * [make_projectable_subst ev args] builds the substitution [Gamma:=args].
+ * If a variable and an alias of it are bound to the same instance, we skip
+ * the alias (we just use eq_constr -- instead of conv --, since anyway,
+ * only instances that are variables -- or evars -- are later considered;
+ * morever, we can bet that similar instances came at some time from
+ * the very same substitution. The removal of aliased duplicates is
+ * useful to ensure the uniqueness of a projection.
+*)
+
+let make_projectable_subst aliases sigma evi args =
+  let sign = evar_filtered_context evi in
+  let evar_aliases = compute_var_aliases sign in
+  let (_,full_subst,cstr_subst) =
+    List.fold_right
+      (fun (id,b,c) (args,all,cstrs) ->
+        match b,args with
+	| None, a::rest ->
+	    let a = whd_evar sigma a in
+	    let cstrs =
+	      let a',args = decompose_app_vect a in
+	      match kind_of_term a' with
+	      | Construct cstr ->
+		  let l = try Constrmap.find cstr cstrs with Not_found -> [] in
+		  Constrmap.add cstr ((args,id)::l) cstrs
+	      | _ -> cstrs in
+	    (rest,Idmap.add id [a,normalize_alias_opt aliases a,id] all,cstrs)
+	| Some c, a::rest ->
+	    let a = whd_evar sigma a in
+	    (match kind_of_term c with
+	    | Var id' ->
+		let idc = normalize_alias_var evar_aliases id' in
+		let sub = try Idmap.find idc all with Not_found -> [] in
+		if List.exists (fun (c,_,_) -> eq_constr a c) sub then
+		  (rest,all,cstrs)
+		else
+		  (rest,
+		   Idmap.add idc ((a,normalize_alias_opt aliases a,id)::sub) all,
+		   cstrs)
+	    | _ ->
+		(rest,Idmap.add id [a,normalize_alias_opt aliases a,id] all,cstrs))
+	| _ -> anomaly "Instance does not match its signature")
+      sign (array_rev_to_list args,Idmap.empty,Constrmap.empty) in
+  (full_subst,cstr_subst)
+
+let make_pure_subst evi args =
+  snd (List.fold_right
+    (fun (id,b,c) (args,l) ->
+      match args with
+	| a::rest -> (rest, (id,a)::l)
+	| _ -> anomaly "Instance does not match its signature")
+    (evar_filtered_context evi) (array_rev_to_list args,[]))
+
+(*------------------------------------*
+ * operations on the evar constraints *
+ *------------------------------------*)
+
+(* We have a unification problem Σ; Γ |- ?e[u1..uq] = t : s where ?e is not yet
+ * declared in Σ but yet known to be declarable in some context x1:T1..xq:Tq.
+ * [define_evar_from_virtual_equation ... Γ Σ t (x1:T1..xq:Tq) .. (u1..uq) (x1..xq)]
+ * declares x1:T1..xq:Tq |- ?e : s such that ?e[u1..uq] = t holds.
+ *)
+
+let define_evar_from_virtual_equation define_fun env evd t_in_env sign filter inst_in_env =
+  let ty_t_in_env = Retyping.get_type_of env evd t_in_env in
+  let evd,evar_in_env = new_evar_instance sign evd ty_t_in_env ~filter inst_in_env in
+  let t_in_env = whd_evar evd t_in_env in
+  let evd = define_fun env evd (destEvar evar_in_env) t_in_env in
+  let ids = List.map pi1 (named_context_of_val sign) in
+  let inst_in_sign = List.map mkVar (list_filter_with filter ids) in
+  let evar_in_sign = mkEvar (fst (destEvar evar_in_env), Array.of_list inst_in_sign) in
+  (evd,whd_evar evd evar_in_sign)
+
+(* We have x1..xq |- ?e1 : τ and had to solve something like
+ * Σ; Γ |- ?e1[u1..uq] = (...\y1 ... \yk ... c), where c is typically some
+ * ?e2[v1..vn], hence flexible. We had to go through k binders and now
+ * virtually have x1..xq, y1'..yk' | ?e1' : τ' and the equation
+ * Γ, y1..yk |- ?e1'[u1..uq y1..yk] = c.
+ * [materialize_evar Γ evd k (?e1[u1..uq]) τ'] extends Σ with the declaration
+ * of ?e1' and returns both its instance ?e1'[x1..xq y1..yk] in an extension
+ * of the context of e1 so that e1 can be instantiated by
+ * (...\y1' ... \yk' ... ?e1'[x1..xq y1'..yk']),
+ * and the instance ?e1'[u1..uq y1..yk] so that the remaining equation
+ * ?e1'[u1..uq y1..yk] = c can be registered
+ *
+ * Note that, because invert_definition does not check types, we need to
+ * guess the types of y1'..yn' by inverting the types of y1..yn along the
+ * substitution u1..uq.
+ *)
+
+let materialize_evar define_fun env evd k (evk1,args1) ty_in_env =
+  let evi1 = Evd.find_undefined evd evk1 in
+  let env1,rel_sign = env_rel_context_chop k env in
+  let sign1 = evar_hyps evi1 in
+  let filter1 = evar_filter evi1 in
+  let ids1 = List.map pi1 (named_context_of_val sign1) in
+  let inst_in_sign = List.map mkVar (list_filter_with filter1 ids1) in
+  let (sign2,filter2,inst2_in_env,inst2_in_sign,_,evd,_) =
+    List.fold_right (fun (na,b,t_in_env as d) (sign,filter,inst_in_env,inst_in_sign,env,evd,avoid) ->
+      let id = next_name_away na avoid in
+      let evd,t_in_sign =
+        define_evar_from_virtual_equation define_fun env evd t_in_env
+          sign filter inst_in_env in
+      let evd,b_in_sign = match b with
+      | None -> evd,None
+      | Some b ->
+          let evd,b = define_evar_from_virtual_equation define_fun env evd b
+            sign filter inst_in_env in
+          evd,Some b in
+      (push_named_context_val (id,b_in_sign,t_in_sign) sign,true::filter,
+       (mkRel 1)::(List.map (lift 1) inst_in_env),
+       (mkRel 1)::(List.map (lift 1) inst_in_sign),
+       push_rel d env,evd,id::avoid))
+      rel_sign
+      (sign1,filter1,Array.to_list args1,inst_in_sign,env1,evd,ids1)
+  in
+  let evd,ev2ty_in_sign =
+    define_evar_from_virtual_equation define_fun env evd ty_in_env
+      sign2 filter2 inst2_in_env in
+  let evd,ev2_in_sign =
+    new_evar_instance sign2 evd ev2ty_in_sign ~filter:filter2 inst2_in_sign in
+  let ev2_in_env = (fst (destEvar ev2_in_sign), Array.of_list inst2_in_env) in
+  (evd, ev2_in_sign, ev2_in_env)
+
+let restrict_upon_filter evd evk p args =
+  let newfilter = List.map p args in
+  if List.for_all (fun id -> id) newfilter then
+    None
+  else
+    let oldfullfilter = evar_filter (Evd.find_undefined evd evk) in
+    Some (apply_subfilter oldfullfilter newfilter)
+
 (* Inverting constructors in instances (common when inferring type of match) *)
 
 let find_projectable_constructor env evd cstr k args cstr_subst =
@@ -705,12 +965,12 @@ let find_projectable_constructor env evd cstr k args cstr_subst =
  * [make_projectable_subst])
  *)
 
-exception NotUnique
-exception NotUniqueInType of types
-
 type evar_projection =
 | ProjectVar
 | ProjectEvar of existential * evar_info * identifier * evar_projection
+
+exception NotUnique
+exception NotUniqueInType of (identifier * evar_projection) list
 
 let rec assoc_up_to_alias sigma aliases y yc = function
   | [] -> raise Not_found
@@ -831,30 +1091,34 @@ type projectibility_status =
   | CannotInvert
   | Invertible of projectibility_kind
 
-let invert_arg_from_subst aliases k sigma subst_in_env c_in_env_extended_with_k_binders =
+let invert_arg_from_subst evd aliases k0 subst_in_env_extended_with_k_binders c_in_env_extended_with_k_binders =
   let effects = ref [] in
   let rec aux k t =
-    let t = whd_evar sigma t in
+    let t = whd_evar evd t in
     match kind_of_term t with
-    | Rel i when i>k ->
-	project_with_effects aliases sigma effects (mkRel (i-k)) subst_in_env
-    | Var id ->
-	project_with_effects aliases sigma effects t subst_in_env
-    | _ ->
-	map_constr_with_binders succ aux k t in
+    | Rel i when i>k0+k -> aux' k (mkRel (i-k))
+    | Var id -> aux' k t
+    | _ -> map_constr_with_binders succ aux k t
+  and aux' k t =
+    try project_with_effects aliases evd effects t subst_in_env_extended_with_k_binders
+    with Not_found ->
+      match expand_alias_once aliases t with
+      | None -> raise Not_found
+      | Some c -> aux k c in
   try
-    let c = aux k c_in_env_extended_with_k_binders in
+    let c = aux 0 c_in_env_extended_with_k_binders in
     Invertible (UniqueProjection (c,!effects))
   with
     | Not_found -> CannotInvert
     | NotUnique -> Invertible NoUniqueProjection
 
-let invert_arg aliases k sigma evk subst_in_env c_in_env_extended_with_k_binders =
-  let res = invert_arg_from_subst aliases k sigma subst_in_env c_in_env_extended_with_k_binders in
+let invert_arg evd aliases k evk subst_in_env_extended_with_k_binders c_in_env_extended_with_k_binders =
+  let res = invert_arg_from_subst evd aliases k subst_in_env_extended_with_k_binders c_in_env_extended_with_k_binders in
   match res with
-  | Invertible (UniqueProjection (c,_)) when occur_evar evk c -> CannotInvert
-  | _ -> res
-
+  | Invertible (UniqueProjection (c,_)) when not (noccur_evar evd evk c) ->
+      CannotInvert
+  | _ ->
+      res
 
 let effective_projections =
   map_succeed (function Invertible c -> c | _ -> failwith"")
@@ -866,12 +1130,34 @@ let instance_of_projection f env t evd projs =
   | UniqueProjection (c,effects) ->
       (List.fold_left (do_projection_effects f env ty) evd effects, c)
 
-let filter_of_projection = function CannotInvert -> false | _ -> true
+exception NotEnoughInformationToInvert
 
-let filter_along f projs v =
-  let l = Array.to_list v in
-  let _,l = list_filter2 (fun b c -> f b) (projs,l) in
-  Array.of_list l
+let extract_unique_projections projs =
+  List.map (function
+    | Invertible (UniqueProjection (c,_)) -> c
+    | _ ->
+        (* For instance, there are evars with non-invertible arguments and *)
+        (* we cannot arbitrarily restrict these evars before knowing if there *)
+        (* will really be used; it can also be due to some argument *)
+        (* (typically a rel) that is not inversible and that cannot be *)
+        (* inverted either because it is needed for typing the conclusion *)
+        (* of the evar to project *)
+      raise NotEnoughInformationToInvert) projs
+
+let extract_candidates sols =
+  try
+    Some
+      (List.map (function (id,ProjectVar) -> mkVar id | _ -> raise Exit) sols)
+  with Exit ->
+    None
+
+let filter_of_projection = function Invertible _ -> true | _ -> false
+
+let invert_invertible_arg evd aliases k (evk,argsv) args' =
+  let evi = Evd.find_undefined evd evk in
+  let subst,_ = make_projectable_subst aliases evd evi argsv in
+  let projs = array_map_to_list (invert_arg evd aliases k evk subst) args' in
+  Array.of_list (extract_unique_projections projs)
 
 (* Redefines an evar with a smaller context (i.e. it may depend on less
  * variables) such that c becomes closed.
@@ -886,7 +1172,27 @@ let filter_along f projs v =
  * such that "hyps' |- ?e : T"
  *)
 
-let restrict_hyps ?(refine=false) evd evk filter =
+let filter_candidates evd evk filter candidates =
+  let evi = Evd.find_undefined evd evk in
+  let candidates = match candidates with
+  | None -> evi.evar_candidates
+  | Some _ -> candidates in
+  match candidates,filter with
+  | None,_ | _, None -> candidates
+  | Some l, Some filter ->
+      let ids = List.map pi1 (list_filter_with filter (evar_context evi)) in
+      Some (List.filter (fun a ->
+        list_subset (Idset.elements (collect_vars a)) ids) l)
+
+let closure_of_filter evd evk filter =
+  let evi = Evd.find_undefined evd evk in
+  let vars = collect_vars (evar_concl evi) in
+  let ids = List.map pi1 (evar_context evi) in
+  let test id b = b || Idset.mem id vars in
+  let newfilter = List.map2 test ids filter in
+  if newfilter = evar_filter evi then None else Some newfilter
+
+let restrict_hyps evd evk filter candidates =
     (* What to do with dependencies?
        Assume we have x:A, y:B(x), z:C(x,y) |- ?e:T(x,y,z) and restrict on y.
        - If y is in a non-erasable position in C(x,y) (i.e. it is not below an
@@ -897,66 +1203,75 @@ let restrict_hyps ?(refine=false) evd evk filter =
        interest for this early detection in practice is not obvious. We let
        it for future work. In any case, thanks to the use of filters, the whole
        (unrestricted) context remains consistent. *)
-    let evi = Evd.find evd evk in
-    let env = evar_unfiltered_env evi in
-    let oldfilter = evar_filter evi in
-    let filter,_ = List.fold_right (fun oldb (l,filter) ->
-      if oldb then List.hd filter::l,List.tl filter else (false::l,filter))
-      oldfilter ([], List.rev filter) in
-    let filter, ccl = check_restricted_occur evd refine (named_context env) filter evi.evar_concl in
-    (env,evar_source evk evd,filter,ccl)
+    let candidates = filter_candidates evd evk (Some filter) candidates in
+    let typablefilter = closure_of_filter evd evk filter in
+    (typablefilter,candidates)
 
-let do_restrict_hyps evd evk projs =
-  let filter = List.map filter_of_projection projs in
-  if List.for_all (fun x -> x) filter then
-    evd,evk
-  else
-    let env,src,filter,ccl = restrict_hyps evd evk filter in
-      if List.for_all (fun x -> x) filter then
-	evd,evk
-      else
-	let evd,nc = new_evar evd env ~src ~filter ccl in
-	let evd = Evd.define evk nc evd in
-	let evk',_ = destEvar nc in
-	  evd,evk'
+exception EvarSolvedWhileRestricting of evar_map * constr
 
-(* [postpone_evar_term] postpones an equation of the form ?e[σ] = c *)
+let do_restrict_hyps evd (evk,args as ev) filter candidates =
+  let filter,candidates = match filter with
+  | None -> None,candidates
+  | Some filter -> restrict_hyps evd evk filter candidates in
+  match candidates,filter with
+  | Some [], _ -> error "Not solvable."
+  | Some [nc],_ ->
+      let evd = Evd.define evk nc evd in
+      raise (EvarSolvedWhileRestricting (evd,whd_evar evd (mkEvar ev)))
+  | None, None -> evd,ev
+  | _ -> restrict_applied_evar evd ev filter candidates
 
-let postpone_evar_term env evd (evk,argsv) rhs =
-  assert (isVar rhs or isRel rhs);
+(* [postpone_non_unique_projection] postpones equation of the form ?e[?] = c *)
+(* ?e is assumed to have no candidates *)
+
+let postpone_non_unique_projection env evd (evk,argsv as ev) sols rhs =
   let rhs = expand_vars_in_term env rhs in
-  let evi = Evd.find evd evk in
-  let evd,evk,args =
-    restrict_upon_filter evd evi evk
-      (* Keep only variables that depends in rhs *)
+  let filter =
+    restrict_upon_filter evd evk
+      (* Keep only variables that occur in rhs *)
       (* This is not safe: is the variable is a local def, its body *)
       (* may contain references to variables that are removed, leading to *)
       (* a ill-formed context. We would actually need a notion of filter *)
       (* that says that the body is hidden. Note that expand_vars_in_term *)
       (* expands only rels and vars aliases, not rels or vars bound to an *)
       (* arbitrary complex term *)
-      (fun a -> not (isRel a || isVar a) || dependent a rhs)
+      (fun a -> not (isRel a || isVar a)
+                || dependent a rhs || List.exists (fun (id,_) -> isVarId id a) sols)
       (Array.to_list argsv) in
-  let args = Array.of_list args in
-  let pb = (Reduction.CONV,env,mkEvar(evk,args),rhs) in
-  Evd.add_conv_pb pb evd
+  let filter = match filter with
+  | None -> None
+  | Some filter -> closure_of_filter evd evk filter in
+  let candidates = extract_candidates sols in
+  if candidates <> None then
+    restrict_evar evd evk filter candidates
+  else
+    (* We made an approximation by not expanding a local definition *)
+    let evd,ev = restrict_applied_evar evd ev filter None in
+    let pb = (Reduction.CONV,env,mkEvar ev,rhs) in
+    Evd.add_conv_pb pb evd
 
-(* [postpone_evar_evar] postpones an equation of the form ?e1[σ1] = ?e2[σ2] *)
+(* [postpone_evar_evar] postpones an equation of the form ?e1[?1] = ?e2[?2] *)
 
-let postpone_evar_evar env evd projs1 (evk1,args1) projs2 (evk2,args2) =
+let postpone_evar_evar f env evd filter1 ev1 filter2 ev2 =
   (* Leave an equation between (restrictions of) ev1 andv ev2 *)
-  let args1' = filter_along filter_of_projection projs1 args1 in
-  let evd,evk1' = do_restrict_hyps evd evk1 projs1 in
-  let args2' = filter_along filter_of_projection projs2 args2 in
-  let evd,evk2' = do_restrict_hyps evd evk2 projs2 in
-  let pb = (Reduction.CONV,env,mkEvar(evk1',args1'),mkEvar (evk2',args2')) in
-  add_conv_pb pb evd
+  try
+    let evd,ev1' = do_restrict_hyps evd ev1 filter1 None in
+    try
+      let evd,ev2' = do_restrict_hyps evd ev2 filter2 None in
+      add_conv_pb (Reduction.CONV,env,mkEvar ev1',mkEvar ev2') evd
+    with EvarSolvedWhileRestricting (evd,ev2) ->
+      (* ev2 solved on the fly *)
+      f env evd ev1' ev2
+  with EvarSolvedWhileRestricting (evd,ev1) ->
+    (* ev1 solved on the fly *)
+    f env evd ev2 ev1
 
 (* [solve_evar_evar f Γ Σ ?e1[u1..un] ?e2[v1..vp]] applies an heuristic
  * to solve the equation Σ; Γ ⊢ ?e1[u1..un] = ?e2[v1..vp]:
  * - if there are at most one φj for each vj s.t. vj = φj(u1..un),
- *   we first restrict ?2 to the subset v_k1..v_kq of the vj that are
- *   inversible and we set ?1[x1..xn] := ?2[φk1(x1..xn)..φkp(x1..xn)]
+ *   we first restrict ?e2 to the subset v_k1..v_kq of the vj that are
+ *   inversible and we set ?e1[x1..xn] := ?e2[φk1(x1..xn)..φkp(x1..xn)]
+ *   (this is a case of pattern-unification)
  * - symmetrically if there are at most one ψj for each uj s.t.
  *   uj = ψj(v1..vp),
  * - otherwise, each position i s.t. ui does not occur in v1..vp has to
@@ -974,55 +1289,139 @@ let are_canonical_instances args1 args2 env =
   let n2 = Array.length args2 in
   let rec aux n = function
     | (id,_,c)::sign
-	when n < n1 && isVar args1.(n) && destVar args1.(n) = id && eq_constr args1.(n) args2.(n) ->
+	when n < n1 && isVarId id args1.(n) && isVarId id args2.(n) ->
 	aux (n+1) sign
     | [] ->
 	let rec aux2 n =
 	  n = n1 ||
-	  (isRel args1.(n) && destRel args1.(n) = n1-n &&
-	   isRel args2.(n) && destRel args2.(n) = n1-n && aux2 (n+1))
+	  (isRelN (n1-n) args1.(n) && isRelN (n1-n) args2.(n) && aux2 (n+1))
 	in aux2 n
     | _ -> false in
   n1 = n2 & aux 0 (named_context env)
 
-exception CannotProject of projectibility_status list
+let filter_compatible_candidates conv_algo env evd evi args rhs c =
+  let c' = instantiate_evar (evar_filtered_context evi) c args in
+  let evd, b = conv_algo env evd Reduction.CONV rhs c' in
+  if b then Some (c,evd) else None
 
-let is_variable_subst args =
-  array_for_all (fun c -> isRel c || isVar c) args
+exception DoesNotPreserveCandidateRestriction
 
-let solve_evar_evar_l2r f env evd (evk1,args1) (evk2,args2 as ev2) =
-  let aliases = make_alias_map env in
-  let subst,_ = make_projectable_subst aliases evd (Evd.find evd evk2) args2 in
+let restrict_candidates conv_algo env evd filter1 (evk1,argsv1) (evk2,argsv2) =
+  let evi1 = Evd.find evd evk1 in
+  let evi2 = Evd.find evd evk2 in
+  let cand1 = filter_candidates evd evk1 filter1 None in
+  let cand2 = evi2.evar_candidates in
+  match cand1, cand2 with
+  | _, None -> cand1
+  | None, Some _ -> raise DoesNotPreserveCandidateRestriction
+  | Some l1, Some l2 ->
+      let args1 = Array.to_list argsv1 in
+      let args2 = Array.to_list argsv2 in
+      let l1' = List.filter (fun c1 ->
+        let c1' = instantiate_evar (evar_filtered_context evi1) c1 args1 in
+        List.filter (fun c2 ->
+          (filter_compatible_candidates conv_algo env evd evi2 args2 c1' c2
+           <> None)) l2 <> []) l1 in
+      if List.length l1 = List.length l1' then None else Some l1'
+
+exception CannotProject of bool list option
+
+(* Assume that FV(?n[x1:=t1..xn:=tn]) belongs to some set U.
+   Can ?n be instantiated by a term u depending essentially on xi such that the
+   FV(u[x1:=t1..xn:=tn]) are in the set U?
+   - If ti is a variable, it has to be in U.
+   - If ti is a constructor, its parameters cannot be erased even if u
+     matches on it, so we have to discard ti if the parameters
+     contain variables not in U.
+   - If ti is rigid, we have to discard it if it contains variables in U.
+
+  Note: when restricting as part of an equation ?n[x1:=t1..xn:=tn] = ?m[...]
+  then, occurrences of ?m in the ti can be seen, like variables, as occurrences
+  of subterms to eventually discard so as to be allowed to keep ti.
+*)
+
+let rec is_constrainable_in k (ev,(fv_rels,fv_ids) as g) t =
+  let f,args = decompose_app_vect t in
+  match kind_of_term f with
+  | Construct (ind,_) ->
+      let nparams = (fst (Global.lookup_inductive ind)).Declarations.mind_nparams in
+      let params,_ = array_chop nparams args in
+      array_for_all (is_constrainable_in k g) params
+  | Ind _ -> array_for_all (is_constrainable_in k g) args
+  | Prod (_,t1,t2) -> is_constrainable_in k g t1 && is_constrainable_in k g t2
+  | Evar (ev',_) -> ev' <> ev (*If ev' needed, one may also try to restrict it*)
+  | Var id -> Idset.mem id fv_ids
+  | Rel n -> n <= k || Intset.mem n fv_rels
+  | Sort _ -> true
+  | _ -> (* We don't try to be more clever *) true
+
+let has_constrainable_free_vars evd aliases k ev (fv_rels,fv_ids as fvs) t =
+  let t = expansion_of_var aliases t in
+  match kind_of_term t with
+  | Var id -> Idset.mem id fv_ids
+  | Rel n -> n <= k || Intset.mem n fv_rels
+  | _ -> is_constrainable_in k (ev,fvs) t
+
+let ensure_evar_independent g env evd (evk1,argsv1 as ev1) (evk2,argsv2 as ev2)=
+  let filter1 =
+    restrict_upon_filter evd evk1 (noccur_evar evd evk2) (Array.to_list argsv1)
+  in
+  let candidates1 = restrict_candidates g env evd filter1 ev1 ev2 in
+  let evd,(evk1,_ as ev1) = do_restrict_hyps evd ev1 filter1 candidates1 in
+  let filter2 =
+    restrict_upon_filter evd evk2 (noccur_evar evd evk1) (Array.to_list argsv2)
+  in
+  let candidates2 = restrict_candidates g env evd filter2 ev2 ev1 in
+  let evd,ev2 = do_restrict_hyps evd ev2 filter2 candidates2 in
+  evd,ev1,ev2
+
+exception EvarSolvedOnTheFly of evar_map * constr
+
+let project_evar_on_evar g env evd aliases k2 (evk1,argsv1 as ev1) (evk2,argsv2 as ev2) =
+  (* Apply filtering on ev1 so that fvs(ev1) are in fvs(ev2). *)
+  let fvs2 = free_vars_and_rels_up_alias_expansion aliases (mkEvar ev2) in
+  let filter1 = restrict_upon_filter evd evk1
+    (has_constrainable_free_vars evd aliases k2 evk2 fvs2)
+    (Array.to_list argsv1) in
+  (* Only try pruning on variable substitutions, postpone otherwise. *)
+  (* Rules out non-linear instances. *)
+  if is_unification_pattern_pure_evar env evd ev2 (mkEvar ev1) then
+    try
+      let candidates1 = restrict_candidates g env evd filter1 ev1 ev2 in
+      let evd,(evk1',args1) = do_restrict_hyps evd ev1 filter1 candidates1 in
+      evd,mkEvar (evk1',invert_invertible_arg evd aliases k2 ev2 args1)
+    with
+    | EvarSolvedWhileRestricting (evd,ev1) ->
+        raise (EvarSolvedOnTheFly (evd,ev1))
+    | DoesNotPreserveCandidateRestriction | NotEnoughInformationToInvert ->
+        raise (CannotProject filter1)
+  else
+    raise (CannotProject filter1)
+
+let solve_evar_evar_l2r f g env evd aliases ev1 (evk2,_ as ev2) =
+  try
+    let evd,body = project_evar_on_evar g env evd aliases 0 ev1 ev2 in
+    Evd.define evk2 body evd
+  with EvarSolvedOnTheFly (evd,c) ->
+    f env evd ev2 c
+
+let solve_evar_evar ?(force=false) f g env evd (evk1,args1 as ev1) (evk2,args2 as ev2) =
   if are_canonical_instances args1 args2 env then
     (* If instances are canonical, we solve the problem in linear time *)
     let sign = evar_filtered_context (Evd.find evd evk2) in
-    let subst = List.map (fun (id,_,_) -> mkVar id) sign in
-    Evd.define evk2 (mkEvar(evk1,Array.of_list subst)) evd
+    let id_inst = list_map_to_array (fun (id,_,_) -> mkVar id) sign in
+    Evd.define evk2 (mkEvar(evk1,id_inst)) evd
   else
-    (* Only try pruning on variable substitutions, postpone otherwise. *)
-    if is_variable_subst args1 && is_variable_subst args2 then
-      let proj1 = array_map_to_list (invert_arg aliases 0 evd evk2 subst) args1 in
-	try
-	  (* Instantiate ev2 with (a restriction of) ev1 if uniquely projectable.
-	     Rules out non-linear instances. *)
-	  let proj1' = effective_projections proj1 in
-	  let evd,args1' =
-	    list_fold_map (instance_of_projection f env (mkEvar ev2)) evd proj1' in
-	  let evd,evk1' = do_restrict_hyps evd evk1 proj1 in
-	    Evd.define evk2 (mkEvar(evk1',Array.of_list args1')) evd
-	with NotUnique -> raise (CannotProject proj1)
-    else raise IllTypedFilter
-
-let solve_evar_evar f env evd ev1 ev2 =
-  try
-    try solve_evar_evar_l2r f env evd ev1 ev2
-    with CannotProject projs1 ->
-    try solve_evar_evar_l2r f env evd ev2 ev1
-    with CannotProject projs2 ->
-    postpone_evar_evar env evd projs1 ev1 projs2 ev2
-  with IllTypedFilter ->
-    let pb = (Reduction.CONV,env,mkEvar(ev1),mkEvar (ev2)) in
-      add_conv_pb pb evd
+    let evd,ev1,ev2 =
+      (* If an evar occurs in the instance of the other evar and the
+         use of an heuristic is forced, we restrict *)
+      if force then ensure_evar_independent g env evd ev1 ev2 else (evd,ev1,ev2) in
+    let aliases = make_alias_map env in
+    try solve_evar_evar_l2r f g env evd aliases ev1 ev2
+    with CannotProject filter1 ->
+    try solve_evar_evar_l2r f g env evd aliases ev2 ev1
+    with CannotProject filter2 ->
+    postpone_evar_evar f env evd filter1 ev1 filter2 ev2
 
 type conv_fun =
   env ->  evar_map -> conv_pb -> constr -> constr -> evar_map * bool
@@ -1040,24 +1439,32 @@ let check_evar_instance evd evk1 body conv_algo =
     user_err_loc (fst (evar_source evk1 evd),"",
 		  str "Unable to find a well-typed instantiation")
 
-(* Solve pbs (?i x1..xn) = (?i y1..yn) which arises often in fixpoint
- * definitions. We try to unify the xi with the yi pairwise. The pairs
- * that don't unify are discarded (i.e. ?i is redefined so that it does not
+(* Solve pbs ?e[t1..tn] = ?e[u1..un] which arise often in fixpoint
+ * definitions. We try to unify the ti with the ui pairwise. The pairs
+ * that don't unify are discarded (i.e. ?e is redefined so that it does not
  * depend on these args). *)
 
-let solve_refl conv_algo env evd evk argsv1 argsv2 =
+let solve_refl ?(can_drop=false) conv_algo env evd evk argsv1 argsv2 =
   if array_equal eq_constr argsv1 argsv2 then evd else
-  let evi = Evd.find_undefined evd evk in
   (* Filter and restrict if needed *)
-  let evd,evk,args =
-    restrict_upon_filter evd evi evk
+  let untypedfilter =
+    restrict_upon_filter evd evk
       (fun (a1,a2) -> snd (conv_algo env evd Reduction.CONV a1 a2))
       (List.combine (Array.to_list argsv1) (Array.to_list argsv2)) in
+  let candidates = filter_candidates evd evk untypedfilter None in
+  let filter = match untypedfilter with
+    | None -> None
+    | Some filter -> closure_of_filter evd evk filter in
+  let evd,ev1 = restrict_applied_evar evd (evk,argsv1) filter candidates in
+  if fst ev1 = evk & can_drop then (* No refinement *) evd else
+    (* either progress, or not allowed to drop, e.g. to preserve possibly *)
+    (* informative equations such as ?e[x:=?y]=?e[x:=?y'] where we don't know *)
+    (* if e can depend on x until ?y is not resolved, or, conversely, we *)
+    (* don't know if ?y has to be unified with ?y, until e is resolved *)
+  let argsv2 = restrict_instance evd evk filter argsv2 in
+  let ev2 = (fst ev1,argsv2) in
   (* Leave a unification problem *)
-  let args1,args2 = List.split args in
-  let argsv1 = Array.of_list args1 and argsv2 = Array.of_list args2 in
-  let pb = (Reduction.CONV,env,mkEvar(evk,argsv1),mkEvar(evk,argsv2)) in
-    Evd.add_conv_pb pb evd
+  Evd.add_conv_pb (Reduction.CONV,env,mkEvar ev1,mkEvar ev2) evd
 
 (* If the evar can be instantiated by a finite set of candidates known
    in advance, we check which of them apply *)
@@ -1070,23 +1477,15 @@ let solve_candidates conv_algo env evd (evk,argsv as ev) rhs =
   match evi.evar_candidates with
   | None -> raise NoCandidates
   | Some l ->
-      let l' = list_map_filter (fun c ->
-        let c' = instantiate_evar (evar_filtered_context evi) c args in
-        let evd, b = conv_algo env evd Reduction.CONV c' rhs in
-        if b then Some (c,evd) else None) l in
+      let l' =
+        list_map_filter
+          (filter_compatible_candidates conv_algo env evd evi args rhs) l in
       match l' with
       | [] -> error_cannot_unify env evd (mkEvar ev, rhs)
       | [c,evd] -> Evd.define evk c evd
       | l when List.length l < List.length l' ->
           let candidates = List.map fst l in
-          let filter = evar_filter evi in
-          let sign = evar_hyps evi in
-          let ids = List.map pi1 (named_context_of_val sign) in
-          let inst_in_sign =
-            List.map mkVar (snd (list_filter2 (fun b id -> b) (filter,ids))) in
-          let evd,evar = new_evar_instance (evar_hyps evi) evd (evar_concl evi)
-            ~filter ~candidates inst_in_sign in
-          Evd.define evk evar evd
+          restrict_evar evd evk None (Some candidates)
       | l -> evd
 
 (* We try to instantiate the evar assuming the body won't depend
@@ -1113,7 +1512,7 @@ let solve_candidates conv_algo env evd (evk,argsv as ev) rhs =
  *)
 
 exception NotInvertibleUsingOurAlgorithm of constr
-exception NotEnoughInformationToProgress
+exception NotEnoughInformationToProgress of (identifier * evar_projection) list
 exception OccurCheckIn of evar_map * constr
 
 let rec invert_definition conv_algo choose env evd (evk,argsv as ev) rhs =
@@ -1132,8 +1531,7 @@ let rec invert_definition conv_algo choose env evd (evk,argsv as ev) rhs =
 	| [] -> raise Not_found
 	| [id,p] -> (mkVar id, p)
 	| (id,p)::_::_ ->
-	    if choose then (mkVar id, p)
-	    else raise (NotUniqueInType(find_solution_type (evar_env evi) sols))
+	    if choose then (mkVar id, p) else raise (NotUniqueInType sols)
       in
       let ty = lazy (Retyping.get_type_of env !evdref t) in
       let evd = do_projection_effects (evar_define conv_algo) env ty !evdref p in
@@ -1141,64 +1539,79 @@ let rec invert_definition conv_algo choose env evd (evk,argsv as ev) rhs =
       c
     with
       | Not_found -> raise (NotInvertibleUsingOurAlgorithm t)
-      | NotUniqueInType ty ->
-	  if not !progress then raise NotEnoughInformationToProgress;
+      | NotUniqueInType sols ->
+	  if not !progress then
+            raise (NotEnoughInformationToProgress sols);
 	  (* No unique projection but still restrict to where it is possible *)
           (* materializing is necessary, but is restricting useful? *)
+          let ty = find_solution_type (evar_env evi) sols in
           let sign = evar_filtered_context evi in
           let ty' = instantiate_evar sign ty (Array.to_list argsv) in
-	  let (evd,_,ev') =
+	  let (evd,evar,(evk',argsv' as ev')) =
             materialize_evar (evar_define conv_algo) env !evdref 0 ev ty' in
 	  let ts = expansions_of_var aliases t in
 	  let test c = isEvar c or List.mem c ts in
-	  let filter = array_map_to_list test argsv in
-	  let evarenv,src,filter,_ = restrict_hyps ~refine:true evd (fst ev') filter in
-	  let args' = filter_along (fun x -> x) filter argsv in
-	  let evd,evar = new_evar !evdref evarenv ~src ~filter ty in
-	  let evk',_ = destEvar evar in
-	  let pb = (Reduction.CONV,env,mkEvar(evk',args'),t) in
-	  evdref := Evd.add_conv_pb pb evd;
+	  let filter = array_map_to_list test argsv' in
+          let filter = apply_subfilter (evar_filter (Evd.find_undefined evd evk)) filter in
+
+          let filter = closure_of_filter evd evk' filter in
+          let candidates = extract_candidates sols in
+          let evd =
+            if candidates <> None then restrict_evar evd evk' filter candidates
+            else
+              let evd,ev'' = restrict_applied_evar evd ev' filter None in
+              Evd.add_conv_pb (Reduction.CONV,env,mkEvar ev'',t) evd in
+          evdref := evd;
 	  evar in
 
   let rec imitate (env',k as envk) t =
     let t = whd_evar !evdref t in
     match kind_of_term t with
-    | Rel i when i>k -> project_variable (mkRel (i-k))
-    | Var id -> project_variable t
+    | Rel i when i>k ->
+        (match pi2 (Environ.lookup_rel (i-k) env') with
+        | None -> project_variable (mkRel (i-k))
+        | Some b ->
+          try project_variable (mkRel (i-k))
+          with NotInvertibleUsingOurAlgorithm _ -> imitate envk (lift i b))
+    | Var id ->
+        (match pi2 (Environ.lookup_named id env') with
+        | None -> project_variable t
+        | Some b ->
+          try project_variable t
+          with NotInvertibleUsingOurAlgorithm _ -> imitate envk b)
     | Evar (evk',args' as ev') ->
         if evk = evk' then raise (OccurCheckIn (evd,rhs));
 	(* Evar/Evar problem (but left evar is virtual) *)
-	let projs' =
-	  array_map_to_list
-	    (invert_arg_from_subst aliases k !evdref subst) args'
-	in
-	  (try
-	     (* Try to project (a restriction of) the right evar *)
-	     let eprojs' = effective_projections projs' in
-	     let evd,args' =
-	       list_fold_map (instance_of_projection (evar_define conv_algo) env' t)
-	         !evdref eprojs' in
-	     let evd,evk' = do_restrict_hyps evd evk' projs' in
-	       evdref := evd;
-	       mkEvar (evk',Array.of_list args')
-	   with NotUnique | IllTypedFilter ->
-	   assert !progress;
-	   (* Make the virtual left evar real *)
-	   let ty = get_type_of env' !evdref t in
-	   let (evd,evar'',ev'') =
+        let aliases = lift_aliases k aliases in
+        (try
+          let ev = (evk,Array.map (lift k) argsv) in
+          let evd,body = project_evar_on_evar conv_algo env !evdref aliases k ev'  ev in
+	  evdref := evd;
+          body
+        with
+        | EvarSolvedOnTheFly (evd,t) -> evdref:=evd; imitate envk t
+        | CannotProject filter' ->
+	  assert !progress;
+	  (* Make the virtual left evar real *)
+	  let ty = get_type_of env' !evdref t in
+	  let (evd,evar'',ev'') =
              materialize_evar (evar_define conv_algo) env' !evdref k ev ty in
-	     (try
-		let evd =
-		  (* Try to project (a restriction of) the left evar ... *)
-		  try solve_evar_evar_l2r (evar_define conv_algo) env' evd ev'' ev'
-		  with CannotProject projs'' ->
-		    (* ... or postpone the problem *)
-		    postpone_evar_evar env' evd projs'' ev'' projs' ev'
-		in
-	          evdref := evd;
-		  evar''
-	      with IllTypedFilter -> raise (NotInvertibleUsingOurAlgorithm t)))
+          (* materialize_evar may instantiate ev' by another evar; adjust it *)
+          let (evk',args' as ev') = normalize_evar evd ev' in
+	  let evd =
+	     (* Try to project (a restriction of) the left evar ... *)
+	    try
+              let evd,body = project_evar_on_evar conv_algo env' evd aliases 0 ev'' ev' in
+              Evd.define evk' body evd
+	    with
+            | EvarSolvedOnTheFly _ -> assert false (* ev has no candidates *)
+            | CannotProject filter'' ->
+	      (* ... or postpone the problem *)
+	      postpone_evar_evar (evar_define conv_algo) env' evd filter'' ev'' filter' ev' in
+	  evdref := evd;
+	  evar'')
     | _ ->
+        progress := true;
 	match
 	  let c,args = decompose_app_vect t in
 	  match kind_of_term c with
@@ -1208,16 +1621,30 @@ let rec invert_definition conv_algo choose env evd (evk,argsv as ev) rhs =
             (*  possible inversions; we do not treat overlap with a possible *)
             (*  alternative inversion of the subterms of the constructor, etc)*)
 	    (match find_projectable_constructor env evd cstr k args cstr_subst with
-	     | [id] -> Some (mkVar id)
+	     | _::_ as l -> Some (List.map mkVar l)
 	     | _ -> None)
 	  | _ -> None
 	with
-	| Some c -> c
+	| Some l ->
+            let ty = get_type_of env' !evdref t in
+            let candidates =
+              try
+                let t =
+                  map_constr_with_full_binders (fun d (env,k) -> push_rel d env, k+1)
+	            imitate envk t in
+                t::l
+              with _ -> l in
+            (match candidates with
+            | [x] -> x
+            | _ ->
+	      let (evd,evar'',ev'') =
+                materialize_evar (evar_define conv_algo) env' !evdref k ev ty in
+              evdref := restrict_evar evd (fst ev'') None (Some candidates);
+              evar'')
 	| None ->
-	  progress := true;
 	  (* Evar/Rigid problem (or assimilated if not normal): we "imitate" *)
-	  map_constr_with_full_binders (fun d (env,k) -> push_rel d env, k+1)
-	    imitate envk t in
+	    map_constr_with_full_binders (fun d (env,k) -> push_rel d env, k+1)
+	      imitate envk t in
 
   let rhs = whd_beta evd rhs (* heuristic *) in
   let body = imitate (env,0) rhs in
@@ -1233,8 +1660,11 @@ let rec invert_definition conv_algo choose env evd (evk,argsv as ev) rhs =
 and evar_define conv_algo ?(choose=false) env evd (evk,argsv as ev) rhs =
   match kind_of_term rhs with
   | Evar (evk2,argsv2 as ev2) ->
-      if evk = evk2 then solve_refl conv_algo env evd evk argsv argsv2
-      else solve_evar_evar (evar_define conv_algo) env evd ev ev2
+      if evk = evk2 then
+        solve_refl ~can_drop:choose conv_algo env evd evk argsv argsv2
+      else
+        solve_evar_evar ~force:choose
+          (evar_define conv_algo) conv_algo env evd ev ev2
   | _ ->
   try solve_candidates conv_algo env evd ev rhs
   with NoCandidates ->
@@ -1265,8 +1695,8 @@ and evar_define conv_algo ?(choose=false) env evd (evk,argsv as ev) rhs =
     let evd' = Evd.define evk body evd' in
     check_evar_instance evd' evk body conv_algo
   with
-    | NotEnoughInformationToProgress ->
-	postpone_evar_term env evd ev rhs
+    | NotEnoughInformationToProgress sols ->
+	postpone_non_unique_projection env evd ev sols rhs
     | NotInvertibleUsingOurAlgorithm t ->
 	error_not_clean env evd evk t (evar_source evk evd)
     | OccurCheckIn (evd,rhs) ->
@@ -1279,173 +1709,6 @@ and evar_define conv_algo ?(choose=false) env evd (evk,argsv as ev) rhs =
 	      env evd evk argsv argsv2
 	| _ ->
 	    error_occur_check env evd evk rhs
-
-(*-------------------*)
-(* Auxiliary functions for the conversion algorithms modulo evars
- *)
-
-let has_undefined_evars_or_sorts evd t =
-  let rec has_ev t =
-    match kind_of_term t with
-    | Evar (ev,args) ->
-        (match evar_body (Evd.find evd ev) with
-        | Evar_defined c ->
-            has_ev c; Array.iter has_ev args
-        | Evar_empty ->
-	    raise NotInstantiatedEvar)
-    | Sort s when is_sort_variable evd s -> raise Not_found
-    | _ -> iter_constr has_ev t in
-  try let _ = has_ev t in false
-  with (Not_found | NotInstantiatedEvar) -> true
-
-let is_ground_term evd t =
-  not (has_undefined_evars_or_sorts evd t)
-
-let is_ground_env evd env =
-  let is_ground_decl = function
-      (_,Some b,_) -> is_ground_term evd b
-    | _ -> true in
-  List.for_all is_ground_decl (rel_context env) &&
-  List.for_all is_ground_decl (named_context env)
-(* Memoization is safe since evar_map and environ are applicative
-   structures *)
-let is_ground_env = memo1_2 is_ground_env
-
-(* Return the head evar if any *)
-
-exception NoHeadEvar
-
-let head_evar =
-  let rec hrec c = match kind_of_term c with
-    | Evar (evk,_)   -> evk
-    | Case (_,_,c,_) -> hrec c
-    | App (c,_)      -> hrec c
-    | Cast (c,_,_)   -> hrec c
-    | _              -> raise NoHeadEvar
-  in
-  hrec
-
-(* Expand head evar if any (currently consider only applications but I
-   guess it should consider Case too) *)
-
-let whd_head_evar_stack sigma c =
-  let rec whrec (c, l as s) =
-    match kind_of_term c with
-      | Evar (evk,args as ev) when Evd.is_defined sigma evk
-	  -> whrec (existential_value sigma ev, l)
-      | Cast (c,_,_) -> whrec (c, l)
-      | App (f,args) -> whrec (f, Array.fold_right (fun a l -> a::l) args l)
-      | _ -> s
-  in
-  whrec (c, [])
-
-let whd_head_evar sigma c = applist (whd_head_evar_stack sigma c)
-
-let rec expand_and_check_vars aliases = function
-  | [] -> []
-  | a::l when isRel a or isVar a ->
-      let a = expansion_of_var aliases a in
-      if isRel a or isVar a then a :: expand_and_check_vars aliases l
-      else raise Exit
-  | _ ->
-      raise Exit
-
-module Constrhash = Hashtbl.Make
-  (struct type t = constr
-	  let equal = eq_constr
-	  let hash = hash_constr
-   end)
-
-let rec constr_list_distinct l =
-  let visited = Constrhash.create 23 in
-  let rec loop = function
-    | h::t ->
-	if Constrhash.mem visited h then false
-	else (Constrhash.add visited h h; loop t)
-    | [] -> true
-  in loop l
-
-let get_actual_deps aliases l t =
-  if occur_meta_or_existential t then
-    (* Probably no restrictions on allowed vars in presence of evars *)
-    l
-  else
-    (* Probably strong restrictions coming from t being evar-closed *)
-    let (fv_rels,fv_ids) = free_vars_and_rels_up_alias_expansion aliases t in
-    List.filter (fun c ->
-      match kind_of_term c with
-      | Var id -> Idset.mem id fv_ids
-      | Rel n -> Intset.mem n fv_rels
-      | _ -> assert false) l
-
-let remove_instance_local_defs evd evk args =
-  let evi = Evd.find evd evk in
-  let rec aux = function
-  | (_,Some _,_)::sign, a::args -> aux (sign,args)
-  | (_,None,_)::sign, a::args -> a::aux (sign,args)
-  | [], [] -> []
-  | _ -> assert false in
-  aux (evar_filtered_context evi, args)
-
-(* Check if an applied evar "?X[args] l" is a Miller's pattern *)
-
-let find_unification_pattern_args env l t =
-  if List.for_all (fun x -> isRel x || isVar x) l (* common failure case *) then
-    let aliases = make_alias_map env in
-    match (try Some (expand_and_check_vars aliases l) with Exit -> None) with
-    | Some l as x when constr_list_distinct (get_actual_deps aliases l t) -> x
-    | _ -> None
-  else
-    None
-
-let is_unification_pattern_meta env nb m l t =
-  (* Variables from context and rels > nb are implicitly all there *)
-  (* so we need to be a rel <= nb *)
-  if List.for_all (fun x -> isRel x && destRel x <= nb) l then
-    match find_unification_pattern_args env l t with
-    | Some _ as x when not (dependent (mkMeta m) t) -> x
-    | _ -> None
-  else
-    None
-
-let is_unification_pattern_evar env evd (evk,args) l t =
-  if List.for_all (fun x -> isRel x || isVar x) l (* common failure case *) then
-    let args = remove_instance_local_defs evd evk (Array.to_list args) in
-    let n = List.length args in
-    match find_unification_pattern_args env (args @ l) t with
-    | Some l when not (occur_evar evk t) -> Some (list_skipn n l)
-    | _ -> None
-  else
-    None
-
-let is_unification_pattern (env,nb) evd f l t =
-  match kind_of_term f with
-  | Meta m -> is_unification_pattern_meta env nb m l t
-  | Evar ev -> is_unification_pattern_evar env evd ev l t
-  | _ -> None
-
-(* From a unification problem "?X l = c", build "\x1...xn.(term1 l2)"
-   (pattern unification). It is assumed that l is made of rel's that
-   are distinct and not bound to aliases. *)
-(* It is also assumed that c does not contain metas because metas
-   *implicitly* depend on Vars but lambda abstraction will not reflect this
-   dependency: ?X x = ?1 (?1 is a meta) will return \_.?1 while it should
-   return \y. ?1{x\y} (non constant function if ?1 depends on x) (BB) *)
-let solve_pattern_eqn env l c =
-  let c' = List.fold_right (fun a c ->
-    let c' = subst_term (lift 1 a) (lift 1 c) in
-    match kind_of_term a with
-      (* Rem: if [a] links to a let-in, do as if it were an assumption *)
-      | Rel n ->
-          let d = map_rel_declaration (lift n) (lookup_rel n env) in
-          mkLambda_or_LetIn d c'
-      | Var id ->
-          let d = lookup_named id env in mkNamedLambda_or_LetIn d c'
-      | _ -> assert false)
-    l c in
-  (* Warning: we may miss some opportunity to eta-reduce more since c'
-     is not in normal form *)
-  whd_eta c'
 
 (* This code (i.e. solve_pb, etc.) takes a unification
  * problem, and tries to solve it. If it solves it, then it removes
@@ -1516,44 +1779,50 @@ let evars_of_term c =
   in
   evrec Intset.empty c
 
-(* spiwack: a few functions to gather the existential variables
-   that occur in the types of goals present or past. *)
-let add_evars_of_evars_of_term acc evm c =
-  let evars = evars_of_term c in
-  Intset.fold begin fun e r ->
-    let body = (Evd.find evm e).evar_body in
-    let subevars =
-      match body with
-      | Evar_empty -> None
-      | Evar_defined c' -> Some (evars_of_term c')
-    in
-    Intmap.add e subevars r
-  end evars acc
+(* spiwack: a few functions to gather evars on which goals depend. *)
+let queue_set q is_dependent set =
+  Intset.iter (fun a -> Queue.push (is_dependent,a) q) set
+let queue_term q is_dependent c =
+  queue_set q is_dependent (evars_of_term c)
 
-let evars_of_evars_of_term = add_evars_of_evars_of_term Intmap.empty
-
-let add_evars_of_evars_in_type acc evm e =
+let process_dependent_evar q acc evm is_dependent e =
   let evi = Evd.find evm e in
-  let acc_with_concl = add_evars_of_evars_of_term acc evm evi.evar_concl in
-  let hyps = Environ.named_context_of_val evi.evar_hyps in
-  List.fold_left begin fun r (_,b,t) ->
-    let r = add_evars_of_evars_of_term r evm t in
+  (* Queues evars appearing in the types of the goal (conclusion, then
+     hypotheses), they are all dependent. *)
+  queue_term q true evi.evar_concl;
+  List.iter begin fun (_,b,t) ->
+    queue_term q true t;
     match b with
-    | None -> r
-    | Some b -> add_evars_of_evars_of_term r evm b
-  end acc_with_concl hyps
+    | None -> ()
+    | Some b -> queue_term q true b
+  end (Environ.named_context_of_val evi.evar_hyps);
+  match evi.evar_body with
+  | Evar_empty ->
+      if is_dependent then Intmap.add e None acc else acc
+  | Evar_defined b ->
+      let subevars = evars_of_term b in
+      (* evars appearing in the definition of an evar [e] are marked
+         as dependent when [e] is dependent itself: if [e] is a
+         non-dependent goal, then, unless they are reach from another
+         path, these evars are just other non-dependent goals. *)
+      queue_set q is_dependent subevars;
+      if is_dependent then Intmap.add e (Some subevars) acc else acc
 
-let rec add_evars_of_evars_in_types_of_set acc evm s =
-  Intset.fold begin fun e r ->
-    let r = add_evars_of_evars_in_type r evm e in
-    match (Evd.find evm e).evar_body with
-    | Evar_empty -> r
-    | Evar_defined b -> add_evars_of_evars_in_types_of_set r evm (evars_of_term b)
-  end s acc
+let gather_dependent_evars q evm =
+  let acc = ref Intmap.empty in
+  while not (Queue.is_empty q) do
+    let (is_dependent,e) = Queue.pop q in
+    (* checks if [e] has already been added to [!acc] *)
+    begin if not (Intmap.mem e !acc) then
+        acc := process_dependent_evar q !acc evm is_dependent e  
+    end
+  done;
+  !acc
 
-let evars_of_evars_in_types_of_list evm l =
-  let set_of_l = List.fold_left (fun x y -> Intset.add y x) Intset.empty l in
-  add_evars_of_evars_in_types_of_set Intmap.empty evm set_of_l
+let gather_dependent_evars evm l =
+  let q = Queue.create () in
+  List.iter (fun a -> Queue.add (false,a) q) l;
+  gather_dependent_evars q evm
 
 (* /spiwack *)
 
@@ -1627,7 +1896,9 @@ let check_evars env initial_sigma sigma c =
 
 open Glob_term
 
+(****************************************)
 (* Operations on value/type constraints *)
+(****************************************)
 
 type type_constraint_type = (int * int) option * constr
 type type_constraint = type_constraint_type option
@@ -1666,10 +1937,6 @@ let empty_valcon = None
 (* Builds a value constraint *)
 let mk_valcon c = Some c
 
-
-let new_type_evar ?src ?filter evd env =
-  let evd', s = new_sort_variable evd in
-    new_evar evd' env ?src ?filter (mkSort s)
 
 let idx = id_of_string "x"
 

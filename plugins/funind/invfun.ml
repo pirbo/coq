@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -588,15 +588,15 @@ let rec reflexivity_with_destruct_cases g =
     )
   in
   (tclFIRST
-    [ reflexivity;
-      tclTHEN (tclPROGRESS discr_inject) (destruct_case ());
+    [ observe_tac "reflexivity_with_destruct_cases : reflexivity" reflexivity;
+      observe_tac "reflexivity_with_destruct_cases : destruct_case" ((destruct_case ()));
       (*  We reach this point ONLY if
 	  the same value is matched (at least) two times
 	  along binding path.
 	  In this case, either we have a discriminable hypothesis and we are done,
 	  either at least an injectable one and we do the injection before continuing
       *)
-      tclTHEN (tclPROGRESS discr_inject ) reflexivity_with_destruct_cases
+      observe_tac "reflexivity_with_destruct_cases : others" (tclTHEN (tclPROGRESS discr_inject ) reflexivity_with_destruct_cases)
     ])
     g
 
@@ -752,6 +752,7 @@ let do_save () = Lemmas.save_named false
 *)
 
 let derive_correctness make_scheme functional_induction (funs: constant list) (graphs:inductive list) =
+  let previous_state = States.freeze () in
   let funs = Array.of_list funs and graphs = Array.of_list graphs in
   let funs_constr = Array.map mkConst funs  in
   try
@@ -793,22 +794,21 @@ let derive_correctness make_scheme functional_induction (funs: constant list) (g
     Array.iteri
       (fun i f_as_constant ->
 	 let f_id = id_of_label (con_label f_as_constant) in
-	 Lemmas.start_proof
-	   (*i The next call to mk_correct_id is valid since we are constructing the lemma
+	 (*i The next call to mk_correct_id is valid since we are constructing the lemma
 	     Ensures by: obvious
-	     i*)
-	   (mk_correct_id f_id)
+	 i*)
+	 let lem_id = mk_correct_id f_id in
+	 Lemmas.start_proof lem_id
 	   (Decl_kinds.Global,(Decl_kinds.Proof Decl_kinds.Theorem))
 	   (fst lemmas_types_infos.(i))
 	   (fun _ _ -> ());
-	 Pfedit.by (observe_tac ("prove correctness ("^(string_of_id f_id)^")") (proving_tac i));
+	 Pfedit.by
+	   (observe_tac ("prove correctness ("^(string_of_id f_id)^")")
+	      (proving_tac i));
 	 do_save ();
 	 let finfo = find_Function_infos f_as_constant in
-	 update_Function
-	   {finfo with
-	      correctness_lemma = Some (destConst (Constrintern.global_reference (mk_correct_id f_id)))
-	   }
-
+	 let lem_cst = destConst (Constrintern.global_reference lem_id) in
+	 update_Function {finfo with correctness_lemma = Some lem_cst}
       )
       funs;
     let lemmas_types_infos =
@@ -845,34 +845,27 @@ let derive_correctness make_scheme functional_induction (funs: constant list) (g
     Array.iteri
       (fun i f_as_constant ->
 	 let f_id = id_of_label (con_label f_as_constant) in
-	 Lemmas.start_proof
-	   (*i The next call to mk_complete_id is valid since we are constructing the lemma
+	 (*i The next call to mk_complete_id is valid since we are constructing the lemma
 	     Ensures by: obvious
-	     i*)
-	   (mk_complete_id f_id)
+	   i*)
+	 let lem_id = mk_complete_id f_id in
+	 Lemmas.start_proof lem_id
 	   (Decl_kinds.Global,(Decl_kinds.Proof Decl_kinds.Theorem))
 	   (fst lemmas_types_infos.(i))
 	   (fun _ _ -> ());
-	 Pfedit.by (observe_tac ("prove completeness ("^(string_of_id f_id)^")") (proving_tac i));
+	 Pfedit.by
+	   (observe_tac ("prove completeness ("^(string_of_id f_id)^")")
+	      (proving_tac i));
 	 do_save ();
 	 let finfo = find_Function_infos f_as_constant in
-	 update_Function
-	   {finfo with
-	      completeness_lemma = Some (destConst (Constrintern.global_reference (mk_complete_id f_id)))
-	   }
+	 let lem_cst = destConst (Constrintern.global_reference lem_id) in
+	 update_Function {finfo with completeness_lemma = Some lem_cst}
       )
       funs;
   with e ->
     (* In case of problem, we reset all the lemmas *)
-    (*i The next call to mk_correct_id is valid since we are erasing the lemmas
-      Ensures by: obvious
-      i*)
-    let first_lemma_id =
-      let f_id = id_of_label (con_label funs.(0)) in
-
-      mk_correct_id f_id
-    in
-     ignore(try Vernacentries.vernac_reset_name (Util.dummy_loc,first_lemma_id) with _ -> ());
+    Pfedit.delete_all_proofs ();
+    States.unfreeze previous_state;
     raise e
 
 

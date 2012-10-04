@@ -73,16 +73,21 @@ COQBINARIES:= $(COQMKTOP) $(COQC) \
 
 CSDPCERT:=plugins/micromega/csdpcert$(EXE)
 
+CORESRCDIRS:=\
+  config 	lib		kernel		kernel/byterun	library \
+  proofs 	tactics 	pretyping	interp		toplevel \
+  parsing
+
+PLUGINS:=\
+  omega		romega 		micromega 	quote		ring \
+  setoid_ring 	xml 		extraction 	fourier \
+  cc 		funind 		firstorder 	field 		subtac \
+  rtauto 	nsatz           syntax          decl_mode
+
 SRCDIRS:=\
-  config 	tools 		tools/coqdoc 	scripts		lib \
-  kernel	kernel/byterun	library 	proofs 		tactics \
-  pretyping	interp		toplevel/utils	toplevel 	parsing 	\
-  ide/utils	ide		\
-  $(addprefix plugins/, \
-    omega	romega 		micromega 	quote		ring	dp \
-    setoid_ring xml 		extraction 	fourier \
-    cc 		funind 		firstorder 	field 		subtac \
-    rtauto 	nsatz           syntax          decl_mode)
+  $(CORESRCDIRS)  \
+  tools 	tools/coqdoc 	scripts		ide/utils	ide \
+  $(addprefix plugins/, $(PLUGINS))
 
 # Order is relevent here because kernel and checker contain files
 # with the same name
@@ -125,14 +130,15 @@ REFMANCOQTEXFILES:=$(addprefix doc/refman/, \
   RefMan-cic.v.tex RefMan-lib.v.tex \
   RefMan-tacex.v.tex RefMan-syn.v.tex \
   RefMan-oth.v.tex RefMan-ltac.v.tex \
-  RefMan-decl.v.tex \
+  RefMan-decl.v.tex RefMan-sch.v.tex \
+  RefMan-pro.v.tex \
   Cases.v.tex Coercion.v.tex Extraction.v.tex \
   Program.v.tex Omega.v.tex Micromega.v.tex Polynom.v.tex Nsatz.v.tex \
   Setoid.v.tex Helm.tex Classes.v.tex )
 
 REFMANTEXFILES:=$(addprefix doc/refman/, \
   headers.sty Reference-Manual.tex \
-  RefMan-pre.tex RefMan-int.tex RefMan-pro.tex RefMan-com.tex \
+  RefMan-pre.tex RefMan-int.tex RefMan-com.tex \
   RefMan-uti.tex RefMan-ide.tex RefMan-add.tex RefMan-modr.tex ) \
   $(REFMANCOQTEXFILES) \
 
@@ -176,7 +182,6 @@ QUOTECMA:=plugins/quote/quote_plugin.cma
 RINGCMA:=plugins/ring/ring_plugin.cma
 NEWRINGCMA:=plugins/setoid_ring/newring_plugin.cma
 NSATZCMA:=plugins/nsatz/nsatz_plugin.cma
-DPCMA:=plugins/dp/dp_plugin.cma
 FIELDCMA:=plugins/field/field_plugin.cma
 XMLCMA:=plugins/xml/xml_plugin.cma
 FOURIERCMA:=plugins/fourier/fourier_plugin.cma
@@ -196,14 +201,14 @@ OTHERSYNTAXCMA:=$(addprefix plugins/syntax/, \
 DECLMODECMA:=plugins/decl_mode/decl_mode_plugin.cma
 
 PLUGINSCMA:=$(OMEGACMA) $(ROMEGACMA) $(MICROMEGACMA) $(DECLMODECMA) \
-        $(QUOTECMA) $(RINGCMA) $(NEWRINGCMA) $(DPCMA) $(FIELDCMA) \
+        $(QUOTECMA) $(RINGCMA) $(NEWRINGCMA) $(FIELDCMA) \
         $(FOURIERCMA) $(EXTRACTIONCMA) $(XMLCMA) \
         $(CCCMA)  $(FOCMA) $(SUBTACCMA) $(RTAUTOCMA) \
         $(FUNINDCMA) $(NSATZCMA) $(NATSYNTAXCMA) $(OTHERSYNTAXCMA)
 
 ifneq ($(HASNATDYNLINK),false)
  STATICPLUGINS:=
- INITPLUGINS:=$(EXTRACTIONCMA) $(FOCMA) $(CCCMA) $(DPCMA) \
+ INITPLUGINS:=$(EXTRACTIONCMA) $(FOCMA) $(CCCMA) \
 	$(XMLCMA) $(FUNINDCMA) $(SUBTACCMA) $(NATSYNTAXCMA)
  INITPLUGINSOPT:=$(INITPLUGINS:.cma=.cmxs)
  PLUGINS:=$(PLUGINSCMA)
@@ -314,7 +319,6 @@ NEWRINGVO:=$(call cat_vo_itarget, plugins/setoid_ring)
 NSATZVO:=$(call cat_vo_itarget, plugins/nsatz)
 FOURIERVO:=$(call cat_vo_itarget, plugins/fourier)
 FUNINDVO:=$(call cat_vo_itarget, plugins/funind)
-DPVO:=$(call cat_vo_itarget, plugins/dp)
 RTAUTOVO:=$(call cat_vo_itarget, plugins/rtauto)
 EXTRACTIONVO:=$(call cat_vo_itarget, plugins/extraction)
 XMLVO:=
@@ -322,7 +326,7 @@ CCVO:=
 
 PLUGINSVO:= $(OMEGAVO) $(ROMEGAVO) $(MICROMEGAVO) $(RINGVO) $(FIELDVO) \
 	    $(XMLVO) $(FOURIERVO) $(CCVO) $(FUNINDVO) \
-	    $(RTAUTOVO) $(NEWRINGVO) $(DPVO) $(QUOTEVO) \
+	    $(RTAUTOVO) $(NEWRINGVO) $(QUOTEVO) \
             $(NSATZVO) $(EXTRACTIONVO)
 
 ALLVO:= $(THEORIESVO) $(PLUGINSVO)
@@ -346,8 +350,6 @@ MANPAGES:=man/coq-tex.1 man/coqdep.1 man/gallina.1 \
 	man/coqc.1 man/coqtop.1 man/coqtop.byte.1 man/coqtop.opt.1 \
 	man/coqwc.1 man/coqdoc.1 man/coqide.1 \
 	man/coq_makefile.1 man/coqmktop.1 man/coqchk.1
-
-DATE=$(shell LANG=C date +"%B %Y")
 
 ###########################################################################
 # Source documentation

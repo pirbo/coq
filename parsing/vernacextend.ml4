@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -49,13 +49,18 @@ let mlexpr_of_clause =
        (Option.List.cons (Option.map (fun a -> GramTerminal a) a) b))
 
 let declare_command loc s nt cl =
+  let se = mlexpr_of_string s in
   let gl = mlexpr_of_clause cl in
   let funcl = make_fun_clauses loc s cl in
   declare_str_items loc
     [ <:str_item< do {
-	try Vernacinterp.vinterp_add $mlexpr_of_string s$ $funcl$
-	with e -> Pp.pp (Errors.print e);
-	Egrammar.extend_vernac_command_grammar $mlexpr_of_string s$ $nt$ $gl$
+	try Vernacinterp.vinterp_add $se$ $funcl$
+	with e ->
+	  Pp.msg_warning
+	    (Stream.iapp
+	       (Pp.str ("Exception in vernac extend " ^ $se$ ^": "))
+	       (Errors.print e));
+	Egrammar.extend_vernac_command_grammar $se$ $nt$ $gl$
       } >> ]
 
 open Pcaml

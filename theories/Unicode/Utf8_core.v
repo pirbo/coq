@@ -1,7 +1,7 @@
 (* -*- coding:utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -17,7 +17,9 @@ Notation "∃  x .. y , P" := (exists x, .. (exists y, P) ..)
 
 Notation "x ∨ y" := (x \/ y) (at level 85, right associativity) : type_scope.
 Notation "x ∧ y" := (x /\ y) (at level 80, right associativity) : type_scope.
-Notation "x → y" := (x -> y) (at level 90, right associativity): type_scope.
+Notation "x → y" := (x -> y)
+  (at level 90, y at level 200, right associativity): type_scope.
+
 Notation "x ↔ y" := (x <-> y) (at level 95, no associativity): type_scope.
 Notation "¬ x" := (~x) (at level 75, right associativity) : type_scope.
 Notation "x ≠ y" := (x <> y) (at level 70) : type_scope.

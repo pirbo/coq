@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -260,7 +260,14 @@ let rec pr_generic prc prlc prtac prpat x =
 
 let rec tacarg_using_rule_token pr_gen = function
   | Some s :: l, al -> str s :: tacarg_using_rule_token pr_gen (l,al)
-  | None :: l, a :: al -> pr_gen a :: tacarg_using_rule_token pr_gen (l,al)
+  | None :: l, a :: al ->
+      let print_it =
+        match genarg_tag a with
+        | OptArgType _ -> fold_opt (fun _ -> true) false a
+        | _ -> true
+      in
+      let r = tacarg_using_rule_token pr_gen (l,al) in
+      if print_it then pr_gen a :: r else r
   | [], [] -> []
   | _ -> failwith "Inconsistent arguments of extended tactic"
 
@@ -338,11 +345,15 @@ let pr_bindings prlc prc = pr_bindings_gen false prlc prc
 let pr_with_bindings prlc prc (c,bl) =
   hov 1 (prc c ++ pr_bindings prlc prc bl)
 
+let pr_as_ipat pat = str "as " ++ pr_intro_pattern pat
+let pr_eqn_ipat pat = str "eqn:" ++ pr_intro_pattern pat
+
 let pr_with_induction_names = function
   | None, None -> mt ()
-  | eqpat, ipat ->
-      spc () ++ hov 1 (str "as" ++ pr_opt pr_intro_pattern eqpat ++
-                       pr_opt pr_intro_pattern ipat)
+  | Some eqpat, None -> spc () ++ hov 1 (pr_eqn_ipat eqpat)
+  | None, Some ipat -> spc () ++ hov 1 (pr_as_ipat ipat)
+  | Some eqpat, Some ipat ->
+    spc () ++ hov 1 (pr_as_ipat ipat ++ spc () ++ pr_eqn_ipat eqpat)
 
 let pr_as_intro_pattern ipat =
   spc () ++ hov 1 (str "as" ++ spc () ++ pr_intro_pattern ipat)
@@ -419,7 +430,7 @@ let pr_clauses default_is_concl pr_id = function
 	 (if occs = no_occurrences_expr then mt ()
 	  else pr_with_occurrences (fun () -> str" |- *") (occs,())))
 
-let pr_orient b = if b then mt () else str " <-"
+let pr_orient b = if b then mt () else str "<- "
 
 let pr_multi = function
   | Precisely 1 -> mt ()
@@ -514,6 +525,11 @@ let pr_auto_using prc = function
   | [] -> mt ()
   | l -> spc () ++
       hov 2 (str "using" ++ spc () ++ prlist_with_sep pr_comma prc l)
+
+let string_of_debug = function
+  | Off -> ""
+  | Debug -> "debug "
+  | Info -> "info_"
 
 let pr_then () = str ";"
 
@@ -623,19 +639,14 @@ let rec pr_atom0 = function
   | TacAssumption -> str "assumption"
   | TacAnyConstructor (false,None) -> str "constructor"
   | TacAnyConstructor (true,None) -> str "econstructor"
-  | TacTrivial ([],Some []) -> str "trivial"
-  | TacAuto (None,[],Some []) -> str "auto"
+  | TacTrivial (d,[],Some []) -> str (string_of_debug d ^ "trivial")
+  | TacAuto (d,None,[],Some []) -> str (string_of_debug d ^ "auto")
   | TacReflexivity -> str "reflexivity"
   | TacClear (true,[]) -> str "clear"
   | t -> str "(" ++ pr_atom1 t ++ str ")"
 
   (* Main tactic printer *)
 and pr_atom1 = function
-  | TacAutoTDB _ | TacDestructHyp _ | TacDestructConcl
-  | TacSuperAuto _ | TacExtend (_,
-    ("GTauto"|"GIntuition"|"TSimplif"|
-     "LinearIntuition"),_) ->
-      errorlabstrm "Obsolete V8" (str "Tactic is not ported to V8.0")
   | TacExtend (loc,s,l) ->
       pr_with_comments loc (pr_extend 1 s l)
   | TacAlias (loc,s,l,_) ->
@@ -693,12 +704,13 @@ and pr_atom1 = function
   | TacGeneralizeDep c ->
       hov 1 (str "generalize" ++ spc () ++ str "dependent" ++
              pr_constrarg c)
-  | TacLetTac (na,c,cl,true) when cl = nowhere ->
+  | TacLetTac (na,c,cl,true,_) when cl = nowhere ->
       hov 1 (str "pose" ++ pr_pose pr_lconstr pr_constr na c)
-  | TacLetTac (na,c,cl,b) ->
+  | TacLetTac (na,c,cl,b,e) ->
       hov 1 ((if b then str "set" else str "remember") ++
              (if b then pr_pose pr_lconstr else pr_pose_as_style)
 	        pr_constr na c ++
+             pr_opt (fun p -> pr_eqn_ipat p ++ spc ()) e ++
              pr_clauses (Some b) pr_ident cl)
 (*  | TacInstantiate (n,c,ConclLocation ()) ->
       hov 1 (str "instantiate" ++ spc() ++
@@ -714,14 +726,14 @@ and pr_atom1 = function
   | TacSimpleInductionDestruct (isrec,h) ->
       hov 1 (str "simple " ++ str (if isrec then "induction" else "destruct")
              ++ pr_arg pr_quantified_hypothesis h)
-  | TacInductionDestruct (isrec,ev,(l,cl)) ->
+  | TacInductionDestruct (isrec,ev,(l,el,cl)) ->
       hov 1 (str (with_evars ev (if isrec then "induction" else "destruct")) ++
              spc () ++
-             prlist_with_sep pr_comma (fun (h,e,ids) ->
-	       prlist_with_sep spc (pr_induction_arg pr_lconstr pr_constr) h ++
-	       pr_with_induction_names ids ++
-               pr_opt pr_eliminator e) l ++
-               pr_opt_no_spc (pr_clauses None pr_ident) cl)
+             prlist_with_sep pr_comma (fun (h,ids) ->
+	       pr_induction_arg pr_lconstr pr_constr h ++
+	       pr_with_induction_names ids) l ++
+             pr_opt pr_eliminator el ++
+	     pr_opt_no_spc (pr_clauses None pr_ident) cl)
   | TacDoubleInduction (h1,h2) ->
       hov 1
         (str "double induction" ++
@@ -742,17 +754,15 @@ and pr_atom1 = function
       hov 1 (str "lapply" ++ pr_constrarg c)
 
   (* Automation tactics *)
-  | TacTrivial ([],Some []) as x -> pr_atom0 x
-  | TacTrivial (lems,db) ->
-      hov 0 (str "trivial" ++
+  | TacTrivial (_,[],Some []) as x -> pr_atom0 x
+  | TacTrivial (d,lems,db) ->
+      hov 0 (str (string_of_debug d ^ "trivial") ++
              pr_auto_using pr_constr lems ++ pr_hintbases db)
-  | TacAuto (None,[],Some []) as x -> pr_atom0 x
-  | TacAuto (n,lems,db) ->
-      hov 0 (str "auto" ++ pr_opt (pr_or_var int) n ++
+  | TacAuto (_,None,[],Some []) as x -> pr_atom0 x
+  | TacAuto (d,n,lems,db) ->
+      hov 0 (str (string_of_debug d ^ "auto") ++
+	     pr_opt (pr_or_var int) n ++
              pr_auto_using pr_constr lems ++ pr_hintbases db)
-  | TacDAuto (n,p,lems) ->
-      hov 1 (str "auto" ++ pr_opt (pr_or_var int) n ++ str "decomp" ++
-             pr_opt int p ++ pr_auto_using pr_constr lems)
 
   (* Context management *)
   | TacClear (true,[]) as t -> pr_atom0 t
@@ -803,17 +813,17 @@ and pr_atom1 = function
 
   (* Equivalence relations *)
   | TacReflexivity as x -> pr_atom0 x
-  | TacSymmetry cls -> str "symmetry " ++ pr_clauses (Some true) pr_ident cls
+  | TacSymmetry cls -> str "symmetry" ++ pr_clauses (Some true) pr_ident cls
   | TacTransitivity (Some c) -> str "transitivity" ++ pr_constrarg c
   | TacTransitivity None -> str "etransitivity"
 
   (* Equality and inversion *)
   | TacRewrite (ev,l,cl,by) ->
-      hov 1 (str (with_evars ev "rewrite") ++
+      hov 1 (str (with_evars ev "rewrite") ++ spc () ++
 	     prlist_with_sep
 	     (fun () -> str ","++spc())
 	     (fun (b,m,c) ->
-		pr_orient b ++ spc() ++ pr_multi m ++ pr_with_bindings c)
+		pr_orient b ++ pr_multi m ++ pr_with_bindings c)
 	     l
 	     ++ pr_clauses (Some true) pr_ident cl
 	     ++	(match by with Some by -> pr_by_tactic (pr_tac_level ltop) by | None -> mt()))
@@ -913,7 +923,7 @@ let rec pr_tac inherited tac =
   | TacSolve tl ->
       str "solve" ++ spc () ++ pr_seq_body (pr_tac ltop) tl, llet
   | TacComplete t ->
-      str "complete" ++ spc () ++ pr_tac (lcomplete,E) t, lcomplete
+      pr_tac (lcomplete,E) t, lcomplete
   | TacId l ->
       str "idtac" ++ prlist (pr_arg (pr_message_token pr_ident)) l, latom
   | TacAtom (loc,TacAlias (_,s,l,_)) ->

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -576,7 +576,6 @@ let inSimplBehaviour = declare_object { (default_object "SIMPLBEHAVIOUR") with
 
 let set_simpl_behaviour local r (recargs, nargs, flags as req) =
   let nargs = if List.mem `SimplNeverUnfold flags then max_int else nargs in
-  let nargs = List.fold_left max nargs recargs in
   let behaviour = {
     b_nargs = nargs; b_recargs = recargs;
     b_dont_expose_case = List.mem `SimplDontExposeCase flags } in
@@ -610,10 +609,11 @@ let dont_expose_case r =
 
 let rec red_elim_const env sigma ref largs =
   let nargs = stack_args_size largs in
-  let largs, unfold_anyway =
+  let largs, unfold_anyway, unfold_nonelim =
     match recargs ref with
-    | None -> largs, false
+    | None -> largs, false, false
     | Some (_,n) when nargs < n -> raise Redelimination
+    | Some (x::l,_) when nargs <= List.fold_left max x l -> raise Redelimination
     | Some (l,n) ->
         List.fold_left (fun stack i ->
           let arg = stack_nth stack i in
@@ -621,7 +621,8 @@ let rec red_elim_const env sigma ref largs =
           match kind_of_term (fst rarg) with
           | Construct _ -> stack_assign stack i (app_stack rarg)
           | _ -> raise Redelimination)
-        largs l, n >= 0 && l = [] && nargs >= n in
+        largs l, n >= 0 && l =  [] && nargs >= n, 
+                 n >= 0 && l <> [] && nargs >= n in
   try match reference_eval sigma env ref with
     | EliminationCases n when nargs >= n ->
 	let c = reference_value sigma env ref in
@@ -651,6 +652,9 @@ let rec red_elim_const env sigma ref largs =
 	(match reduce_fix_use_function env sigma f whfun (destFix d) lrest with
 	   | NotReducible -> raise Redelimination
 	   | Reduced (c,rest) -> (nf_beta sigma c, rest))
+    | NotAnElimination when unfold_nonelim -> 
+         let c = reference_value sigma env ref in
+         whd_betaiotazeta sigma (app_stack (c, largs)), empty_stack
     | _ -> raise Redelimination
     with Redelimination when unfold_anyway ->
        let c = reference_value sigma env ref in

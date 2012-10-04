@@ -1,12 +1,10 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
-
-open Pp
 
 (** Arbitrary large integer numbers *)
 
@@ -14,6 +12,9 @@ type bigint
 
 val of_string : string -> bigint
 val to_string : bigint -> string
+
+val of_int : int -> bigint
+val to_int : bigint -> int (** May raise a Failure on oversized numbers *)
 
 val zero : bigint
 val one : bigint
@@ -38,6 +39,4 @@ val is_pos_or_zero : bigint -> bool
 val is_neg_or_zero : bigint -> bool
 val neg : bigint -> bigint
 
-val pow : bigint -> bigint -> bigint
-
-val pr_bigint : bigint -> std_ppcmds
+val pow : bigint -> int -> bigint

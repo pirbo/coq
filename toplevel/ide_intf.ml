@@ -1,10 +1,16 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
+
+(** Protocol version of this file. This is the date of the last modification. *)
+
+(** WARNING: TO BE UPDATED WHEN MODIFIED! *)
+
+let protocol_version = "20120710"
 
 (** * Interface of calls to Coq by CoqIde *)
 
@@ -22,10 +28,32 @@ type 'a call =
   | Evars
   | Hints
   | Status
+  | Search of search_flags
   | GetOptions
   | SetOptions of (option_name * option_value) list
   | InLoadPath of string
   | MkCases of string
+  | Quit
+  | About
+
+(** The structure that coqtop should implement *)
+
+type handler = {
+  interp : raw * verbose * string -> string;
+  rewind : int -> int;
+  goals : unit -> goals option;
+  evars : unit -> evar list option;
+  hints : unit -> (hint list * hint) option;
+  status : unit -> status;
+  search : search_flags -> string coq_object list;
+  get_options : unit -> (option_name * option_state) list;
+  set_options : (option_name * option_value) list -> unit;
+  inloadpath : string -> bool;
+  mkcases : string -> string list list;
+  quit : unit -> unit;
+  about : unit -> coq_info;
+  handle_exn : exn -> location * string;
+}
 
 (** The actual calls *)
 
@@ -35,10 +63,12 @@ let goals : goals option call = Goal
 let evars : evar list option call = Evars
 let hints : (hint list * hint) option call = Hints
 let status : status call = Status
+let search flags : string coq_object list call = Search flags
 let get_options : (option_name * option_state) list call = GetOptions
 let set_options l : unit call = SetOptions l
 let inloadpath s : bool call = InLoadPath s
 let mkcases s : string list list call = MkCases s
+let quit : unit call = Quit
 
 (** * Coq answers to CoqIde *)
 
@@ -51,10 +81,13 @@ let abstract_eval_call handler c =
       | Evars -> Obj.magic (handler.evars () : evar list option)
       | Hints -> Obj.magic (handler.hints () : (hint list * hint) option)
       | Status -> Obj.magic (handler.status () : status)
+      | Search flags -> Obj.magic (handler.search flags : string coq_object list)
       | GetOptions -> Obj.magic (handler.get_options () : (option_name * option_state) list)
       | SetOptions opts -> Obj.magic (handler.set_options opts : unit)
       | InLoadPath s -> Obj.magic (handler.inloadpath s : bool)
       | MkCases s -> Obj.magic (handler.mkcases s : string list list)
+      | Quit -> Obj.magic (handler.quit () : unit)
+      | About -> Obj.magic (handler.about () : coq_info)
     in Good res
   with e ->
     let (l, str) = handler.handle_exn e in
@@ -178,6 +211,44 @@ let to_option_state = function
   }
 | _ -> raise Marshal_error
 
+let of_search_constraint = function
+| Name_Pattern s ->
+  constructor "search_constraint" "name_pattern" [of_string s]
+| Type_Pattern s ->
+  constructor "search_constraint" "type_pattern" [of_string s]
+| SubType_Pattern s ->
+  constructor "search_constraint" "subtype_pattern" [of_string s]
+| In_Module m ->
+  constructor "search_constraint" "in_module" [of_list of_string m]
+| Include_Blacklist ->
+  constructor "search_constraint" "include_blacklist" []
+
+let to_search_constraint xml = do_match xml "search_constraint"
+  (fun s args -> match s with
+  | "name_pattern" -> Name_Pattern (to_string (singleton args))
+  | "type_pattern" -> Type_Pattern (to_string (singleton args))
+  | "subtype_pattern" -> SubType_Pattern (to_string (singleton args))
+  | "in_module" -> In_Module (to_list to_string (singleton args))
+  | "include_blacklist" -> Include_Blacklist
+  | _ -> raise Marshal_error)
+
+let of_coq_object f ans =
+  let prefix = of_list of_string ans.coq_object_prefix in
+  let qualid = of_list of_string ans.coq_object_qualid in
+  let obj = f ans.coq_object_object in
+  Element ("coq_object", [], [prefix; qualid; obj])
+
+let to_coq_object f = function
+| Element ("coq_object", [], [prefix; qualid; obj]) ->
+  let prefix = to_list to_string prefix in
+  let qualid = to_list to_string qualid in
+  let obj = f obj in {
+    coq_object_prefix = prefix;
+    coq_object_qualid = qualid;
+    coq_object_object = obj;
+  }
+| _ -> raise Marshal_error
+
 let of_value f = function
 | Good x -> Element ("value", ["val", "good"], [f x])
 | Fail (loc, msg) ->
@@ -218,6 +289,9 @@ let of_call = function
   Element ("call", ["val", "hints"], [])
 | Status ->
   Element ("call", ["val", "status"], [])
+| Search flags ->
+  let args = List.map (of_pair of_search_constraint of_bool) flags in
+  Element ("call", ["val", "search"], args)
 | GetOptions ->
   Element ("call", ["val", "getoptions"], [])
 | SetOptions opts ->
@@ -227,6 +301,10 @@ let of_call = function
   Element ("call", ["val", "inloadpath"], [PCData file])
 | MkCases ind ->
   Element ("call", ["val", "mkcases"], [PCData ind])
+| Quit ->
+  Element ("call", ["val", "quit"], [])
+| About ->
+  Element ("call", ["val", "about"], [])
 
 let to_call = function
 | Element ("call", attrs, l) ->
@@ -242,6 +320,9 @@ let to_call = function
   | "goal" -> Goal
   | "evars" -> Evars
   | "status" -> Status
+  | "search" ->
+    let args = List.map (to_pair to_search_constraint to_bool) l in
+    Search args
   | "getoptions" -> GetOptions
   | "setoptions" ->
     let args = List.map (to_pair (to_list to_string) to_option_value) l in
@@ -249,19 +330,33 @@ let to_call = function
   | "inloadpath" -> InLoadPath (raw_string l)
   | "mkcases" -> MkCases (raw_string l)
   | "hints" -> Hints
+  | "quit" -> Quit
+  | "about" -> About
   | _ -> raise Marshal_error
   end
 | _ -> raise Marshal_error
 
 let of_status s =
   let of_so = of_option of_string in
-  Element ("status", [], [of_so s.status_path; of_so s.status_proofname])
+  let of_sl = of_list of_string in
+  Element ("status", [],
+    [
+      of_sl s.status_path;
+      of_so s.status_proofname;
+      of_sl s.status_allproofs;
+      of_int s.status_statenum;
+      of_int s.status_proofnum;
+    ]
+  )
 
 let to_status = function
-| Element ("status", [], [path; name]) ->
+| Element ("status", [], [path; name; prfs; snum; pnum]) ->
   {
-    status_path = to_option to_string path;
+    status_path = to_list to_string path;
     status_proofname = to_option to_string name;
+    status_allproofs = to_list to_string prfs;
+    status_statenum = to_int snum;
+    status_proofnum = to_int pnum;
   }
 | _ -> raise Marshal_error
 
@@ -275,25 +370,46 @@ let to_evar = function
 let of_goal g =
   let hyp = of_list of_string g.goal_hyp in
   let ccl = of_string g.goal_ccl in
-  Element ("goal", [], [hyp; ccl])
+  let id = of_string g.goal_id in
+  Element ("goal", [], [id; hyp; ccl])
 
 let to_goal = function
-| Element ("goal", [], [hyp; ccl]) ->
+| Element ("goal", [], [id; hyp; ccl]) ->
   let hyp = to_list to_string hyp in
   let ccl = to_string ccl in
-  { goal_hyp = hyp; goal_ccl = ccl }
+  let id = to_string id in
+  { goal_hyp = hyp; goal_ccl = ccl; goal_id = id; }
 | _ -> raise Marshal_error
 
 let of_goals g =
+  let of_glist = of_list of_goal in
   let fg = of_list of_goal g.fg_goals in
-  let bg = of_list of_goal g.bg_goals in
+  let bg = of_list (of_pair of_glist of_glist) g.bg_goals in
   Element ("goals", [], [fg; bg])
 
 let to_goals = function
 | Element ("goals", [], [fg; bg]) ->
+  let to_glist = to_list to_goal in
   let fg = to_list to_goal fg in
-  let bg = to_list to_goal bg in
+  let bg = to_list (to_pair to_glist to_glist) bg in
   { fg_goals = fg; bg_goals = bg; }
+| _ -> raise Marshal_error
+
+let of_coq_info info =
+  let version = of_string info.coqtop_version in
+  let protocol = of_string info.protocol_version in
+  let release = of_string info.release_date in
+  let compile = of_string info.compile_date in
+  Element ("coq_info", [], [version; protocol; release; compile])
+
+let to_coq_info = function
+| Element ("coq_info", [], [version; protocol; release; compile]) ->
+  {
+    coqtop_version = to_string version;
+    protocol_version = to_string protocol;
+    release_date = to_string release;
+    compile_date = to_string compile;
+  }
 | _ -> raise Marshal_error
 
 let of_hints =
@@ -308,10 +424,13 @@ let of_answer (q : 'a call) (r : 'a value) =
   | Evars -> Obj.magic (of_option (of_list of_evar) : evar list option -> xml)
   | Hints -> Obj.magic (of_hints : (hint list * hint) option -> xml)
   | Status -> Obj.magic (of_status : status -> xml)
+  | Search _ -> Obj.magic (of_list (of_coq_object of_string) : string coq_object list -> xml)
   | GetOptions -> Obj.magic (of_list (of_pair (of_list of_string) of_option_state) : (option_name * option_state) list -> xml)
   | SetOptions _ -> Obj.magic (fun _ -> Element ("unit", [], []))
   | InLoadPath _ -> Obj.magic (of_bool : bool -> xml)
   | MkCases _ -> Obj.magic (of_list (of_list of_string) : string list list -> xml)
+  | Quit -> Obj.magic (fun _ -> Element ("unit", [], []))
+  | About -> Obj.magic (of_coq_info : coq_info -> xml)
   in
   of_value convert r
 
@@ -331,6 +450,8 @@ let to_answer xml =
     | "evar" -> Obj.magic (to_evar elt : evar)
     | "option_value" -> Obj.magic (to_option_value elt : option_value)
     | "option_state" -> Obj.magic (to_option_state elt : option_state)
+    | "coq_info" -> Obj.magic (to_coq_info elt : coq_info)
+    | "coq_object" -> Obj.magic (to_coq_object convert elt : 'a coq_object)
     | _ -> raise Marshal_error
     end
   | _ -> raise Marshal_error
@@ -370,10 +491,13 @@ let pr_call = function
   | Evars -> "EVARS"
   | Hints -> "HINTS"
   | Status -> "STATUS"
+  | Search _ -> "SEARCH"
   | GetOptions -> "GETOPTIONS"
   | SetOptions l -> "SETOPTIONS" ^ " [" ^ pr_setoptions l ^ "]"
   | InLoadPath s -> "INLOADPATH "^s
   | MkCases s -> "MKCASES "^s
+  | Quit -> "QUIT"
+  | About -> "ABOUT"
 
 let pr_value_gen pr = function
   | Good v -> "GOOD " ^ pr v
@@ -385,9 +509,9 @@ let pr_string s = "["^s^"]"
 let pr_bool b = if b then "true" else "false"
 
 let pr_status s =
-  let path = match s.status_path with
-  | None -> "no path; "
-  | Some p -> "path = " ^ p ^ "; "
+  let path =
+    let l = String.concat "." s.status_path in
+    "path=" ^ l ^ ";"
   in
   let name = match s.status_proofname with
   | None -> "no proof;"
@@ -402,7 +526,14 @@ let pr_mkcases l =
 let pr_goals_aux g =
   if g.fg_goals = [] then
     if g.bg_goals = [] then "Proof completed."
-    else Printf.sprintf "Still %i unfocused goals." (List.length g.bg_goals)
+    else
+      let rec pr_focus _ = function
+      | [] -> assert false
+      | [lg, rg] -> Printf.sprintf "%i" (List.length lg + List.length rg)
+      | (lg, rg) :: l ->
+        Printf.sprintf "%i:%a" (List.length lg + List.length rg) pr_focus l
+      in
+      Printf.sprintf "Still focussed: [%a]." pr_focus g.bg_goals
   else
     let pr_menu s = s in
     let pr_goal { goal_hyp = hyps; goal_ccl = goal } =
@@ -428,7 +559,11 @@ let pr_full_value call value =
     | Evars -> pr_value_gen pr_evars (Obj.magic value : evar list option value)
     | Hints -> pr_value value
     | Status -> pr_value_gen pr_status (Obj.magic value : status value)
+    | Search _ -> pr_value value
     | GetOptions -> pr_value_gen pr_getoptions (Obj.magic value : (option_name * option_state) list value)
     | SetOptions _ -> pr_value value
     | InLoadPath s -> pr_value_gen pr_bool (Obj.magic value : bool value)
     | MkCases s -> pr_value_gen pr_mkcases (Obj.magic value : string list list value)
+    | Quit -> pr_value value
+    | About -> pr_value value
+

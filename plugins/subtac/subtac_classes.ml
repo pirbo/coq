@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -52,7 +52,7 @@ let type_ctx_instance evars env ctx inst subst =
 	| None -> interp_casted_constr_evars evars env (List.hd l) t', List.tl l
 	| Some b -> substl subst b, l
       in
-       evars := resolve_typeclasses ~onlyargs:true ~fail:true env !evars;
+       evars := resolve_typeclasses ~filter:Subtac_utils.no_goals_or_obligations ~fail:true env !evars;
        let d = na, Some c', t' in
 	aux (c' :: subst, d :: instctx) l ctx
     | [] -> subst
@@ -107,9 +107,10 @@ let new_instance ?(global=false) ctx (instid, bk, cl) props ?(generalize=true) p
 	let i = Nameops.add_suffix (Classes.id_of_class k) "_instance_0" in
 	  Namegen.next_global_ident_away i (Termops.ids_of_context env)
   in
+  evars := resolve_typeclasses ~filter:Subtac_utils.no_goals_or_obligations ~fail:true env !evars;  
+  let ctx = Evarutil.nf_rel_context_evar !evars ctx 
+  and ctx' = Evarutil.nf_rel_context_evar !evars ctx' in
   let env' = push_rel_context ctx env in
-  evars := Evarutil.nf_evar_map !evars;
-  evars := resolve_typeclasses ~onlyargs:false ~fail:true env !evars;
   let sigma =  !evars in
   let subst = List.map (Evarutil.nf_evar sigma) subst in
   let props =
@@ -157,6 +158,8 @@ let new_instance ?(global=false) ctx (instid, bk, cl) props ?(generalize=true) p
 	    Inl (type_ctx_instance evars (push_rel_context ctx' env') k.cl_props props subst)
   in	  
   evars := Evarutil.nf_evar_map !evars;
+  evars := resolve_typeclasses ~filter:Subtac_utils.no_goals_or_obligations ~fail:true env !evars;
+  evars := resolve_typeclasses ~filter:Typeclasses.no_goals ~fail:false env !evars;
   let term, termtype =
     match subst with
     | Inl subst ->

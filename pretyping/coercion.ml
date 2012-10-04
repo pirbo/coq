@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -110,7 +110,7 @@ module Default = struct
 
   let saturate_evd env evd =
     Typeclasses.resolve_typeclasses
-      ~onlyargs:true ~split:true ~fail:false env evd
+      ~filter:Typeclasses.no_goals ~split:true ~fail:false env evd
 
   (* appliquer le chemin de coercions p à hj *)
   let apply_coercion env sigma p hj typ_cl =

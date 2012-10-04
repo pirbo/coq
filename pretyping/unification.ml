@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -36,6 +36,15 @@ let occur_meta_or_undefined_evar evd c =
     | Sort s when is_sort_variable evd s -> raise Occur
     | _ -> iter_constr occrec c
   in try occrec c; false with Occur | Not_found -> true
+
+let occur_meta_evd sigma mv c =
+  let rec occrec c =
+    (* Note: evars are not instantiated by terms with metas *)
+    let c = whd_evar sigma (whd_meta sigma c) in
+    match kind_of_term c with
+    | Meta mv' when mv = mv' -> raise Occur
+    | _ -> iter_constr occrec c
+  in try occrec c; false with Occur -> true
 
 (* if lname_typ is [xn,An;..;x1,A1] and l is a list of terms,
    gives [x1:A1]..[xn:An]c' such that c converts to ([x1:A1]..[xn:An]c' l) *)
@@ -388,7 +397,8 @@ let unify_0_with_initial_metas (sigma,ms,es as subst) conv_at_top env cv_pb flag
                check_compatibility curenv substn tyM tyN);
 	    if k2 < k1 then sigma,(k1,cN,stN)::metasubst,evarsubst
 	    else sigma,(k2,cM,stM)::metasubst,evarsubst
-	| Meta k, _ when not (dependent cM cN) ->
+	| Meta k, _
+            when not (dependent cM cN) (* helps early trying alternatives *) ->
             if wt && flags.check_applied_meta_types then
               (let tyM = Typing.meta_type sigma k in
                let tyN = get_type_of curenv sigma cN in
@@ -401,7 +411,8 @@ let unify_0_with_initial_metas (sigma,ms,es as subst) conv_at_top env cv_pb flag
 	      (k,lift (-nb) cN,snd (extract_instance_status pb))::metasubst,
               evarsubst)
 	    else error_cannot_unify_local curenv sigma (m,n,cN)
-	| _, Meta k when not (dependent cN cM) ->
+	| _, Meta k
+            when not (dependent cN cM) (* helps early trying alternatives *) ->
             if wt && flags.check_applied_meta_types then
               (let tyM = get_type_of curenv sigma cM in
                let tyN = Typing.meta_type sigma k in
@@ -904,8 +915,13 @@ let w_merge env with_types flags (evd,metas,evars) =
 	    in
               w_merge_rec evd' (metas'@metas@metas'') (evars'@evars'') eqns
     	  else
-	    let evd' = meta_assign mv (c,(status,TypeProcessed)) evd in
-	      w_merge_rec evd' (metas''@metas) evars'' eqns
+            let evd' =
+              if occur_meta_evd evd mv c then
+                if isMetaOf mv (whd_betadeltaiota env evd c) then evd
+                else error_cannot_unify env evd (mkMeta mv,c)
+              else
+	        meta_assign mv (c,(status,TypeProcessed)) evd in
+	    w_merge_rec evd' (metas''@metas) evars'' eqns
     | [] ->
 	(* Process type eqns *)
 	let rec process_eqns failures = function
@@ -966,7 +982,7 @@ let check_types env flags (sigma,_,_ as subst) m n =
 
 let try_resolve_typeclasses env evd flags m n =
   if flags.resolve_evars then
-    try Typeclasses.resolve_typeclasses ~onlyargs:false ~split:false
+    try Typeclasses.resolve_typeclasses ~filter:Typeclasses.no_goals ~split:false
 	  ~fail:true env evd
     with e when Typeclasses_errors.unsatisfiable_exception e ->
       error_cannot_unify env evd (m, n)

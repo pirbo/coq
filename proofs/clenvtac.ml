@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -71,8 +71,8 @@ let clenv_refine with_evars ?(with_classes=true) clenv gls =
   let clenv = clenv_pose_dependent_evars with_evars clenv in
   let evd' =
     if with_classes then
-      Typeclasses.resolve_typeclasses ~fail:(not with_evars)
-	clenv.env clenv.evd
+      Typeclasses.resolve_typeclasses ~filter:Typeclasses.all_evars
+        ~fail:(not with_evars) clenv.env clenv.evd
     else clenv.evd
   in
   let clenv = { clenv with evd = evd' } in

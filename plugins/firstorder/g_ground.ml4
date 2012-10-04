@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -134,8 +134,6 @@ TACTIC EXTEND firstorder
 |   [ "firstorder" tactic_opt(t) firstorder_using(l)
        "with" ne_preident_list(l') ] ->
       [ gen_ground_tac true (Option.map eval_tactic t) l l' ]
-|   [ "firstorder" tactic_opt(t) ] ->
-      [ gen_ground_tac true (Option.map eval_tactic t) [] [] ]
 END
 
 TACTIC EXTEND gintuition

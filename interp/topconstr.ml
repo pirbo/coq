@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -239,7 +239,7 @@ let compare_recursive_parts found f (iterator,subc) =
   | GLambda (_,Name x,_,t_x,c), GLambda (_,Name y,_,t_y,term)
   | GProd (_,Name x,_,t_x,c), GProd (_,Name y,_,t_y,term) ->
       (* We found a binding position where it differs *)
-      check_is_hole y t_x;
+      check_is_hole x t_x;
       check_is_hole y t_y;
       !diff = None && (diff := Some (x,y,None); aux c term)
   | _ ->
@@ -923,6 +923,12 @@ let names_of_local_assums bl =
 
 let names_of_local_binders bl =
   List.flatten (List.map (function LocalRawAssum(l,_,_)->l|LocalRawDef(l,_)->[l]) bl)
+
+(**********************************************************************)
+(* Miscellaneous *)
+
+let error_invalid_pattern_notation loc =
+  user_err_loc (loc,"",str "Invalid notation for pattern.")
 
 (**********************************************************************)
 (* Functions on constr_expr *)

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -26,7 +26,6 @@ open Tacexpr
 (** Terms *)
 
 val pr_lconstr_env         : env -> constr -> std_ppcmds
-val pr_lconstr_env_at_top  : env -> constr -> std_ppcmds
 val pr_lconstr             : constr -> std_ppcmds
 
 val pr_constr_env          : env -> constr -> std_ppcmds
@@ -44,7 +43,7 @@ val pr_constr_under_binders      : constr_under_binders -> std_ppcmds
 val pr_lconstr_under_binders_env : env -> constr_under_binders -> std_ppcmds
 val pr_lconstr_under_binders     : constr_under_binders -> std_ppcmds
 
-val pr_ltype_env_at_top    : env -> types -> std_ppcmds
+val pr_goal_concl_style_env : env -> types -> std_ppcmds
 val pr_ltype_env           : env -> types -> std_ppcmds
 val pr_ltype               : types -> std_ppcmds
 
@@ -104,7 +103,7 @@ val pr_transparent_state   : transparent_state -> std_ppcmds
 (** Proofs *)
 
 val pr_goal                : goal sigma -> std_ppcmds
-val pr_subgoals            : string option -> evar_map -> evar list -> goal list -> std_ppcmds
+val pr_subgoals            : ?pr_first:bool -> string option -> evar_map -> evar list -> int list -> goal list -> std_ppcmds
 val pr_subgoal             : int -> evar_map -> goal list -> std_ppcmds
 val pr_concl               : int -> evar_map -> goal -> std_ppcmds
 
@@ -141,7 +140,7 @@ val pr_assumptionset :
 val pr_goal_by_id : string -> std_ppcmds
 
 type printer_pr = {
- pr_subgoals            : string option -> evar_map -> evar list -> goal list -> std_ppcmds;
+ pr_subgoals            : ?pr_first:bool -> string option -> evar_map -> evar list -> int list -> goal list -> std_ppcmds;
  pr_subgoal             : int -> evar_map -> goal list -> std_ppcmds;
  pr_goal                : goal sigma -> std_ppcmds;
 };;

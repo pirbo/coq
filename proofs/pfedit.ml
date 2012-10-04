@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -35,8 +35,10 @@ let delete_proof = Proof_global.discard
 let delete_current_proof = Proof_global.discard_current
 let delete_all_proofs = Proof_global.discard_all
 
-let undo n = 
+let undo n =
   let p = Proof_global.give_me_the_proof () in
+  let d = Proof.V82.depth p in
+  if n >= d then raise Proof.EmptyUndoStack;
   for i = 1 to n do
     Proof.undo p
   done
@@ -62,17 +64,10 @@ let start_proof id str hyps c ?init_tac ?compute_guard hook =
   let goals = [ (Global.env_of_context hyps , c) ] in
   let init_tac = Option.map Proofview.V82.tactic init_tac in
   Proof_global.start_proof id str goals ?compute_guard hook;
-  Option.iter Proof_global.run_tactic init_tac
+  try Option.iter Proof_global.run_tactic init_tac
+  with e -> Proof_global.discard_current (); raise e
 
-let restart_proof () =
-  let p = Proof_global.give_me_the_proof () in
-  try while true do
-    Proof.undo p
-  done with Proof.EmptyUndoStack -> ()
-
-let resume_last_proof () = Proof_global.resume_last ()
-let resume_proof (_,id) = Proof_global.resume id
-let suspend_proof ()  =  Proof_global.suspend ()
+let restart_proof () = undo_todepth 1
 
 let cook_proof hook =
   let prf = Proof_global.give_me_the_proof () in

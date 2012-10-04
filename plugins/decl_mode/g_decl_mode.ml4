@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -29,7 +29,7 @@ let pr_goal gs =
     (str "     *** Declarative Mode ***" ++ fnl ()++fnl ()),
     (str "thesis := "  ++ fnl ()),
     Printer.pr_context_of env,
-    Printer.pr_ltype_env_at_top env (Goal.V82.concl sigma g)
+    Printer.pr_goal_concl_style_env env (Goal.V82.concl sigma g)
   in
     preamb ++
     str"  " ++ hv 0 (penv ++ fnl () ++
@@ -103,7 +103,7 @@ let proof_instr = Gram.entry_create "proofmode:instr"
 
 (* [Genarg.create_arg] creates a new embedding into Genarg. *)
 let (wit_proof_instr,globwit_proof_instr,rawwit_proof_instr) =
-  Genarg.create_arg "proof_instr"
+  Genarg.create_arg None "proof_instr"
 let _ = Tacinterp.add_interp_genarg "proof_instr"
   begin
   begin fun e x -> (* declares the globalisation function *)
@@ -111,6 +111,7 @@ let _ = Tacinterp.add_interp_genarg "proof_instr"
       (Decl_interp.intern_proof_instr e (Genarg.out_gen rawwit_proof_instr x))
   end,
   begin fun ist gl x -> (* declares the interpretation function *)
+    Tacmach.project gl ,
     Genarg.in_gen wit_proof_instr 
       (interp_proof_instr ist gl (Genarg.out_gen globwit_proof_instr x))
   end,

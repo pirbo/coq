@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -20,7 +20,7 @@ Require Export Classical.   (* Axiomatize classical reasoning *)
 Require Export Description. (* Axiomatize constructive form of Church's iota *)
 Require Import ChoiceFacts.
 
-Notation Local inhabited A := A (only parsing).
+Local Notation inhabited A := A (only parsing).
 
 (** The idea for the following proof comes from [ChicliPottierSimpson02] *)
 

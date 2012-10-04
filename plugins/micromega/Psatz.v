@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -81,14 +81,14 @@ Ltac lra :=
   first [ psatzl R | psatzl Q ].
 
 Ltac lia :=
-  zify ; unfold Zsucc in * ; 
-  (*cbv delta - [Zplus Zminus Zopp Zmult Zpower Zgt Zge Zle Zlt iff not] ;*) xlia ; 
+  zify ; unfold Z.succ in * ;
+  (*cbv delta - [Z.add Z.sub Z.opp Z.mul Z.pow Z.gt Z.ge Z.le Z.lt iff not] ;*) xlia ;
   intros __wit __varmap __ff ;
     change (Tauto.eval_f (Zeval_formula (@find Z Z0 __varmap)) __ff) ;
       apply (ZTautoChecker_sound __ff __wit); vm_compute ; reflexivity.
 
 Ltac nia :=
-  zify ; unfold Zsucc in * ; 
+  zify ; unfold Z.succ in * ;
   xnlia ;
   intros __wit __varmap __ff ;
     change (Tauto.eval_f (Zeval_formula (@find Z Z0 __varmap)) __ff) ;

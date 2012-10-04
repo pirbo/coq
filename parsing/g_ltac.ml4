@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -80,7 +80,6 @@ GEXTEND Gram
 	  TacFirst l
       | IDENT "solve" ; "["; l = LIST0 tactic_expr SEP "|"; "]" ->
 	  TacSolve l
-      | IDENT "complete" ; ta = tactic_expr -> TacComplete ta
       | IDENT "idtac"; l = LIST0 message_token -> TacId l
       | IDENT "fail"; n = [ n = int_or_var -> n | -> fail_default_value ];
 	  l = LIST0 message_token -> TacFail (n,l)

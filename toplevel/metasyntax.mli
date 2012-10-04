@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -54,10 +54,12 @@ val add_syntax_extension :
 (** Add a syntactic definition (as in "Notation f := ...") *)
 
 val add_syntactic_definition : identifier -> identifier list * constr_expr ->
-  bool -> bool -> unit
+  bool -> Flags.compat_version option -> unit
 
 (** Print the Camlp4 state of a grammar *)
 
 val print_grammar : string -> unit
 
 val check_infix_modifiers : syntax_modifier list -> unit
+
+val with_syntax_protection : ('a -> 'b) -> 'a -> 'b

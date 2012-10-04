@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -28,6 +28,9 @@ type proofview = {
      solution : Evd.evar_map;
      comb : Goal.goal list
      }
+
+let proofview p =
+  p.comb , p.solution
 
 (* Initialises a proofview, the argument is a list of environement, 
    conclusion types, and optional names, creating that many initial goals. *)
@@ -95,6 +98,8 @@ let list_goto =
    and second component is what goes after (in the expected
    order) *)
 type focus_context = Goal.goal list * Goal.goal list
+
+let focus_context f = f
 
 (* This (internal) function extracts a sublist between two indices, and
    returns this sublist together with its context:

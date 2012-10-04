@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -28,9 +28,11 @@ open Names
 (* Parsing via scopes *)
 (* For example, (nat_of_string "3") is <<(S (S (S O)))>> *)
 
+let threshold = of_int 5000
+
 let nat_of_int dloc n =
   if is_pos_or_zero n then begin
-      if less_than (of_string "5000") n then
+      if less_than threshold n then
 	Flags.if_warn msg_warning
 	  (strbrk "Stack overflow or segmentation fault happens when " ++
 	   strbrk "working with large numbers in nat (observed threshold " ++

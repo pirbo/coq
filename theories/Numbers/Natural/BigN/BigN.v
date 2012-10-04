@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -119,7 +119,7 @@ BigN.zify. auto with zarith.
 intros NEQ.
 generalize (BigN.spec_div_eucl a b).
 generalize (Z_div_mod_full [a] [b] NEQ).
-destruct BigN.div_eucl as (q,r), Zdiv_eucl as (q',r').
+destruct BigN.div_eucl as (q,r), Z.div_eucl as (q',r').
 intros (EQ,_). injection 1. intros EQr EQq.
 BigN.zify. rewrite EQr, EQq; auto.
 Qed.

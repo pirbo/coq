@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -197,7 +197,7 @@ let empty_env () = [], get_global_ids ()
 let mktable autoclean =
   let h = Hashtbl.create 97 in
   if autoclean then register_cleanup (fun () -> Hashtbl.clear h);
-  (Hashtbl.add h, Hashtbl.find h, fun () -> Hashtbl.clear h)
+  (Hashtbl.replace h, Hashtbl.find h, fun () -> Hashtbl.clear h)
 
 (* We might have built [global_reference] whose canonical part is
    inaccurate. We must hence compare only the user part,

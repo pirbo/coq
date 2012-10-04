@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -236,7 +236,7 @@ Proof.
 Qed.
 
 (** Hence the number of bits of [a] is [1+log2 a]
-    (see [Psize] and [Psize_pos]).
+    (see [Pos.size_nat] and [Pos.size]).
 *)
 
 (** Testing bits after division or multiplication by a power of two *)

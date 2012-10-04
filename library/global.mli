@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -87,7 +87,7 @@ val lookup_module    : module_path -> module_body
 val lookup_modtype   : module_path -> module_type_body
 val constant_of_delta_kn : kernel_name -> constant
 val mind_of_delta_kn : kernel_name -> mutual_inductive
-val exists_label     : label -> bool
+val exists_objlabel  : label -> bool
 
 (** Compiled modules *)
 val start_library : dir_path -> module_path

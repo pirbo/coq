@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -88,7 +88,7 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
 
   (* coerce to tycon if any *)
   let inh_conv_coerce_to_tycon loc env evdref j = function
-    | None -> j_nf_evar !evdref j
+    | None -> j
     | Some t -> evd_comb2 (Coercion.inh_conv_coerce_to loc env) evdref j t
 
   let push_rels vars env = List.fold_right push_rel vars env
@@ -323,7 +323,9 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
  	    else tycon
 	  in
 	    match ty with
-	    | Some (_, t) when Subtac_coercion.disc_subset t = None -> ty
+	    | Some (_, t) ->
+	      if Subtac_coercion.disc_subset (whd_betadeltaiota env !evdref t) = None then ty
+	      else None
 	    | _ -> None
 	in
 	let fj = pretype ftycon env evdref lvar f in
@@ -340,13 +342,12 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
 			Coercion.inh_conv_coerces_to loc env !evdref resty ty) tycon;
 		      let evd, (_, _, tycon) = split_tycon loc env !evdref tycon in
 		      evdref := evd;
-		      let hj = pretype (mk_tycon (nf_evar !evdref c1)) env evdref lvar c in
+		      let hj = pretype (mk_tycon c1) env evdref lvar c in
 		      let value, typ = applist (j_val resj, [j_val hj]), subst1 hj.uj_val c2 in
-		      let typ' = nf_evar !evdref typ in
 			apply_rec env (n+1)
-			  { uj_val = nf_evar !evdref value;
-			    uj_type = nf_evar !evdref typ' }
-			  (Option.map (fun (abs, c) -> abs, nf_evar !evdref c) tycon) rest
+			{ uj_val = value;
+			  uj_type = typ }
+			  (Option.map (fun (abs, c) -> abs, c) tycon) rest
 
 		  | _ ->
 		      let hj = pretype empty_tycon env evdref lvar c in
@@ -354,9 +355,9 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
 			  (join_loc floc argloc) env !evdref
 	      		  resj [hj]
 	in
-	let resj = j_nf_evar !evdref (apply_rec env 1 fj ftycon args) in
+	let resj = apply_rec env 1 fj ftycon args in
 	let resj =
-	  match kind_of_term resj.uj_val with
+	  match kind_of_term (whd_evar !evdref resj.uj_val) with
 	  | App (f,args) when isInd f or isConst f ->
 	      let sigma =  !evdref in
 	      let c = mkApp (f,Array.map (whd_evar sigma) args) in
@@ -508,10 +509,9 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
 		  it_mkLambda_or_LetIn (lift (nar+1) p) psign, p in
 	  let pred = nf_evar !evdref pred in
 	  let p = nf_evar !evdref p in
-	 (*   msgnl (str "Pred is: " ++ Termops.print_constr_env env pred);*)
 	  let f cs b =
 	    let n = rel_context_length cs.cs_args in
-	    let pi = lift n pred in (* liftn n 2 pred ? *)
+	    let pi = lift n pred in
 	    let pi = beta_applist (pi, [build_dependent_constructor cs]) in
 	    let csgn =
 	      if not !allow_anonymous_refs then
@@ -525,7 +525,6 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
 		cs.cs_args
 	    in
 	    let env_c = push_rels csgn env in
-(* 	      msgnl (str "Pi is: " ++ Termops.print_constr_env env_c pi); *)
 	    let bj = pretype (mk_tycon pi) env_c evdref lvar b in
 	      it_mkLambda_or_LetIn bj.uj_val cs.cs_args in
 	  let b1 = f cstrs.(0) b1 in
@@ -551,8 +550,6 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
 	    | CastConv (k,t) ->
 		let tj = pretype_type empty_valcon env evdref lvar t in
 		let cj = pretype (mk_tycon tj.utj_val) env evdref lvar c in
-		  (* User Casts are for helping pretyping, experimentally not to be kept*)
-		  (* ... except for Correctness *)
 		let v = mkCast (cj.uj_val, k, tj.utj_val) in
 		  { uj_val = v; uj_type = tj.utj_val }
 	in
@@ -600,9 +597,9 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
     in
       if resolve_classes then
 	(try 
-	   evdref := Typeclasses.resolve_typeclasses ~onlyargs:true
+	   evdref := Typeclasses.resolve_typeclasses ~filter:Subtac_utils.no_goals_or_obligations
 	     ~split:true ~fail:true env !evdref;
-	   evdref := Typeclasses.resolve_typeclasses ~onlyargs:false
+	   evdref := Typeclasses.resolve_typeclasses ~filter:Typeclasses.all_evars
 	     ~split:true ~fail:false env !evdref
 	 with e -> if fail_evar then raise e else ());
       evdref := consider_remaining_unif_problems env !evdref;
@@ -647,8 +644,8 @@ module SubtacPretyping_F (Coercion : Coercion.S) = struct
   let understand_type sigma env c =
     snd (ise_pretype_gen true false true sigma env ([],[]) IsType c)
 
-  let understand_ltac expand_evar sigma env lvar kind c =
-    ise_pretype_gen expand_evar false true sigma env lvar kind c
+  let understand_ltac ?(resolve_classes=false) expand_evar sigma env lvar kind c =
+    ise_pretype_gen expand_evar false resolve_classes sigma env lvar kind c
 
   let understand_tcc ?(resolve_classes=true) sigma env ?expected_type:exptyp c =
     ise_pretype_gen true false resolve_classes sigma env ([],[]) (OfType exptyp) c

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -19,6 +19,10 @@ Module N.
 
 Definition t := N.
 
+(** ** Nicer name [N.pos] for contructor [Npos] *)
+
+Notation pos := Npos.
+
 (** ** Constants *)
 
 Definition zero := 0.
@@ -30,7 +34,7 @@ Definition two := 2.
 Definition succ_double x :=
   match x with
   | 0 => 1
-  | Npos p => Npos p~1
+  | pos p => pos p~1
   end.
 
 (** ** Operation [x -> 2*x] *)
@@ -38,7 +42,7 @@ Definition succ_double x :=
 Definition double n :=
   match n with
   | 0 => 0
-  | Npos p => Npos p~0
+  | pos p => pos p~0
   end.
 
 (** ** Successor *)
@@ -46,7 +50,7 @@ Definition double n :=
 Definition succ n :=
   match n with
   | 0 => 1
-  | Npos p => Npos (Pos.succ p)
+  | pos p => pos (Pos.succ p)
   end.
 
 (** ** Predecessor *)
@@ -54,15 +58,15 @@ Definition succ n :=
 Definition pred n :=
   match n with
   | 0 => 0
-  | Npos p => Pos.pred_N p
+  | pos p => Pos.pred_N p
   end.
 
 (** ** The successor of a [N] can be seen as a [positive] *)
 
 Definition succ_pos (n : N) : positive :=
  match n with
-   | N0 => 1%positive
-   | Npos p => Pos.succ p
+   | 0 => 1%positive
+   | pos p => Pos.succ p
  end.
 
 (** ** Addition *)
@@ -71,7 +75,7 @@ Definition add n m :=
   match n, m with
   | 0, _ => m
   | _, 0 => n
-  | Npos p, Npos q => Npos (p + q)
+  | pos p, pos q => pos (p + q)
   end.
 
 Infix "+" := add : N_scope.
@@ -82,9 +86,9 @@ Definition sub n m :=
 match n, m with
 | 0, _ => 0
 | n, 0 => n
-| Npos n', Npos m' =>
+| pos n', pos m' =>
   match Pos.sub_mask n' m' with
-  | IsPos p => Npos p
+  | IsPos p => pos p
   | _ => 0
   end
 end.
@@ -97,7 +101,7 @@ Definition mul n m :=
   match n, m with
   | 0, _ => 0
   | _, 0 => 0
-  | Npos p, Npos q => Npos (p * q)
+  | pos p, pos q => pos (p * q)
   end.
 
 Infix "*" := mul : N_scope.
@@ -107,23 +111,19 @@ Infix "*" := mul : N_scope.
 Definition compare n m :=
   match n, m with
   | 0, 0 => Eq
-  | 0, Npos m' => Lt
-  | Npos n', 0 => Gt
-  | Npos n', Npos m' => (n' ?= m')%positive
+  | 0, pos m' => Lt
+  | pos n', 0 => Gt
+  | pos n', pos m' => (n' ?= m')%positive
   end.
 
 Infix "?=" := compare (at level 70, no associativity) : N_scope.
 
 (** Boolean equality and comparison *)
 
-(** Nota: this [eqb] is not convertible with the generated [N_beq],
-    since the underlying [Pos.eqb] differs from [positive_beq]
-    (cf BinIntDef). *)
-
 Fixpoint eqb n m :=
   match n, m with
     | 0, 0 => true
-    | Npos p, Npos q => Pos.eqb p q
+    | pos p, pos q => Pos.eqb p q
     | _, _ => false
   end.
 
@@ -155,8 +155,8 @@ Definition div2 n :=
   match n with
   | 0 => 0
   | 1 => 0
-  | Npos (p~0) => Npos p
-  | Npos (p~1) => Npos p
+  | pos (p~0) => pos p
+  | pos (p~1) => pos p
   end.
 
 (** Parity *)
@@ -164,7 +164,7 @@ Definition div2 n :=
 Definition even n :=
   match n with
     | 0 => true
-    | Npos (xO _) => true
+    | pos (xO _) => true
     | _ => false
   end.
 
@@ -176,7 +176,7 @@ Definition pow n p :=
   match p, n with
     | 0, _ => 1
     | _, 0 => 0
-    | Npos p, Npos q => Npos (q^p)
+    | pos p, pos q => pos (q^p)
   end.
 
 Infix "^" := pow : N_scope.
@@ -186,7 +186,7 @@ Infix "^" := pow : N_scope.
 Definition square n :=
   match n with
     | 0 => 0
-    | Npos p => Npos (Pos.square p)
+    | pos p => pos (Pos.square p)
   end.
 
 (** Base-2 logarithm *)
@@ -195,8 +195,8 @@ Definition log2 n :=
  match n with
    | 0 => 0
    | 1 => 0
-   | Npos (p~0) => Npos (Pos.size p)
-   | Npos (p~1) => Npos (Pos.size p)
+   | pos (p~0) => pos (Pos.size p)
+   | pos (p~1) => pos (Pos.size p)
  end.
 
 (** How many digits in a number ?
@@ -206,13 +206,13 @@ Definition log2 n :=
 Definition size n :=
  match n with
   | 0 => 0
-  | Npos p => Npos (Pos.size p)
+  | pos p => pos (Pos.size p)
  end.
 
 Definition size_nat n :=
  match n with
   | 0 => O
-  | Npos p => Pos.size_nat p
+  | pos p => Pos.size_nat p
  end.
 
 (** Euclidean division *)
@@ -237,7 +237,7 @@ Definition div_eucl (a b:N) : N * N :=
   match a, b with
    | 0,  _ => (0, 0)
    | _, 0  => (0, a)
-   | Npos na, _ => pos_div_eucl na b
+   | pos na, _ => pos_div_eucl na b
   end.
 
 Definition div a b := fst (div_eucl a b).
@@ -252,7 +252,7 @@ Definition gcd a b :=
  match a, b with
   | 0, _ => b
   | _, 0 => a
-  | Npos p, Npos q => Npos (Pos.gcd p q)
+  | pos p, pos q => pos (Pos.gcd p q)
  end.
 
 (** Generalized Gcd, also computing rests of [a] and [b] after
@@ -262,9 +262,9 @@ Definition ggcd a b :=
  match a, b with
   | 0, _ => (b,(0,1))
   | _, 0 => (a,(1,0))
-  | Npos p, Npos q =>
+  | pos p, pos q =>
      let '(g,(aa,bb)) := Pos.ggcd p q in
-     (Npos g, (Npos aa, Npos bb))
+     (pos g, (pos aa, pos bb))
  end.
 
 (** Square root *)
@@ -272,17 +272,17 @@ Definition ggcd a b :=
 Definition sqrtrem n :=
  match n with
   | 0 => (0, 0)
-  | Npos p =>
+  | pos p =>
     match Pos.sqrtrem p with
-     | (s, IsPos r) => (Npos s, Npos r)
-     | (s, _) => (Npos s, 0)
+     | (s, IsPos r) => (pos s, pos r)
+     | (s, _) => (pos s, 0)
     end
  end.
 
 Definition sqrt n :=
  match n with
   | 0 => 0
-  | Npos p => Npos (Pos.sqrt p)
+  | pos p => pos (Pos.sqrt p)
  end.
 
 (** Operation over bits of a [N] number. *)
@@ -293,7 +293,7 @@ Definition lor n m :=
  match n, m with
    | 0, _ => m
    | _, 0 => n
-   | Npos p, Npos q => Npos (Pos.lor p q)
+   | pos p, pos q => pos (Pos.lor p q)
  end.
 
 (** Logical [and] *)
@@ -302,7 +302,7 @@ Definition land n m :=
  match n, m with
   | 0, _ => 0
   | _, 0 => 0
-  | Npos p, Npos q => Pos.land p q
+  | pos p, pos q => Pos.land p q
  end.
 
 (** Logical [diff] *)
@@ -311,7 +311,7 @@ Fixpoint ldiff n m :=
  match n, m with
   | 0, _ => 0
   | _, 0 => n
-  | Npos p, Npos q => Pos.ldiff p q
+  | pos p, pos q => Pos.ldiff p q
  end.
 
 (** [xor] *)
@@ -320,7 +320,7 @@ Definition lxor n m :=
   match n, m with
     | 0, _ => m
     | _, 0 => n
-    | Npos p, Npos q => Pos.lxor p q
+    | pos p, pos q => Pos.lxor p q
   end.
 
 (** Shifts *)
@@ -331,13 +331,13 @@ Definition shiftr_nat (a:N)(n:nat) := nat_iter n div2 a.
 Definition shiftl a n :=
   match a with
     | 0 => 0
-    | Npos a => Npos (Pos.shiftl a n)
+    | pos a => pos (Pos.shiftl a n)
   end.
 
 Definition shiftr a n :=
   match n with
     | 0 => a
-    | Npos p => Pos.iter p div2 a
+    | pos p => Pos.iter p div2 a
   end.
 
 (** Checking whether a particular bit is set or not *)
@@ -345,7 +345,7 @@ Definition shiftr a n :=
 Definition testbit_nat (a:N) :=
   match a with
     | 0 => fun _ => false
-    | Npos p => Pos.testbit_nat p
+    | pos p => Pos.testbit_nat p
   end.
 
 (** Same, but with index in N *)
@@ -353,7 +353,7 @@ Definition testbit_nat (a:N) :=
 Definition testbit a n :=
   match a with
     | 0 => false
-    | Npos p => Pos.testbit p n
+    | pos p => Pos.testbit p n
   end.
 
 (** Translation from [N] to [nat] and back. *)
@@ -361,13 +361,13 @@ Definition testbit a n :=
 Definition to_nat (a:N) :=
   match a with
     | 0 => O
-    | Npos p => Pos.to_nat p
+    | pos p => Pos.to_nat p
   end.
 
 Definition of_nat (n:nat) :=
   match n with
     | O => 0
-    | S n' => Npos (Pos.of_succ_nat n')
+    | S n' => pos (Pos.of_succ_nat n')
   end.
 
 (** Iteration of a function *)
@@ -375,7 +375,7 @@ Definition of_nat (n:nat) :=
 Definition iter (n:N) {A} (f:A->A) (x:A) : A :=
   match n with
     | 0 => x
-    | Npos p => Pos.iter p f x
+    | pos p => Pos.iter p f x
   end.
 
 End N.

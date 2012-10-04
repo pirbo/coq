@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,7 +13,7 @@ Require Import Zcompare.
 Require Import ZArith_dec.
 Require Import Sumbool.
 
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 
 (** * Boolean operations from decidability of order *)
 (** The decidability of equality and order relations over
@@ -25,7 +25,7 @@ Definition Z_ge_lt_bool (x y:Z) := bool_of_sumbool (Z_ge_lt_dec x y).
 Definition Z_le_gt_bool (x y:Z) := bool_of_sumbool (Z_le_gt_dec x y).
 Definition Z_gt_le_bool (x y:Z) := bool_of_sumbool (Z_gt_le_dec x y).
 
-Definition Z_eq_bool (x y:Z) := bool_of_sumbool (Z_eq_dec x y).
+Definition Z_eq_bool (x y:Z) := bool_of_sumbool (Z.eq_dec x y).
 Definition Z_noteq_bool (x y:Z) := bool_of_sumbool (Z_noteq_dec x y).
 
 Definition Zeven_odd_bool (x:Z) := bool_of_sumbool (Zeven_odd_dec x).
@@ -33,10 +33,10 @@ Definition Zeven_odd_bool (x:Z) := bool_of_sumbool (Zeven_odd_dec x).
 (**********************************************************************)
 (** * Boolean comparisons of binary integers *)
 
-Notation Zle_bool := Z.leb (only parsing).
-Notation Zge_bool := Z.geb (only parsing).
-Notation Zlt_bool := Z.ltb (only parsing).
-Notation Zgt_bool := Z.gtb (only parsing).
+Notation Zle_bool := Z.leb (compat "8.3").
+Notation Zge_bool := Z.geb (compat "8.3").
+Notation Zlt_bool := Z.ltb (compat "8.3").
+Notation Zgt_bool := Z.gtb (compat "8.3").
 
 (** We now provide a direct [Z.eqb] that doesn't refer to [Z.compare].
    The old [Zeq_bool] is kept for compatibility. *)
@@ -87,7 +87,7 @@ Proof.
  apply Z.leb_le.
 Qed.
 
-Notation Zle_bool_refl := Z.leb_refl (only parsing).
+Notation Zle_bool_refl := Z.leb_refl (compat "8.3").
 
 Lemma Zle_bool_antisym n m :
  (n <=? m) = true -> (m <=? n) = true -> n = m.

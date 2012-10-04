@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,7 +13,7 @@ Set Implicit Arguments.
 Require Import ZArith.
 Local Open Scope Z_scope.
 
-Definition base digits := Zpower 2 (Zpos digits).
+Definition base digits := Z.pow 2 (Zpos digits).
 
 Section Carry.
 

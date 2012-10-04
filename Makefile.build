@@ -36,10 +36,12 @@ endif
 # of include, and they will then be automatically deleted, leading to an
 # infinite loop.
 
-ALLDEPS=$(addsuffix .d, \
+MLFILES:=$(MLSTATICFILES) $(MLEXTRAFILES)
+
+ALLDEPS:=$(addsuffix .d, \
   $(ML4FILES) $(MLFILES) $(MLIFILES) $(CFILES) $(MLLIBFILES) $(VFILES))
 
-.SECONDARY: $(ALLDEPS) $(GENFILES) $(GENML4FILES)
+.SECONDARY: $(ALLDEPS) $(GENFILES) $(ML4FILES:.ml4=.ml)
 
 # NOTA: the -include below will lauch the build of all .d. Some of them
 # will _fail_ at first, this is to be expected (no grammar.cma initially).
@@ -82,12 +84,15 @@ HIDE := $(if $(VERBOSE),,@)
 
 LOCALINCLUDES=$(addprefix -I , $(SRCDIRS) )
 MLINCLUDES=$(LOCALINCLUDES) -I $(MYCAMLP4LIB)
+COREMLINCLUDES=$(addprefix -I , $(CORESRCDIRS)) -I $(MYCAMLP4LIB)
 
 OCAMLC += $(CAMLFLAGS)
 OCAMLOPT += $(CAMLFLAGS)
 
 BYTEFLAGS=$(MLINCLUDES) $(CAMLDEBUG) $(USERFLAGS)
 OPTFLAGS=$(MLINCLUDES) $(CAMLDEBUGOPT) $(CAMLTIMEPROF) $(USERFLAGS)
+COREBYTEFLAGS=$(COREMLINCLUDES) $(CAMLDEBUG) $(USERFLAGS)
+COREOPTFLAGS=$(COREMLINCLUDES) $(CAMLDEBUGOPT) $(CAMLTIMEPROF) $(USERFLAGS)
 DEPFLAGS= -slash $(LOCALINCLUDES)
 
 define bestocaml
@@ -96,7 +101,7 @@ $(OCAMLOPT) $(OPTFLAGS) -o $@ $(1) $(addsuffix .cmxa,$(2)) $^ && $(STRIP) $@,\
 $(OCAMLC) $(BYTEFLAGS) $(COQTOOLSBYTEFLAGS) -o $@ $(1) $(addsuffix .cma,$(2)) $^)
 endef
 
-CAMLP4DEPS=`sed -n -e 's@^(\*.*camlp4deps: "\(.*\)".*@\1@p' $<`
+CAMLP4DEPS=`LC_ALL=C sed -n -e 's@^(\*.*camlp4deps: "\(.*\)".*@\1@p' $<`
 ifeq ($(CAMLP4),camlp5)
 CAMLP4USE=pa_extend.cmo q_MLast.cmo pa_macro.cmo -D$(CAMLVERSION)
 else
@@ -169,10 +174,12 @@ CINCLUDES= -I $(CAMLHLIB)
 
 # libcoqrun.a, dllcoqrun.so
 
+# NB: We used to do a ranlib after ocamlmklib, but it seems that
+# ocamlmklib is already doing it
+
 $(LIBCOQRUN): kernel/byterun/coq_jumptbl.h $(BYTERUN) 
 	cd $(dir $(LIBCOQRUN)) && \
 	$(OCAMLMKLIB) -oc $(COQRUN) $(foreach u,$(BYTERUN),$(notdir $(u)))
-	$(RANLIB) $(LIBCOQRUN)
 
 #coq_jumptbl.h is required only if you have GCC 2.0 or later
 kernel/byterun/coq_jumptbl.h : kernel/byterun/coq_instruct.h
@@ -201,12 +208,12 @@ states:: states/initial.coq
 
 $(COQTOPOPT): $(BESTCOQMKTOP) $(LINKCMX) $(LIBCOQRUN)
 	$(SHOW)'COQMKTOP -o $@'	
-	$(HIDE)$(BESTCOQMKTOP) -boot -opt $(OPTFLAGS) -o $@
+	$(HIDE)$(BESTCOQMKTOP) -boot -opt $(COREOPTFLAGS) -o $@
 	$(STRIP) $@
 
 $(COQTOPBYTE): $(BESTCOQMKTOP) $(LINKCMO) $(LIBCOQRUN)
 	$(SHOW)'COQMKTOP -o $@'	
-	$(HIDE)$(BESTCOQMKTOP) -boot -top $(BYTEFLAGS) -o $@
+	$(HIDE)$(BESTCOQMKTOP) -boot -top $(COREBYTEFLAGS) -o $@
 
 $(COQTOPEXE): $(ORDER_ONLY_SEP) $(BESTCOQTOP)
 	cd bin; ln -sf coqtop.$(BEST)$(EXE) coqtop$(EXE)
@@ -318,7 +325,7 @@ $(COQIDEOPT): $(LINKIDEOPT) | $(COQTOPOPT)
 	$(STRIP) $@
 
 $(COQIDEBYTE): $(LINKIDE) | $(COQTOPBYTE)
-	$(SHOW)'OCAMLOPT -o $@'
+	$(SHOW)'OCAMLC -o $@'
 	$(HIDE)$(OCAMLC) $(COQIDEFLAGS) $(BYTEFLAGS) -o $@ unix.cma threads.cma lablgtk.cma gtkThread.cmo\
 		str.cma $(COQRUNBYTEFLAGS) $(LINKIDE)
 
@@ -446,7 +453,7 @@ noreal: logic arith bool zarith qarith lists sets fsets relations \
 # 3) plugins
 ###########################################################################
 
-.PHONY: plugins omega micromega ring setoid_ring nsatz dp xml extraction
+.PHONY: plugins omega micromega ring setoid_ring nsatz xml extraction
 .PHONY: field fourier funind cc subtac rtauto pluginsopt
 
 plugins: $(PLUGINSVO)
@@ -455,7 +462,6 @@ micromega: $(MICROMEGAVO) $(MICROMEGACMA) $(CSDPCERT)
 ring: $(RINGVO) $(RINGCMA)
 setoid_ring: $(NEWRINGVO) $(NEWRINGCMA)
 nsatz: $(NSATZVO) $(NSATZCMA)
-dp: $(DPCMA)
 xml: $(XMLVO) $(XMLCMA)
 extraction: $(EXTRACTIONCMA)
 field: $(FIELDVO) $(FIELDCMA)
@@ -545,9 +551,9 @@ $(FAKEIDE): lib/xml_lexer$(BESTOBJ) lib/xml_parser$(BESTOBJ) lib/xml_utils$(BEST
 
 ifeq ($(CAMLP4),camlp4)
 tools/compat5.cmo: tools/compat5.mlp
-	$(OCAMLC) -c -I $(MYCAMLP4LIB) -pp "$(CAMLP4O) -impl" -impl $<
+	$(OCAMLC) -c -I $(MYCAMLP4LIB) -pp '$(CAMLP4O) -impl' -impl $<
 tools/compat5b.cmo: tools/compat5b.mlp
-	$(OCAMLC) -c -I $(MYCAMLP4LIB) -pp "$(CAMLP4O) -impl" -impl $<
+	$(OCAMLC) -c -I $(MYCAMLP4LIB) -pp '$(CAMLP4O) -impl' -impl $<
 else
 tools/compat5.cmo: tools/compat5.ml
 	$(OCAMLC) -c $<
@@ -730,7 +736,7 @@ dev/printers.cma: | dev/printers.mllib.d
 parsing/grammar.cma: | parsing/grammar.mllib.d
 	$(SHOW)'Testing $@'
 	@touch test.ml4
-	$(HIDE)$(OCAMLC) $(BYTEFLAGS) -pp "$(CAMLP4O) -I $(CAMLLIB) $^ -impl" -impl test.ml4 -o test-grammar
+	$(HIDE)$(OCAMLC) $(BYTEFLAGS) -pp '$(CAMLP4O) -I $(CAMLLIB) $^ -impl' -impl test.ml4 -o test-grammar
 	@rm -f test-grammar test.*
 	$(SHOW)'OCAMLC -a $@'   
 	$(HIDE)$(OCAMLC) $(BYTEFLAGS) $^ -linkall -a -o $@
@@ -847,6 +853,12 @@ COND_OPTFLAGS= \
 
 HACKMLI = $(if $(wildcard $<i),,-intf-suffix .cmi)
 
+define diff
+ $(strip $(foreach f, $(1), $(if $(filter $(f),$(2)),,$f)))
+endef
+
+MLWITHOUTMLI := $(call diff, $(MLFILES), $(MLIFILES:.mli=.ml))
+
 $(MLWITHOUTMLI:.ml=.cmx): %.cmx: %.cmi  # for .ml with .mli this is already the case
 
 $(MLWITHOUTMLI:.ml=.cmi): %.cmi: %.cmo
@@ -953,7 +965,7 @@ checker/%.mllib.d: $(D_DEPEND_BEFORE_SRC) checker/%.mllib $(D_DEPEND_AFTER_SRC) 
 
 %.c.d: $(D_DEPEND_BEFORE_SRC) %.c $(D_DEPEND_AFTER_SRC) $(GENHFILES)
 	$(SHOW)'CCDEP     $<'
-	$(HIDE)$(CC) -MM -MQ "$@" -MQ "$(<:.c=.o)" $(CFLAGS) -isystem $(CAMLHLIB) $< $(TOTARGET)
+	$(HIDE)$(OCAMLC) -ccopt "-MM -MQ $@ -MQ $(<:.c=.o) -isystem $(CAMLHLIB)" $< $(TOTARGET)
 
 ###########################################################################
 # this sets up developper supporting stuff

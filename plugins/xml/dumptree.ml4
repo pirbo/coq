@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -107,7 +107,7 @@ let pr_context_xml env =
 
 let pr_subgoal_metas_xml metas env=
   let pr_one (meta, typ) =
-    fnl () ++ str "<meta index=\"" ++ int meta ++ str " type=\"" ++ xmlstream (pr_ltype_env_at_top env typ) ++
+    fnl () ++ str "<meta index=\"" ++ int meta ++ str " type=\"" ++ xmlstream (pr_goal_concl_style_env env typ) ++
       str "\"/>"
   in
   List.fold_left (++) (mt ()) (List.map pr_one metas)
@@ -117,7 +117,7 @@ let pr_goal_xml sigma g =
   let env = try Goal.V82.unfiltered_env sigma g with _ -> empty_env in
   if Decl_mode.try_get_info sigma g = None then
     (hov 2 (str "<goal>" ++ fnl () ++ str "<concl type=\"" ++
-    xmlstream (pr_ltype_env_at_top env (Goal.V82.concl sigma g)) ++
+    xmlstream (pr_goal_concl_style_env env (Goal.V82.concl sigma g)) ++
     str "\"/>" ++
     (pr_context_xml env)) ++
     fnl () ++ str "</goal>")

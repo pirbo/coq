@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -40,7 +40,9 @@ let lposint = 0
 let lnegint = 35 (* must be consistent with Notation "- x" *)
 let ltop = (200,E)
 let lproj = 1
-let lsimple = (1,E)
+let ldelim = 1
+let lsimpleconstr = (8,E)
+let lsimplepatt = (1,E)
 
 let prec_less child (parent,assoc) =
   if parent < 0 && child = lprod then true
@@ -149,7 +151,7 @@ let pr_or_var pr = function
   | ArgVar (loc,s) -> pr_lident (loc,s)
 
 let pr_prim_token = function
-  | Numeral n -> Bigint.pr_bigint n
+  | Numeral n -> str (Bigint.to_string n)
   | String s -> qs s
 
 let pr_evar pr n l =
@@ -188,7 +190,7 @@ let rec pr_patt sep inh p =
   | CPatNotation (_,s,(l,ll)) ->
       pr_notation (pr_patt mt) (fun _ _ _ -> mt()) s (l,ll,[])
   | CPatPrim (_,p) -> pr_prim_token p, latom
-  | CPatDelimiters (_,k,p) -> pr_delimiters k (pr_patt mt lsimple p), 1
+  | CPatDelimiters (_,k,p) -> pr_delimiters k (pr_patt mt lsimplepatt p), 1
   in
   let loc = cases_pattern_expr_loc p in
   pr_with_comments loc
@@ -219,25 +221,33 @@ let surround_impl k p =
   | Explicit -> str"(" ++ p ++ str")"
   | Implicit -> str"{" ++ p ++ str"}"
 
-let surround_binder k p =
-  match k with
-  | Default b -> hov 1 (surround_impl b p)
-  | Generalized (b, b', t) ->
-      hov 1 (surround_impl b' (surround_impl b p))
-
 let surround_implicit k p =
   match k with
-  | Default Explicit -> p
-  | Default Implicit -> (str"{" ++ p ++ str"}")
-  | Generalized (b, b', t) ->
-      surround_impl b' (surround_impl b p)
+  | Explicit -> p
+  | Implicit -> (str"{" ++ p ++ str"}")
 
 let pr_binder many pr (nal,k,t) =
-  match t with
-  | CHole _ -> prlist_with_sep spc pr_lname nal
-  | _ ->
-    let s = prlist_with_sep spc pr_lname nal ++ str" : " ++ pr t in
-      hov 1 (if many then surround_binder k s else surround_implicit k s)
+  match k with
+    | Generalized (b, b', t') ->
+      assert (b=Implicit);
+      begin match nal with
+	|[loc,Anonymous] ->
+	  hov 1 (str"`" ++ (surround_impl b'
+			      ((if t' then str "!" else mt ()) ++ pr t)))
+	|[loc,Name id] ->
+	  hov 1 (str "`" ++ (surround_impl b'
+			       (pr_lident (loc,id) ++ str " : " ++
+				  (if t' then str "!" else mt()) ++ pr t)))
+	|_ -> anomaly "List of generalized binders have alwais one element."
+      end
+    | Default b ->
+      match t with
+	| CHole _ ->
+	  let s = prlist_with_sep spc pr_lname nal in
+	  hov 1 (surround_implicit b s)
+	| _ ->
+	  let s = prlist_with_sep spc pr_lname nal ++ str " : " ++ pr t in
+	  hov 1 (if many then surround_impl b s else surround_implicit b s)
 
 let pr_binder_among_many pr_c = function
   | LocalRawAssum (nal,k,t) ->
@@ -323,19 +333,27 @@ let pr_recursive_decl pr pr_dangling dangling_with_for id bl annot t c =
   pr_opt_type_spc pr t ++ str " :=" ++
   pr_sep_com (fun () -> brk(1,2)) (pr_body ltop) c
 
-let pr_fixdecl pr prd dangling_with_for ((_,id),(n,ro),bl,t,c) =
-  let annot =
-    match ro with
-	CStructRec ->
-	  if List.length bl > 1 && n <> None then
-	    spc() ++ str "{struct " ++ pr_id (snd (Option.get n)) ++ str"}"
-	  else mt()
-      | CWfRec c ->
-	  spc () ++ str "{wf " ++ pr lsimple c ++ pr_id (snd (Option.get n)) ++ str"}"
-      | CMeasureRec (m,r) ->
-	  spc () ++ str "{measure " ++ pr lsimple m ++ pr_id (snd (Option.get n)) ++
-	    (match r with None -> mt() | Some r -> str" on " ++ pr lsimple r) ++ str"}"
-  in
+let pr_guard_annot pr_aux bl (n,ro) =
+  match n with
+    | None -> mt ()
+    | Some (loc, id) ->
+      match (ro : Topconstr.recursion_order_expr) with
+	| CStructRec ->
+	  let names_of_binder = function
+	    | LocalRawAssum (nal,_,_) -> nal
+	    | LocalRawDef (_,_) -> []
+	  in let ids = List.flatten (List.map names_of_binder bl) in
+	     if List.length ids > 1 then
+	       spc() ++ str "{struct " ++ pr_id id ++ str"}"
+	     else mt()
+	| CWfRec c ->
+	  spc() ++ str "{wf " ++ pr_aux c ++ spc() ++ pr_id id ++ str"}"
+	| CMeasureRec (m,r) ->
+	  spc() ++ str "{measure " ++ pr_aux m ++ spc() ++ pr_id id++
+	    (match r with None -> mt() | Some r -> str" on " ++ pr_aux r) ++ str"}"
+
+let pr_fixdecl pr prd dangling_with_for ((_,id),ro,bl,t,c) =
+  let annot = pr_guard_annot (pr lsimpleconstr) bl ro in
     pr_recursive_decl pr prd dangling_with_for id bl annot t c
 
 let pr_cofixdecl pr prd dangling_with_for ((_,id),bl,t,c) =
@@ -355,7 +373,7 @@ let pr_asin pr (na,indnalopt) =
     | None -> mt ()) ++
   (match indnalopt with
     | None -> mt ()
-    | Some t -> spc () ++ str "in " ++ pr lsimple t)
+    | Some t -> spc () ++ str "in " ++ pr lsimpleconstr t)
 
 let pr_case_item pr (tm,asin) =
   hov 0 (pr (lcast,E) tm ++ pr_asin pr asin)
@@ -364,7 +382,7 @@ let pr_case_type pr po =
   match po with
     | None | Some (CHole _) -> mt()
     | Some p ->
-        spc() ++ hov 2 (str "return" ++ pr_sep_com spc (pr lsimple) p)
+        spc() ++ hov 2 (str "return" ++ pr_sep_com spc (pr lsimpleconstr) p)
 
 let pr_simple_return_type pr na po =
   (match na with
@@ -374,7 +392,7 @@ let pr_simple_return_type pr na po =
   pr_case_type pr po
 
 let pr_proj pr pr_app a f l =
-  hov 0 (pr lsimple a ++ cut() ++ str ".(" ++ pr_app pr f l ++ str ")")
+  hov 0 (pr (lproj,E) a ++ cut() ++ str ".(" ++ pr_app pr f l ++ str ")")
 
 let pr_appexpl pr f l =
       hov 2 (
@@ -529,9 +547,9 @@ let pr pr sep inherited a =
       pr (fun()->str"(") (max_int,L) t ++ str")", latom
   | CNotation (_,s,env) ->
       pr_notation (pr mt) (pr_binders_gen (pr mt ltop)) s env
-  | CGeneralization (_,bk,ak,c) -> pr_generalization bk ak (pr mt lsimple c), latom
+  | CGeneralization (_,bk,ak,c) -> pr_generalization bk ak (pr mt ltop c), latom
   | CPrim (_,p) -> pr_prim_token p, prec_of_prim_token p
-  | CDelimiters (_,sc,a) -> pr_delimiters sc (pr mt lsimple a), 1
+  | CDelimiters (_,sc,a) -> pr_delimiters sc (pr mt (ldelim,E) a), ldelim
   in
   let loc = constr_loc a in
   pr_with_comments loc
@@ -549,10 +567,14 @@ let modular_constr_pr = pr
 let rec fix rf x =rf (fix rf) x
 let pr = fix modular_constr_pr mt
 
+let pr_simpleconstr = function
+  | CAppExpl (_,(None,f),[]) -> str "@" ++ pr_reference f
+  | c -> pr lsimpleconstr c
+
 let default_term_pr = {
-  pr_constr_expr   = pr lsimple;
+  pr_constr_expr   = pr_simpleconstr;
   pr_lconstr_expr  = pr ltop;
-  pr_constr_pattern_expr  = pr lsimple;
+  pr_constr_pattern_expr  = pr_simpleconstr;
   pr_lconstr_pattern_expr = pr ltop
 }
 

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -259,8 +259,9 @@ let pr_scope_stack = function
 
 let error_inconsistent_scope loc id scopes1 scopes2 =
   user_err_loc (loc,"set_var_scope",
-    pr_id id ++ str " is used both in " ++
-    pr_scope_stack scopes1 ++ strbrk " and in " ++ pr_scope_stack scopes2)
+    pr_id id ++ str " is here used in " ++
+    pr_scope_stack scopes2 ++ strbrk " while it was elsewhere used in " ++
+    pr_scope_stack scopes1)
 
 let error_expect_constr_notation_type loc id =
   user_err_loc (loc,"",
@@ -274,17 +275,17 @@ let error_expect_binder_notation_type loc id =
 let set_var_scope loc id istermvar env ntnvars =
   try
     let idscopes,typ = List.assoc id ntnvars in
-    if !idscopes <> None &
-      (* scopes have no effect on the interpretation of identifiers, hence
-         we can tolerate having a variable occurring several times in
-         different scopes: *) typ <> NtnInternTypeIdent &
-      make_current_scope (Option.get !idscopes)
-      <> make_current_scope (env.tmp_scope,env.scopes) then
-	error_inconsistent_scope loc id
-	  (make_current_scope (Option.get !idscopes))
-	  (make_current_scope (env.tmp_scope,env.scopes))
-    else
-      idscopes := Some (env.tmp_scope,env.scopes);
+    if istermvar then
+      (* scopes have no effect on the interpretation of identifiers *)
+      if !idscopes = None then
+        idscopes := Some (env.tmp_scope,env.scopes)
+      else
+        if make_current_scope (Option.get !idscopes)
+          <> make_current_scope (env.tmp_scope,env.scopes)
+        then
+	  error_inconsistent_scope loc id
+	    (make_current_scope (Option.get !idscopes))
+	    (make_current_scope (env.tmp_scope,env.scopes));
     match typ with
     | NtnInternTypeBinder ->
 	if istermvar then error_expect_binder_notation_type loc id
@@ -410,12 +411,12 @@ let intern_local_binder_aux ?(global_level=false) intern intern_type lvar (env,b
   | LocalRawAssum(nal,bk,ty) ->
       (match bk with
       | Default k ->
-          let (loc,na) = List.hd nal in
-	  (* TODO: fail if several names with different implicit types *)
-	  let ty = locate_if_isevar loc na (intern_type env ty) in
+	  let ty = intern_type env ty in
+          let impls = impls_type_list ty in
 	    List.fold_left
-	     (fun (env,bl) na ->
-	       (push_name_env lvar (impls_type_list ty) env na,(snd na,k,None,ty)::bl))
+	     (fun (env,bl) (loc,na as locna) ->
+	       (push_name_env lvar impls env locna,
+                (na,k,None,locate_if_isevar loc na ty)::bl))
 	      (env,bl) nal
       | Generalized (b,b',t) ->
 	  let env, b = intern_generalized_binder ~global_level intern_type lvar env bl (List.hd nal) b b' t ty in
@@ -454,12 +455,12 @@ let iterate_binder intern lvar (env,bl) = function
       let intern_type env = intern (set_type_scope env) in
       (match bk with
       | Default k ->
-          let (loc,na) = List.hd nal in
-	  (* TODO: fail if several names with different implicit types *)
 	  let ty = intern_type env ty in
-	  let ty = locate_if_isevar loc na ty in
+          let impls = impls_type_list ty in
 	  List.fold_left
-	    (fun (env,bl) na -> (push_name_env lvar (impls_type_list ty) env na,(snd na,k,None,ty)::bl))
+	    (fun (env,bl) (loc,na as locna) ->
+              (push_name_env lvar impls env locna,
+               (na,k,None,locate_if_isevar loc na ty)::bl))
 	    (env,bl) nal
       | Generalized (b,b',t) ->
 	  let env, b = intern_generalized_binder intern_type lvar env bl (List.hd nal) b b' t ty in
@@ -811,9 +812,6 @@ let message_redundant_alias (id1,id2) =
     (str "Alias variable " ++ pr_id id1 ++ str " is merged with " ++ pr_id id2)
 
 (* Expanding notations *)
-
-let error_invalid_pattern_notation loc =
-  user_err_loc (loc,"",str "Invalid notation for pattern.")
 
 let chop_aconstr_constructor loc (ind,k) args =
   if List.length args = 0 then (* Tolerance for a @id notation *) args else
@@ -1420,13 +1418,16 @@ let internalize sigma globalenv env allow_patvar lvar c =
     (tm',(snd na,typ)), na::ids
 
   and iterate_prod loc2 env bk ty body nal =
-    let rec default env bk = function
-    | (loc1,na as locna)::nal ->
-	if nal <> [] then check_capture loc1 ty na;
-	let ty = locate_if_isevar loc1 na (intern_type env ty) in
-	let body = default (push_name_env lvar (impls_type_list ty) env locna) bk nal in
-	  GProd (join_loc loc1 loc2, na, bk, ty, body)
-    | [] -> intern_type env body
+    let default env bk = function
+    | (loc1,na)::nal' as nal ->
+	if nal' <> [] then check_capture loc1 ty na;
+        let ty = intern_type env ty in
+        let impls = impls_type_list ty in
+	let env = List.fold_left (push_name_env lvar impls) env nal in
+        List.fold_right (fun (loc,na) c ->
+          GProd (join_loc loc loc2, na, bk, locate_if_isevar loc na ty, c))
+          nal (intern_type env body)
+    | [] -> assert false
     in
       match bk with
 	| Default b -> default env b nal
@@ -1436,13 +1437,16 @@ let internalize sigma globalenv env allow_patvar lvar c =
 	      it_mkGProd ibind body
 
   and iterate_lam loc2 env bk ty body nal =
-    let rec default env bk = function
-      | (loc1,na as locna)::nal ->
-	  if nal <> [] then check_capture loc1 ty na;
-	  let ty = locate_if_isevar loc1 na (intern_type env ty) in
-	  let body = default (push_name_env lvar (impls_type_list ty) env locna) bk nal in
-	    GLambda (join_loc loc1 loc2, na, bk, ty, body)
-      | [] -> intern env body
+    let default env bk = function
+    | (loc1,na)::nal' as nal ->
+        if nal' <> [] then check_capture loc1 ty na;
+        let ty = intern_type env ty in
+        let impls = impls_type_list ty in
+	let env = List.fold_left (push_name_env lvar impls) env nal in
+        List.fold_right (fun (loc,na) c ->
+          GLambda (join_loc loc loc2, na, bk, locate_if_isevar loc na ty, c))
+          nal (intern env body)
+    | [] -> assert false
     in match bk with
       | Default b -> default env b nal
       | Generalized (b, b', t) ->
@@ -1679,7 +1683,7 @@ let interp_rawcontext_gen understand_type understand_judgment env bl =
 		(push_rel d env, d::params, succ n, impls)
 	  | Some b ->
 	      let c = understand_judgment env b in
-	      let d = (na, Some c.uj_val, c.uj_type) in
+	      let d = (na, Some c.uj_val, Termops.refresh_universes c.uj_type) in
 		(push_rel d env, d::params, succ n, impls))
       (env,[],1,[]) (List.rev bl)
   in (env, par), impls

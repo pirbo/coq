@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -70,12 +70,10 @@ type proof_info = {
   mode : proof_mode
 }
 
-(* Invariant: a proof is at most in one of current_proof and suspended. And the 
-   domain of proof_info is the union of that of current_proof and suspended.*)
-(* The head of [!current_proof] is the actual current proof, the other ones are to
-    be resumed when the current proof is closed, aborted or suspended. *)
+(* Invariant: the domain of proof_info is current_proof.*)
+(* The head of [!current_proof] is the actual current proof, the other ones are
+   to be resumed when the current proof is closed or aborted. *)
 let current_proof = ref ([]:nproof list)
-let suspended = ref ([] : nproof list)
 let proof_info = ref (Idmap.empty : proof_info Idmap.t)
 
 (* Current proof_mode, for bookkeeping *)
@@ -93,7 +91,7 @@ let update_proof_mode () =
       !current_proof_mode.reset (); 
       current_proof_mode := standard
 
-(* combinators for the current_proof and suspended lists *)
+(* combinators for the current_proof lists *)
 let push a l = l := a::!l;
   update_proof_mode ()
 
@@ -145,8 +143,7 @@ let remove id m =
 (*** Proof Global manipulation ***)
 
 let get_all_proof_names () =
-    List.map fst !current_proof @
-    List.map fst !suspended
+    List.map fst !current_proof
 
 let give_me_the_proof () = 
   snd (find_top current_proof)
@@ -160,61 +157,40 @@ let get_current_proof_name () =
     accessed directly through vernacular commands. Error message should be 
    pushed to external layers, and so we should be able to have a finer
    control on error message on complex actions. *)
-let msg_proofs use_resume =
+let msg_proofs () =
   match get_all_proof_names () with
     | [] -> (spc () ++ str"(No proof-editing in progress).")
     | l ->  (str"." ++ fnl () ++ str"Proofs currently edited:" ++ spc () ++
-               (Util.prlist_with_sep Util.pr_spc Nameops.pr_id l) ++
-	       str"." ++
-               (if use_resume then (fnl () ++ str"Use \"Resume\" first.")
-              	else (mt ()))
-	    )
-
+               (Util.prlist_with_sep Util.pr_spc Nameops.pr_id l)++ str ".")
 
 let there_is_a_proof () = !current_proof <> []
-let there_are_suspended_proofs () = !suspended <> []
-let there_are_pending_proofs () = 
-  there_is_a_proof () || 
-  there_are_suspended_proofs ()
-let check_no_pending_proof () = 
+let there_are_pending_proofs () = there_is_a_proof ()
+let check_no_pending_proof () =
   if not (there_are_pending_proofs ()) then
     ()
   else begin
     Util.error (Pp.string_of_ppcmds
-      (str"Proof editing in progress" ++ (msg_proofs false) ++ fnl() ++
+      (str"Proof editing in progress" ++ msg_proofs () ++ fnl() ++
        str"Use \"Abort All\" first or complete proof(s)."))
   end
 
-
-let suspend () =
-  rotate_top current_proof suspended
-
-let resume_last () =
-  rotate_top suspended current_proof
-
-let resume id =
-  rotate_find id suspended current_proof
-
 let discard_gen id =
-  try 
-    ignore (extract id current_proof);
-    remove id proof_info
-  with NoSuchProof -> ignore (extract id suspended)
+  ignore (extract id current_proof);
+  remove id proof_info
 
 let discard (loc,id) = 
   try
     discard_gen id
   with NoSuchProof ->
     Util.user_err_loc
-      (loc,"Pfedit.delete_proof",str"No such proof" ++ msg_proofs false)
+      (loc,"Pfedit.delete_proof",str"No such proof" ++ msg_proofs ())
 
 let discard_current () =
   let (id,_) = extract_top current_proof in
   remove id proof_info
  
 let discard_all () =
-  current_proof := []; 
-  suspended := [];
+  current_proof := [];
   proof_info := Idmap.empty
 
 (* [set_proof_mode] sets the proof mode to be used after it's called. It is
@@ -363,9 +339,14 @@ module Bullet = struct
     let bullet_kind = (Proof.new_focus_kind () : t list Proof.focus_kind)
     let bullet_cond = Proof.done_cond ~loose_end:true bullet_kind
 
+    (* spiwack: as it is bullets are reset (locally) by *any* non-bullet focusing command
+       experience will tell if this is the right discipline of if we want to be finer and
+       reset them only for a choice of bullets. *)
     let get_bullets pr =
-      try Proof.get_at_focus bullet_kind pr
-      with Proof.NoSuchFocus -> []
+      if Proof.is_last_focus bullet_kind pr then
+	Proof.get_at_focus bullet_kind pr
+      else
+	[]
 
     let has_bullet bul pr =
       let rec has_bullet = function

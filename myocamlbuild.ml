@@ -402,6 +402,15 @@ let extra_rules () = begin
   if w32 then flag ["link"; "ocaml"; "program"; "ide"]
     (S [A "-ccopt"; A "-link -Wl,-subsystem,windows"; P w32ico]);
 
+(** The mingw32-ocaml cross-compiler currently uses Filename.dir_sep="/".
+    Let's tweak that... *)
+
+  if w32 then begin
+    ocaml_lib "tools/win32hack";
+    List.iter (fun (_,s,_) -> tag_file (s^".native") ["use_win32hack"])
+      all_binaries
+  end;
+
 (** Coqtop *)
 
   let () =
@@ -413,9 +422,9 @@ let extra_rules () = begin
       if not w32 then N else S ([A"-camlbin";A w32bin;A "-ccopt";P w32ico])
     in
     if opt then rule fo ~prod:fo ~deps:(depsall@depso) ~insert:`top
-      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-opt";incl fo;A"-o";Px fo]);
+      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-opt";incl fo;camlp4incl;A"-o";Px fo]);
     rule fb ~prod:fb ~deps:(depsall@depsb) ~insert:`top
-      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-top";incl fb;A"-o";Px fb]);
+      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-top";incl fb;camlp4incl;A"-o";Px fb]);
   in
 
 (** Coq files dependencies *)

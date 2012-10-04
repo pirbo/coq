@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -60,7 +60,7 @@ Add Printing Let sigT2.
 
 (** Projections of [sig]
 
-    An element [y] of a subset [{x:A & (P x)}] is the pair of an [a]
+    An element [y] of a subset [{x:A | (P x)}] is the pair of an [a]
     of type [A] and of a proof [h] that [a] satisfies [P].  Then
     [(proj1_sig y)] is the witness [a] and [(proj2_sig y)] is the
     proof of [(P a)] *)
@@ -226,16 +226,16 @@ Hint Resolve exist exist2 existT existT2: core.
 
 (* Compatibility *)
 
-Notation sigS := sigT (only parsing).
-Notation existS := existT (only parsing).
-Notation sigS_rect := sigT_rect (only parsing).
-Notation sigS_rec := sigT_rec (only parsing).
-Notation sigS_ind := sigT_ind (only parsing).
-Notation projS1 := projT1 (only parsing).
-Notation projS2 := projT2 (only parsing).
+Notation sigS := sigT (compat "8.2").
+Notation existS := existT (compat "8.2").
+Notation sigS_rect := sigT_rect (compat "8.2").
+Notation sigS_rec := sigT_rec (compat "8.2").
+Notation sigS_ind := sigT_ind (compat "8.2").
+Notation projS1 := projT1 (compat "8.2").
+Notation projS2 := projT2 (compat "8.2").
 
-Notation sigS2 := sigT2 (only parsing).
-Notation existS2 := existT2 (only parsing).
-Notation sigS2_rect := sigT2_rect (only parsing).
-Notation sigS2_rec := sigT2_rec (only parsing).
-Notation sigS2_ind := sigT2_ind (only parsing).
+Notation sigS2 := sigT2 (compat "8.2").
+Notation existS2 := existT2 (compat "8.2").
+Notation sigS2_rect := sigT2_rect (compat "8.2").
+Notation sigS2_rec := sigT2_rec (compat "8.2").
+Notation sigS2_ind := sigT2_ind (compat "8.2").

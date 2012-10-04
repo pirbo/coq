@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -26,6 +26,8 @@ type advanced_flag = bool  (* true = advanced         false = basic *)
 type split_flag = bool     (* true = exists           false = split *)
 type hidden_flag = bool    (* true = internal use     false = user-level *)
 type letin_flag = bool     (* true = use local def    false = use Leibniz *)
+
+type debug = Debug | Info | Off (* for trivial / auto / eauto ... *)
 
 type glob_red_flag =
   | FBeta
@@ -106,11 +108,14 @@ type 'id gclause =
 let nowhere = {onhyps=Some[]; concl_occs=no_occurrences_expr}
 
 type 'constr induction_clause =
-  ('constr with_bindings induction_arg list * 'constr with_bindings option *
-   (intro_pattern_expr located option * intro_pattern_expr located option))
+    'constr with_bindings induction_arg *
+    (intro_pattern_expr located option (* eqn:... *)
+    * intro_pattern_expr located option) (* as ... *)
 
 type ('constr,'id) induction_clause_list =
-    'constr induction_clause list * 'id gclause option
+    'constr induction_clause list
+    * 'constr with_bindings option (* using ... *)
+    * 'id gclause option (* in ... *)
 
 type multi =
   | Precisely of int
@@ -158,7 +163,8 @@ type ('constr,'pat,'cst,'ind,'ref,'id,'tac,'lev) gen_atomic_tactic_expr =
   | TacAssert of 'tac option * intro_pattern_expr located option * 'constr
   | TacGeneralize of ('constr with_occurrences * name) list
   | TacGeneralizeDep of 'constr
-  | TacLetTac of name * 'constr * 'id gclause * letin_flag
+  | TacLetTac of name * 'constr * 'id gclause * letin_flag *
+      intro_pattern_expr located option
 
   (* Derived basic tactics *)
   | TacSimpleInductionDestruct of rec_flag * quantified_hypothesis
@@ -171,13 +177,8 @@ type ('constr,'pat,'cst,'ind,'ref,'id,'tac,'lev) gen_atomic_tactic_expr =
   | TacLApply of 'constr
 
   (* Automation tactics *)
-  | TacTrivial of 'constr list * string list option
-  | TacAuto of int or_var option * 'constr list * string list option
-  | TacAutoTDB of int option
-  | TacDestructHyp of (bool * identifier located)
-  | TacDestructConcl
-  | TacSuperAuto of (int option * reference list * bool * bool)
-  | TacDAuto of int or_var option * int option * 'constr list
+  | TacTrivial of debug * 'constr list * string list option
+  | TacAuto of debug * int or_var option * 'constr list * string list option
 
   (* Context management *)
   | TacClear of bool * 'id list

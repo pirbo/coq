@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -221,7 +221,7 @@ Definition all (A:Type) (P:A -> Prop) := forall x:A, P x.
 
 Notation "'exists' x .. y , p" := (ex (fun x => .. (ex (fun y => p)) ..))
   (at level 200, x binder, right associativity,
-   format "'[' 'exists'  '/  ' x .. y ,  '/  ' p ']'")
+   format "'[' 'exists'  '/  ' x  ..  y ,  '/  ' p ']'")
   : type_scope.
 
 Notation "'exists2' x , p & q" := (ex2 (fun x => p) (fun x => q))
@@ -240,12 +240,12 @@ Section universal_quantification.
 
   Theorem inst : forall x:A, all (fun x => P x) -> P x.
   Proof.
-    unfold all in |- *; auto.
+    unfold all; auto.
   Qed.
 
   Theorem gen : forall (B:Prop) (f:forall y:A, B -> P y), B -> all P.
   Proof.
-    red in |- *; auto.
+    red; auto.
   Qed.
 
 End universal_quantification.
@@ -284,7 +284,7 @@ Section Logic_lemmas.
 
   Theorem absurd : forall A C:Prop, A -> ~ A -> C.
   Proof.
-    unfold not in |- *; intros A C h1 h2.
+    unfold not; intros A C h1 h2.
     destruct (h2 h1).
   Qed.
 
@@ -313,7 +313,7 @@ Section Logic_lemmas.
 
     Theorem not_eq_sym : x <> y -> y <> x.
     Proof.
-      red in |- *; intros h1 h2; apply h1; destruct h2; trivial.
+      red; intros h1 h2; apply h1; destruct h2; trivial.
     Qed.
 
   End equality.
@@ -378,14 +378,14 @@ Qed.
 
 (* Aliases *)
 
-Notation sym_eq := eq_sym (only parsing).
-Notation trans_eq := eq_trans (only parsing).
-Notation sym_not_eq := not_eq_sym (only parsing).
+Notation sym_eq := eq_sym (compat "8.3").
+Notation trans_eq := eq_trans (compat "8.3").
+Notation sym_not_eq := not_eq_sym (compat "8.3").
 
-Notation refl_equal := eq_refl (only parsing).
-Notation sym_equal := eq_sym (only parsing).
-Notation trans_equal := eq_trans (only parsing).
-Notation sym_not_equal := not_eq_sym (only parsing).
+Notation refl_equal := eq_refl (compat "8.3").
+Notation sym_equal := eq_sym (compat "8.3").
+Notation trans_equal := eq_trans (compat "8.3").
+Notation sym_not_equal := not_eq_sym (compat "8.3").
 
 Hint Immediate eq_sym not_eq_sym: core.
 
@@ -404,7 +404,7 @@ Definition uniqueness (A:Type) (P:A->Prop) := forall x y, P x -> P y -> x = y.
 Notation "'exists' ! x .. y , p" :=
   (ex (unique (fun x => .. (ex (unique (fun y => p))) ..)))
   (at level 200, x binder, right associativity,
-   format "'[' 'exists'  !  '/  ' x .. y ,  '/  ' p ']'")
+   format "'[' 'exists'  !  '/  ' x  ..  y ,  '/  ' p ']'")
   : type_scope.
 
 Lemma unique_existence : forall (A:Type) (P:A->Prop),

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -82,11 +82,9 @@ let start_proof_com env isevars sopt kind (bl,t) hook =
       Impargs.declare_manual_implicits (loc = Local) gr ~enriching:true [imps];
       hook loc gr)
 
-let print_subgoals () = Flags.if_verbose (fun () -> msg (Printer.pr_open_subgoals ())) ()
-
 let start_proof_and_print env isevars idopt k t hook =
   start_proof_com env isevars idopt k t hook;
-  print_subgoals ()
+  Vernacentries.print_subgoals ()
 
 let _ = Detyping.set_detype_anonymous (fun loc n -> GVar (loc, id_of_string ("Anonymous_REL_" ^ string_of_int n)))
 

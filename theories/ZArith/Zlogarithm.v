@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -34,22 +34,22 @@ Section Log_pos. (* Log of positive integers *)
   Fixpoint log_inf (p:positive) : Z :=
     match p with
       | xH => 0 (* 1 *)
-      | xO q => Zsucc (log_inf q)       (* 2n *)
-      | xI q => Zsucc (log_inf q)       (* 2n+1 *)
+      | xO q => Z.succ (log_inf q)       (* 2n *)
+      | xI q => Z.succ (log_inf q)       (* 2n+1 *)
     end.
 
   Fixpoint log_sup (p:positive) : Z :=
     match p with
       | xH => 0	(* 1 *)
-      | xO n => Zsucc (log_sup n) (* 2n *)
-      | xI n => Zsucc (Zsucc (log_inf n))	(* 2n+1 *)
+      | xO n => Z.succ (log_sup n) (* 2n *)
+      | xI n => Z.succ (Z.succ (log_inf n))	(* 2n+1 *)
     end.
 
   Hint Unfold log_inf log_sup.
 
   Lemma Psize_log_inf : forall p, Zpos (Pos.size p) = Z.succ (log_inf p).
   Proof.
-   induction p; simpl; now rewrite <- ?Z.succ_Zpos, ?IHp.
+   induction p; simpl; now rewrite ?Pos2Z.inj_succ, ?IHp.
   Qed.
 
   Lemma Zlog2_log_inf : forall p, Z.log2 (Zpos p) = log_inf p.
@@ -71,26 +71,26 @@ Section Log_pos. (* Log of positive integers *)
   (** Then we give the specifications of [log_inf] and [log_sup]
     and prove their validity *)
 
-  Hint Resolve Zle_trans: zarith.
+  Hint Resolve Z.le_trans: zarith.
 
   Theorem log_inf_correct :
     forall x:positive,
-      0 <= log_inf x /\ two_p (log_inf x) <= Zpos x < two_p (Zsucc (log_inf x)).
+      0 <= log_inf x /\ two_p (log_inf x) <= Zpos x < two_p (Z.succ (log_inf x)).
   Proof.
-    simple induction x; intros; simpl in |- *;
+    simple induction x; intros; simpl;
       [ elim H; intros Hp HR; clear H; split;
 	[ auto with zarith
-	  | rewrite two_p_S with (x := Zsucc (log_inf p)) by (apply Zle_le_succ; trivial);
+	  | rewrite two_p_S with (x := Z.succ (log_inf p)) by (apply Z.le_le_succ_r; trivial);
 	    rewrite two_p_S by trivial;
-	    rewrite two_p_S in HR by trivial; rewrite (BinInt.Zpos_xI p);
+	    rewrite two_p_S in HR by trivial; rewrite (BinInt.Pos2Z.inj_xI p);
 		omega ]
 	| elim H; intros Hp HR; clear H; split;
 	  [ auto with zarith
-	    | rewrite two_p_S with (x := Zsucc (log_inf p)) by (apply Zle_le_succ; trivial);
+	    | rewrite two_p_S with (x := Z.succ (log_inf p)) by (apply Z.le_le_succ_r; trivial);
 	      rewrite two_p_S by trivial;
-	      rewrite two_p_S in HR by trivial; rewrite (BinInt.Zpos_xO p);
+	      rewrite two_p_S in HR by trivial; rewrite (BinInt.Pos2Z.inj_xO p);
 		  omega ]
-	| unfold two_power_pos in |- *; unfold shift_pos in |- *; simpl in |- *;
+	| unfold two_power_pos; unfold shift_pos; simpl;
 	  omega ].
   Qed.
 
@@ -103,7 +103,7 @@ Section Log_pos. (* Log of positive integers *)
 
   Lemma log_sup_correct1 : forall p:positive, 0 <= log_sup p.
   Proof.
-    simple induction p; intros; simpl in |- *; auto with zarith.
+    simple induction p; intros; simpl; auto with zarith.
   Qed.
 
   (** For every [p], either [p] is a power of two and [(log_inf p)=(log_sup p)]
@@ -112,46 +112,46 @@ Section Log_pos. (* Log of positive integers *)
   Theorem log_sup_log_inf :
     forall p:positive,
       IF Zpos p = two_p (log_inf p) then Zpos p = two_p (log_sup p)
-    else log_sup p = Zsucc (log_inf p).
+    else log_sup p = Z.succ (log_inf p).
   Proof.
     simple induction p; intros;
-      [ elim H; right; simpl in |- *;
+      [ elim H; right; simpl;
 	rewrite (two_p_S (log_inf p0) (log_inf_correct1 p0));
-	  rewrite BinInt.Zpos_xI; unfold Zsucc in |- *; omega
+	  rewrite BinInt.Pos2Z.inj_xI; unfold Z.succ; omega
 	| elim H; clear H; intro Hif;
-	  [ left; simpl in |- *;
+	  [ left; simpl;
 	    rewrite (two_p_S (log_inf p0) (log_inf_correct1 p0));
 	      rewrite (two_p_S (log_sup p0) (log_sup_correct1 p0));
 		rewrite <- (proj1 Hif); rewrite <- (proj2 Hif);
 		  auto
-	    | right; simpl in |- *;
+	    | right; simpl;
 	      rewrite (two_p_S (log_inf p0) (log_inf_correct1 p0));
-		rewrite BinInt.Zpos_xO; unfold Zsucc in |- *;
+		rewrite BinInt.Pos2Z.inj_xO; unfold Z.succ;
 		  omega ]
 	| left; auto ].
   Qed.
 
   Theorem log_sup_correct2 :
-    forall x:positive, two_p (Zpred (log_sup x)) < Zpos x <= two_p (log_sup x).
+    forall x:positive, two_p (Z.pred (log_sup x)) < Zpos x <= two_p (log_sup x).
   Proof.
     intro.
     elim (log_sup_log_inf x).
     (* x is a power of two and [log_sup = log_inf] *)
     intros [E1 E2]; rewrite E2.
-    split; [ apply two_p_pred; apply log_sup_correct1 | apply Zle_refl ].
+    split; [ apply two_p_pred; apply log_sup_correct1 | apply Z.le_refl ].
     intros [E1 E2]; rewrite E2.
-    rewrite <- (Zpred_succ (log_inf x)).
+    rewrite (Z.pred_succ (log_inf x)).
     generalize (log_inf_correct2 x); omega.
   Qed.
 
   Lemma log_inf_le_log_sup : forall p:positive, log_inf p <= log_sup p.
   Proof.
-    simple induction p; simpl in |- *; intros; omega.
+    simple induction p; simpl; intros; omega.
   Qed.
 
-  Lemma log_sup_le_Slog_inf : forall p:positive, log_sup p <= Zsucc (log_inf p).
+  Lemma log_sup_le_Slog_inf : forall p:positive, log_sup p <= Z.succ (log_inf p).
   Proof.
-    simple induction p; simpl in |- *; intros; omega.
+    simple induction p; simpl; intros; omega.
   Qed.
 
   (** Now it's possible to specify and build the [Log] rounded to the nearest *)
@@ -161,22 +161,20 @@ Section Log_pos. (* Log of positive integers *)
       | xH => 0
       | xO xH => 1
       | xI xH => 2
-      | xO y => Zsucc (log_near y)
-      | xI y => Zsucc (log_near y)
+      | xO y => Z.succ (log_near y)
+      | xI y => Z.succ (log_near y)
     end.
 
   Theorem log_near_correct1 : forall p:positive, 0 <= log_near p.
   Proof.
-    simple induction p; simpl in |- *; intros;
+    simple induction p; simpl; intros;
       [ elim p0; auto with zarith
 	| elim p0; auto with zarith
 	| trivial with zarith ].
-    intros; apply Zle_le_succ.
-    generalize H0; elim p1; intros; simpl in |- *;
-      [ assumption | assumption | apply Zorder.Zle_0_pos ].
-    intros; apply Zle_le_succ.
-    generalize H0; elim p1; intros; simpl in |- *;
-      [ assumption | assumption | apply Zorder.Zle_0_pos ].
+    intros; apply Z.le_le_succ_r.
+    generalize H0; now elim p1.
+    intros; apply Z.le_le_succ_r.
+    generalize H0; now elim p1.
   Qed.
 
   Theorem log_near_correct2 :
@@ -184,9 +182,9 @@ Section Log_pos. (* Log of positive integers *)
   Proof.
     simple induction p.
     intros p0 [Einf| Esup].
-    simpl in |- *. rewrite Einf.
+    simpl. rewrite Einf.
     case p0; [ left | left | right ]; reflexivity.
-    simpl in |- *; rewrite Esup.
+    simpl; rewrite Esup.
     elim (log_sup_log_inf p0).
     generalize (log_inf_le_log_sup p0).
     generalize (log_sup_le_Slog_inf p0).
@@ -194,10 +192,10 @@ Section Log_pos. (* Log of positive integers *)
     intros; omega.
     case p0; intros; auto with zarith.
     intros p0 [Einf| Esup].
-    simpl in |- *.
+    simpl.
     repeat rewrite Einf.
     case p0; intros; auto with zarith.
-    simpl in |- *.
+    simpl.
     repeat rewrite Esup.
     case p0; intros; auto with zarith.
     auto.
@@ -218,20 +216,20 @@ Section divers.
 
   Lemma ZERO_le_N_digits : forall x:Z, 0 <= N_digits x.
   Proof.
-    simple induction x; simpl in |- *;
-      [ apply Zle_refl | exact log_inf_correct1 | exact log_inf_correct1 ].
+    simple induction x; simpl;
+      [ apply Z.le_refl | exact log_inf_correct1 | exact log_inf_correct1 ].
   Qed.
 
-  Lemma log_inf_shift_nat : forall n:nat, log_inf (shift_nat n 1) = Z_of_nat n.
+  Lemma log_inf_shift_nat : forall n:nat, log_inf (shift_nat n 1) = Z.of_nat n.
   Proof.
     simple induction n; intros;
-      [ try trivial | rewrite Znat.inj_S; rewrite <- H; reflexivity ].
+      [ try trivial | rewrite Nat2Z.inj_succ; rewrite <- H; reflexivity ].
   Qed.
 
-  Lemma log_sup_shift_nat : forall n:nat, log_sup (shift_nat n 1) = Z_of_nat n.
+  Lemma log_sup_shift_nat : forall n:nat, log_sup (shift_nat n 1) = Z.of_nat n.
   Proof.
     simple induction n; intros;
-      [ try trivial | rewrite Znat.inj_S; rewrite <- H; reflexivity ].
+      [ try trivial | rewrite Nat2Z.inj_succ; rewrite <- H; reflexivity ].
   Qed.
 
   (** [Is_power p] means that p is a power of two *)
@@ -247,21 +245,21 @@ Section divers.
   Proof.
     split;
       [ elim p;
-	[ simpl in |- *; tauto
-	  | simpl in |- *; intros; generalize (H H0); intro H1; elim H1;
+	[ simpl; tauto
+	  | simpl; intros; generalize (H H0); intro H1; elim H1;
 	    intros y0 Hy0; exists (S y0); rewrite Hy0; reflexivity
 	  | intro; exists 0%nat; reflexivity ]
-	| intros; elim H; intros; rewrite H0; elim x; intros; simpl in |- *; trivial ].
+	| intros; elim H; intros; rewrite H0; elim x; intros; simpl; trivial ].
   Qed.
 
   Lemma Is_power_or : forall p:positive, Is_power p \/ ~ Is_power p.
   Proof.
     simple induction p;
-      [ intros; right; simpl in |- *; tauto
+      [ intros; right; simpl; tauto
 	| intros; elim H;
-	  [ intros; left; simpl in |- *; exact H0
-	    | intros; right; simpl in |- *; exact H0 ]
-	| left; simpl in |- *; trivial ].
+	  [ intros; left; simpl; exact H0
+	    | intros; right; simpl; exact H0 ]
+	| left; simpl; trivial ].
   Qed.
 
 End divers.

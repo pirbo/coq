@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,7 +12,7 @@ Require Import Rfunctions.
 Require Import Rseries.
 Require Import PartSum.
 Require Import Binomial.
-Open Local Scope R_scope.
+Local Open Scope R_scope.
 
 (** TT Ak; 0<=k<=N *)
 Fixpoint prod_f_R0 (f:nat -> R) (N:nat) : R :=
@@ -36,7 +36,7 @@ Proof.
   replace (S n - k - 1)%nat with O; [rewrite H1; simpl|omega].
   replace (n+1+0)%nat with (S n); ring.
   replace (S n - k-1)%nat with (S (n - k-1));[idtac|omega].
-  simpl in |- *; replace (k + S (n - k))%nat with (S n).
+  simpl; replace (k + S (n - k))%nat with (S n).
   replace (k + 1 + S (n - k - 1))%nat with (S n).
   rewrite Hrecn; [ ring | assumption ].
   omega.
@@ -49,8 +49,8 @@ Lemma prod_SO_pos :
     (forall n:nat, (n <= N)%nat -> 0 <= An n) -> 0 <= prod_f_R0 An N.
 Proof.
   intros; induction  N as [| N HrecN].
-  simpl in |- *; apply H; trivial.
-  simpl in |- *; apply Rmult_le_pos.
+  simpl; apply H; trivial.
+  simpl; apply Rmult_le_pos.
   apply HrecN; intros; apply H; apply le_trans with N;
     [ assumption | apply le_n_Sn ].
   apply H; apply le_n.
@@ -64,7 +64,7 @@ Lemma prod_SO_Rle :
 Proof.
   intros; induction  N as [| N HrecN].
   elim  H with O; trivial.
-  simpl in |- *; apply Rle_trans with (prod_f_R0 An N * Bn (S N)).
+  simpl; apply Rle_trans with (prod_f_R0 An N * Bn (S N)).
   apply Rmult_le_compat_l.
   apply prod_SO_pos; intros; elim (H n (le_trans _ _ _ H0 (le_n_Sn N))); intros;
     assumption.
@@ -114,7 +114,7 @@ Proof.
      (if eq_nat_dec n 0 then 1 else INR n) = INR n).
   intros n; case (eq_nat_dec n 0); auto with real.
   intros; absurd (0 < n)%nat; omega.
-  intros; unfold Rsqr in |- *; repeat rewrite fact_prodSO.
+  intros; unfold Rsqr; repeat rewrite fact_prodSO.
   cut ((k=N)%nat \/ (k < N)%nat \/ (N < k)%nat).
   intro H2; elim H2; intro H3.
   rewrite H3; replace (2*N-N)%nat with N;[right; ring|omega].
@@ -164,14 +164,14 @@ Qed.
 (**********)
 Lemma INR_fact_lt_0 : forall n:nat, 0 < INR (fact n).
 Proof.
-  intro; apply lt_INR_0; apply neq_O_lt; red in |- *; intro;
-    elim (fact_neq_0 n); symmetry  in |- *; assumption.
+  intro; apply lt_INR_0; apply neq_O_lt; red; intro;
+    elim (fact_neq_0 n); symmetry ; assumption.
 Qed.
 
 (** We have the following inequality : (C 2N k) <= (C 2N N) forall k in [|O;2N|] *)
 Lemma C_maj : forall N k:nat, (k <= 2 * N)%nat -> C (2 * N) k <= C (2 * N) N.
 Proof.
-  intros; unfold C in |- *; unfold Rdiv in |- *; apply Rmult_le_compat_l.
+  intros; unfold C; unfold Rdiv; apply Rmult_le_compat_l.
   apply pos_INR.
   replace (2 * N - N)%nat with N.
   apply Rmult_le_reg_l with (INR (fact N) * INR (fact N)).

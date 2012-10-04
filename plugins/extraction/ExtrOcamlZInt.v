@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -74,7 +74,7 @@ Extract Constant Z.compare =>
 Extract Constant Z.of_N => "fun p -> p".
 Extract Constant Z.abs_N => "abs".
 
-(** Zdiv and Zmod are quite complex to define in terms of (/) and (mod).
+(** Z.div and Z.modulo are quite complex to define in terms of (/) and (mod).
     For the moment we don't even try *)
 
 

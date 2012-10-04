@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -77,16 +77,18 @@ type glob_sign = {
   gsigma : Evd.evar_map;
   genv : Environ.env }
 
+val fully_empty_glob_sign : glob_sign
+
 val add_interp_genarg :
   string ->
     (glob_sign -> raw_generic_argument -> glob_generic_argument) *
     (interp_sign -> goal sigma -> glob_generic_argument ->
-      typed_generic_argument) *
+      Evd.evar_map * typed_generic_argument) *
     (substitution -> glob_generic_argument -> glob_generic_argument)
     -> unit
 
 val interp_genarg :
-  interp_sign -> goal sigma -> glob_generic_argument -> typed_generic_argument
+  interp_sign -> goal sigma -> glob_generic_argument -> Evd.evar_map * typed_generic_argument
 
 val intern_genarg :
   glob_sign -> raw_generic_argument -> glob_generic_argument
@@ -114,14 +116,15 @@ val subst_glob_with_bindings :
   substitution -> glob_constr_and_expr Glob_term.with_bindings -> glob_constr_and_expr Glob_term.with_bindings
 
 (** Interprets any expression *)
-val val_interp : interp_sign -> goal sigma -> glob_tactic_expr -> value
+val val_interp : interp_sign -> goal sigma -> glob_tactic_expr -> Evd.evar_map * value
 
 (** Interprets an expression that evaluates to a constr *)
 val interp_ltac_constr : interp_sign -> goal sigma -> glob_tactic_expr ->
-  constr
+  Evd.evar_map * constr
 
 (** Interprets redexp arguments *)
-val interp_redexp : Environ.env -> Evd.evar_map -> raw_red_expr -> red_expr
+val dump_glob_red_expr : raw_red_expr -> unit
+val interp_redexp : Environ.env -> Evd.evar_map -> raw_red_expr -> Evd.evar_map * red_expr
 
 (** Interprets tactic expressions *)
 val interp_tac_gen : (identifier * value) list -> identifier list ->
@@ -143,7 +146,7 @@ val eval_tactic : glob_tactic_expr -> tactic
 
 val interp : raw_tactic_expr -> tactic
 
-val eval_ltac_constr : goal sigma -> raw_tactic_expr -> constr
+val eval_ltac_constr : goal sigma -> raw_tactic_expr -> Evd.evar_map * constr
 
 val subst_tactic : substitution -> glob_tactic_expr -> glob_tactic_expr
 

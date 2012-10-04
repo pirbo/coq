@@ -1,5 +1,11 @@
 Require Import Coq.Program.Program Coq.Program.Equality.
 
+Goal forall (H: forall n m : nat, n = m -> n = 0) x, x = tt.
+intros.
+dependent destruction x.
+reflexivity.
+Qed.
+
 Variable A : Set.
 
 Inductive vector : nat -> Type := vnil : vector 0 | vcons : A -> forall {n}, vector n -> vector (S n).
@@ -62,7 +68,7 @@ where " Γ ⊢ τ " := (term Γ τ) : type_scope.
 
 Hint Constructors term : lambda.
 
-Open Local Scope context_scope.
+Local Open Scope context_scope.
 
 Ltac eqns := subst ; reverse ; simplify_dep_elim ; simplify_IH_hyps.
 
@@ -78,6 +84,29 @@ Proof with simpl in * ; eqns ; eauto with lambda.
   destruct Δ as [|Δ τ'']...
 
   destruct Δ as [|Δ τ'']...
+    apply abs.
+    specialize (IHterm Γ (Δ, τ'', τ))...
+
+  intro. eapply app...
+Defined.
+
+Lemma weakening_ctx : forall Γ Δ τ, Γ ; Δ ⊢ τ ->
+  forall Δ', Γ ; Δ' ; Δ ⊢ τ.
+Proof with simpl in * ; eqns ; eauto with lambda.
+  intros Γ Δ τ H.
+
+  dependent induction H.
+
+  destruct Δ as [|Δ τ'']...
+  induction Δ'...
+
+  destruct Δ as [|Δ τ'']...
+  induction Δ'...
+
+  destruct Δ as [|Δ τ'']...
+    apply abs.
+    specialize (IHterm Γ (empty, τ))...
+
     apply abs.
     specialize (IHterm Γ (Δ, τ'', τ))...
 
@@ -104,6 +133,8 @@ Proof with simpl in * ; eqns ; eauto.
 
   eapply app...
 Defined.
+
+
 
 (** Example by Andrew Kenedy, uses simplification of the first component of dependent pairs. *)
 

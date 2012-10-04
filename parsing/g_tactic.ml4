@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -130,21 +130,19 @@ let induction_arg_of_constr (c,lbind as clbind) =
   else ElimOnConstr clbind
 
 let mkTacCase with_evar = function
-  | [([ElimOnConstr cl],None,(None,None))],None ->
+  | [ElimOnConstr cl,(None,None)],None,None ->
       TacCase (with_evar,cl)
   (* Reinterpret numbers as a notation for terms *)
-  | [([(ElimOnAnonHyp n)],None,(None,None))],None ->
+  | [ElimOnAnonHyp n,(None,None)],None,None ->
       TacCase (with_evar,
-        (CPrim (dummy_loc, Numeral (Bigint.of_string (string_of_int n))),
+        (CPrim (dummy_loc, Numeral (Bigint.of_int n)),
 	 NoBindings))
   (* Reinterpret ident as notations for variables in the context *)
   (* because we don't know if they are quantified or not *)
-  | [([ElimOnIdent id],None,(None,None))],None ->
+  | [ElimOnIdent id,(None,None)],None,None ->
       TacCase (with_evar,(CRef (Ident id),NoBindings))
   | ic ->
-      if List.exists (fun (cl,a,b) ->
-           List.exists (function ElimOnAnonHyp _ -> true | _ -> false) cl)
-           (fst ic)
+      if List.exists (function (ElimOnAnonHyp _,_) -> true | _ -> false) (pi1 ic)
       then
 	error "Use of numbers as direct arguments of 'case' is not supported.";
       TacInductionDestruct (false,with_evar,ic)
@@ -279,11 +277,6 @@ GEXTEND Gram
       | "*" -> loc, IntroForthcoming true
       | "**" -> loc, IntroForthcoming false ] ]
   ;
-  intropattern_modifier:
-    [ [ IDENT "_eqn";
-        id = [ ":"; id = naming_intropattern -> id | -> loc, IntroAnonymous ]
-        -> id ] ]
-  ;
   simple_intropattern:
     [ [ pat = disjunctive_intropattern -> pat
       | pat = naming_intropattern -> pat
@@ -348,7 +341,7 @@ GEXTEND Gram
       | IDENT "lazy"; s = strategy_flag -> Lazy s
       | IDENT "compute"; delta = delta_flag -> Cbv (all_with delta)
       | IDENT "vm_compute" -> CbvVm
-      | IDENT "unfold"; ul = LIST1 unfold_occ -> Unfold ul
+      | IDENT "unfold"; ul = LIST1 unfold_occ SEP "," -> Unfold ul
       | IDENT "fold"; cl = LIST1 constr -> Fold cl
       | IDENT "pattern"; pl = LIST1 pattern_occ SEP"," -> Pattern pl
       | s = IDENT -> ExtraRedExpr s ] ]
@@ -445,10 +438,15 @@ GEXTEND Gram
     [ [ "as"; ipat = simple_intropattern -> Some ipat
       | -> None ] ]
   ;
-  with_induction_names:
-    [ [ "as"; ipat = simple_intropattern; eq = OPT intropattern_modifier
-        -> (eq,Some ipat)
-      | -> (None,None) ] ]
+  eqn_ipat:
+    [ [ IDENT "eqn"; ":"; id = naming_intropattern -> Some id
+      | IDENT "_eqn"; ":"; id = naming_intropattern ->
+        let msg = "Obsolete syntax \"_eqn:H\" could be replaced by \"eqn:H\"" in
+        msg_warning (strbrk msg); Some id
+      | IDENT "_eqn" ->
+        let msg = "Obsolete syntax \"_eqn\" could be replaced by \"eqn:?\"" in
+        msg_warning (strbrk msg); Some (loc, IntroAnonymous)
+      | -> None ] ]
   ;
   as_name:
     [ [ "as"; id = ident -> Names.Name id | -> Names.Anonymous ] ]
@@ -477,14 +475,11 @@ GEXTEND Gram
     [ [ b = orient; p = rewriter -> let (m,c) = p in (b,m,c) ] ]
   ;
   induction_clause:
-    [ [ lc = LIST1 induction_arg; ipats = with_induction_names;
-        el = OPT eliminator -> (lc,el,ipats) ] ]
-  ;
-  one_induction_clause:
-    [ [ ic = induction_clause; cl = opt_clause -> ([ic],cl) ] ]
+    [ [ c = induction_arg; pat = as_ipat; eq = eqn_ipat -> (c,(eq,pat)) ] ]
   ;
   induction_clause_list:
-    [ [ ic = LIST1 induction_clause SEP ","; cl = opt_clause -> (ic,cl) ] ]
+    [ [ ic = LIST1 induction_clause SEP ",";
+	el = OPT eliminator; cl = opt_clause -> (ic,el,cl) ] ]
   ;
   move_location:
     [ [ IDENT "after"; id = id_or_meta -> MoveAfter id
@@ -535,15 +530,16 @@ GEXTEND Gram
 	  TacMutualCofix (false,id,List.map mk_cofix_tac fd)
 
       | IDENT "pose"; (id,b) = bindings_with_parameters ->
-	  TacLetTac (Names.Name id,b,nowhere,true)
+	  TacLetTac (Names.Name id,b,nowhere,true,None)
       | IDENT "pose"; b = constr; na = as_name ->
-	  TacLetTac (na,b,nowhere,true)
+	  TacLetTac (na,b,nowhere,true,None)
       | IDENT "set"; (id,c) = bindings_with_parameters; p = clause_dft_concl ->
-	  TacLetTac (Names.Name id,c,p,true)
+	  TacLetTac (Names.Name id,c,p,true,None)
       | IDENT "set"; c = constr; na = as_name; p = clause_dft_concl ->
-          TacLetTac (na,c,p,true)
-      | IDENT "remember"; c = constr; na = as_name; p = clause_dft_all ->
-          TacLetTac (na,c,p,false)
+          TacLetTac (na,c,p,true,None)
+      | IDENT "remember"; c = constr; na = as_name; e = eqn_ipat;
+          p = clause_dft_all ->
+          TacLetTac (na,c,p,false,e)
 
       (* Begin compatibility *)
       | IDENT "assert"; test_lpar_id_coloneq; "("; (loc,id) = identref; ":=";
@@ -578,9 +574,9 @@ GEXTEND Gram
       (* Derived basic tactics *)
       | IDENT "simple"; IDENT"induction"; h = quantified_hypothesis ->
           TacSimpleInductionDestruct (true,h)
-      | IDENT "induction"; ic = one_induction_clause ->
+      | IDENT "induction"; ic = induction_clause_list ->
 	  TacInductionDestruct (true,false,ic)
-      | IDENT "einduction"; ic = one_induction_clause ->
+      | IDENT "einduction"; ic = induction_clause_list ->
 	  TacInductionDestruct(true,true,ic)
       | IDENT "double"; IDENT "induction"; h1 = quantified_hypothesis;
 	  h2 = quantified_hypothesis -> TacDoubleInduction (h1,h2)
@@ -597,21 +593,18 @@ GEXTEND Gram
 
       (* Automation tactic *)
       | IDENT "trivial"; lems = auto_using; db = hintbases ->
-	  TacTrivial (lems,db)
-      | IDENT "auto"; n = OPT int_or_var; lems = auto_using; db = hintbases ->
-	  TacAuto (n,lems,db)
+          TacTrivial (Off,lems,db)
+      | IDENT "info_trivial"; lems = auto_using; db = hintbases ->
+          TacTrivial (Info,lems,db)
+      | IDENT "debug"; IDENT "trivial"; lems = auto_using; db = hintbases ->
+          TacTrivial (Debug,lems,db)
 
-(* Obsolete since V8.0
-      | IDENT "autotdb"; n = OPT natural -> TacAutoTDB n
-      | IDENT "cdhyp"; id = identref -> TacDestructHyp (true,id)
-      | IDENT "dhyp";  id = identref -> TacDestructHyp (false,id)
-      | IDENT "dconcl"  -> TacDestructConcl
-      | IDENT "superauto"; l = autoargs -> TacSuperAuto l
-*)
-      | IDENT "auto"; IDENT "decomp"; p = OPT natural;
-          lems = auto_using -> TacDAuto (None,p,lems)
-      | IDENT "auto"; n = OPT int_or_var; IDENT "decomp"; p = OPT natural;
-          lems = auto_using -> TacDAuto (n,p,lems)
+      | IDENT "auto"; n = OPT int_or_var; lems = auto_using; db = hintbases ->
+          TacAuto (Off,n,lems,db)
+      | IDENT "info_auto"; n = OPT int_or_var; lems = auto_using;
+          db = hintbases -> TacAuto (Info,n,lems,db)
+      | IDENT "debug"; IDENT "auto"; n = OPT int_or_var; lems = auto_using;
+          db = hintbases -> TacAuto (Debug,n,lems,db)
 
       (* Context management *)
       | IDENT "clear"; "-"; l = LIST1 id_or_meta -> TacClear (true, l)

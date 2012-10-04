@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,7 +13,7 @@ Require Export LegacyRing.
 Require Export Arith.
 Require Import Eqdep_dec.
 
-Open Local Scope nat_scope.
+Local Open Scope nat_scope.
 
 Fixpoint nateq (n m:nat) {struct m} : bool :=
   match n, m with
@@ -75,14 +75,14 @@ Ltac rewrite_S_to_plus :=
        (**)  (**)
        rewrite_S_to_plus_term X1
        with t2 := rewrite_S_to_plus_term X2 in
-       change (t1 = t2) in |- *
+       change (t1 = t2)
   |  |- (?X1 = ?X2) =>
       try
        let t1 :=
        (**)  (**)
        rewrite_S_to_plus_term X1
        with t2 := rewrite_S_to_plus_term X2 in
-       change (t1 = t2) in |- *
+       change (t1 = t2)
   end.
 
 Ltac ring_nat := rewrite_S_to_plus; ring.

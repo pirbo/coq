@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -229,11 +229,13 @@ val kind_of_type : types -> (constr, types) kind_of_type
 (** {6 Simple term case analysis. } *)
 
 val isRel  : constr -> bool
+val isRelN : int -> constr -> bool
 val isVar  : constr -> bool
-val isVarId  : identifier -> constr -> bool
+val isVarId : identifier -> constr -> bool
 val isInd  : constr -> bool
 val isEvar : constr -> bool
 val isMeta : constr -> bool
+val isMetaOf : metavariable -> constr -> bool
 val isEvar_or_Meta : constr -> bool
 val isSort : constr -> bool
 val isCast : constr -> bool
@@ -435,8 +437,7 @@ val it_mkProd_or_LetIn : types -> rel_context -> types
 (** {6 Other term destructors. } *)
 
 (** Transforms a product term {% $ %}(x_1:T_1)..(x_n:T_n)T{% $ %} into the pair
-   {% $ %}([(x_n,T_n);...;(x_1,T_1)],T){% $ %}, where {% $ %}T{% $ %} is not a product.
-   It includes also local definitions *)
+   {% $ %}([(x_n,T_n);...;(x_1,T_1)],T){% $ %}, where {% $ %}T{% $ %} is not a product. *)
 val decompose_prod : constr -> (name*constr) list * constr
 
 (** Transforms a lambda term {% $ %}[x_1:T_1]..[x_n:T_n]T{% $ %} into the pair

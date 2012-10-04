@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -158,6 +158,17 @@ let tclose () = [< 'Ppcmd_close_tbox >]
 
 let (++) = Stream.iapp
 
+let rec eval_ppcmds l =
+  let rec aux l =
+    try
+      let a = match Stream.next l with
+      | Ppcmd_box (b,s) -> Ppcmd_box (b,eval_ppcmds s)
+      | a -> a in
+      let rest = aux l in
+      a :: rest
+    with Stream.Failure -> [] in
+  Stream.of_list (aux l)
+
 (* In new syntax only double quote char is escaped by repeating it *)
 let rec escape_string s =
   let rec escape_at s i =
@@ -274,17 +285,15 @@ let pp_dirs ft =
 (* pretty print on stdout and stderr *)
 
 (* Special chars for emacs, to detect warnings inside goal output *)
-let emacs_warning_start_string = String.make 1 (Char.chr 254)
-let emacs_warning_end_string = String.make 1 (Char.chr 255)
+let emacs_quote_start = String.make 1 (Char.chr 254)
+let emacs_quote_end = String.make 1 (Char.chr 255)
 
-let warnstart() =
-  if not !print_emacs then mt() else str emacs_warning_start_string
+let emacs_quote strm =
+  if !print_emacs then
+    [< str emacs_quote_start; hov 0 strm; str emacs_quote_end >]
+  else hov 0 strm
 
-let warnend() =
-  if not !print_emacs then mt() else str emacs_warning_end_string
-
-let warnbody strm =
-  [< warnstart() ; hov 0 (str "Warning: " ++ strm) ; warnend() >]
+let warnbody strm = emacs_quote (str "Warning: " ++ strm)
 
 (* pretty printing functions WITHOUT FLUSH *)
 let pp_with ft strm =
@@ -332,6 +341,9 @@ let msgnl x = msgnl_with !std_ft x
 let msgerr x = msg_with !err_ft x
 let msgerrnl x = msgnl_with !err_ft x
 let msg_warning x = msg_warning_with !err_ft x
+
+(* Same specific display in emacs as warning, but without the "Warning:" *)
+let msg_debug x = msgnl (emacs_quote x)
 
 let string_of_ppcmds c =
   msg_with Format.str_formatter c;

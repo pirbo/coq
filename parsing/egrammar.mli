@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -71,3 +71,5 @@ val get_extend_vernac_grammars :
 val recover_notation_grammar :
   notation -> (precedence * tolerability list) ->
   notation_var_internalization_type list * notation_grammar
+
+val with_grammar_rule_protection : ('a -> 'b) -> 'a -> 'b

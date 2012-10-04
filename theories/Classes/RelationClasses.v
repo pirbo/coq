@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -286,7 +286,7 @@ Definition predicate_implication {l : Tlist} :=
 Infix "<∙>" := predicate_equivalence (at level 95, no associativity) : predicate_scope.
 Infix "-∙>" := predicate_implication (at level 70, right associativity) : predicate_scope.
 
-Open Local Scope predicate_scope.
+Local Open Scope predicate_scope.
 
 (** The pointwise liftings of conjunction and disjunctions.
    Note that these are [binary_operation]s, building new relations out of old ones. *)

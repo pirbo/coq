@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -256,7 +256,8 @@ val app_pair :
 
 (** create a new generic type of argument: force to associate
    unique ML types at each of the three levels *)
-val create_arg : string ->
+val create_arg : 'rawa option ->
+    string ->
       ('a,tlevel) abstract_argument_type
       * ('globa,glevel) abstract_argument_type
       * ('rawa,rlevel) abstract_argument_type
@@ -298,7 +299,6 @@ val in_gen :
 val out_gen :
   ('a,'co) abstract_argument_type -> 'co generic_argument -> 'a
 
-
 (** [in_generic] is used in combination with camlp4 [Gramext.action] magic
 
    [in_generic: !l:type, !a:argument_type -> |a|_l -> 'l generic_argument]
@@ -312,3 +312,5 @@ type an_arg_of_this_type
 
 val in_generic :
   argument_type -> an_arg_of_this_type -> 'co generic_argument
+
+val default_empty_value : ('a,rlevel) abstract_argument_type -> 'a option

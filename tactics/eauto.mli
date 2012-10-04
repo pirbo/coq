@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -27,11 +27,11 @@ val registered_e_assumption : tactic
 
 val e_give_exact : ?flags:Unification.unify_flags -> constr -> tactic
 
-val gen_eauto : bool -> bool * int -> open_constr list ->
+val gen_eauto : ?debug:Tacexpr.debug -> bool * int -> open_constr list ->
   hint_db_name list option -> tactic
 
 val eauto_with_bases :
-  bool ->
+  ?debug:Tacexpr.debug ->
   bool * int ->
   open_constr list -> Auto.hint_db list -> Proof_type.tactic
 

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -52,6 +52,12 @@ val print_list : (formatter -> 'a -> unit) -> formatter -> 'a list -> unit
 
 val run_command : (string -> unit) -> string -> Unix.process_status*string
 
+val custom_coqtop : string option ref
+(* @return command to call coqtop
+   - custom_coqtop if set
+   - from the prefs is set
+   - try to infer it else *)
+val coqtop_path : unit -> string
 
 
 val status : GMisc.statusbar
@@ -67,3 +73,10 @@ val pbar : GRange.progress_bar
   returns an absolute filename equivalent to given filename
 *)
 val absolute_filename : string -> string
+
+(* In win32, when a command-line is to be executed via cmd.exe
+   (i.e. Sys.command, Unix.open_process, ...), it cannot contain several
+   quoted "..." zones otherwise some quotes are lost. Solution: we re-quote
+   everything. Reference: http://ss64.com/nt/cmd.html *)
+
+val requote : string -> string

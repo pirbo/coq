@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -53,7 +53,7 @@ let mode_tactic sel_cb (proof:GText.view) goals hints = match goals with
         "%d subgoal%s\n" goals_cnt (if 1 < goals_cnt then "" else "s")
       in
       let goal_str index total = Printf.sprintf
-        "\n______________________________________(%d/%d)\n" index total
+        "______________________________________(%d/%d)\n" index total
       in
       (* Insert current goal and its hypotheses *)
       let hyps_hints, goal_hints = match hints with
@@ -76,14 +76,15 @@ let mode_tactic sel_cb (proof:GText.view) goals hints = match goals with
       let () = proof#buffer#insert head_str in
       let () = insert_hyp hyps_hints hyps in
       let () =
-        let tags = if goal_hints <> [] then
+        let tags = Tags.Proof.goal :: if goal_hints <> [] then
           let tag = proof#buffer#create_tag [] in
           let () = hook_tag_cb tag goal_hints sel_cb on_hover in
           [tag]
           else []
         in
         proof#buffer#insert (goal_str 1 goals_cnt);
-        proof#buffer#insert ~tags (cur_goal ^ "\n")
+        proof#buffer#insert ~tags cur_goal;
+	proof#buffer#insert "\n"
       in
       (* Insert remaining goals (no hypotheses) *)
       let fold_goal i _ { Interface.goal_ccl = g } =
@@ -91,10 +92,11 @@ let mode_tactic sel_cb (proof:GText.view) goals hints = match goals with
         proof#buffer#insert (g ^ "\n")
       in
       let () = Minilib.list_fold_left_i fold_goal 2 () rem_goals in
-      ignore(proof#buffer#place_cursor  
-        ~where:((proof#buffer#get_iter_at_mark `INSERT)#backward_lines (3*goals_cnt - 2)));
-      ignore(proof#scroll_to_mark `INSERT)
 
+      ignore(proof#buffer#place_cursor
+               ~where:(proof#buffer#end_iter#backward_to_tag_toggle
+			 (Some Tags.Proof.goal)));
+      ignore(proof#scroll_to_mark ~use_align:true ~yalign:0.95 `INSERT)
 
 let mode_cesar (proof:GText.view) = function
   | [] -> assert false
@@ -107,31 +109,39 @@ let mode_cesar (proof:GText.view) = function
       proof#buffer#insert ("thesis := \n "^cur_goal^"\n");
       ignore (proof#scroll_to_iter (proof#buffer#get_iter_at_mark `INSERT))
 
+let rec flatten = function
+| [] -> []
+| (lg, rg) :: l ->
+  let inner = flatten l in
+  List.rev_append lg inner @ rg
+
 let display mode (view:GText.view) goals hints evars =
   let () = view#buffer#set_text "" in
   match goals with
   | None -> ()
     (* No proof in progress *)
-  | Some { Interface.fg_goals = []; Interface.bg_goals = [] } ->
-    (* A proof has been finished, but not concluded *)
-    begin match evars with
-    | Some evs when evs <> [] ->
+  | Some { Interface.fg_goals = []; Interface.bg_goals = bg } ->
+    let bg = flatten (List.rev bg) in
+    let evars = match evars with None -> [] | Some evs -> evs in
+    begin match (bg, evars) with
+    | [], [] ->
+      view#buffer#insert "No more subgoals."
+    | [], _ :: _ ->
+      (* A proof has been finished, but not concluded *)
       view#buffer#insert "No more subgoals but non-instantiated existential variables:\n\n";
       let iter evar =
         let msg = Printf.sprintf "%s\n" evar.Interface.evar_info in
         view#buffer#insert msg
       in
-      List.iter iter evs
-    | _ ->
-      view#buffer#insert "Proof Completed."
+      List.iter iter evars
+    | _, _ ->
+      (* No foreground proofs, but still unfocused ones *)
+      view#buffer#insert "This subproof is complete, but there are still unfocused goals:\n\n";
+      let iter goal =
+        let msg = Printf.sprintf "%s\n" goal.Interface.goal_ccl in
+        view#buffer#insert msg
+      in
+      List.iter iter bg
     end
-  | Some { Interface.fg_goals = []; Interface.bg_goals = bg } ->
-    (* No foreground proofs, but still unfocused ones *)
-    view#buffer#insert "This subproof is complete, but there are still unfocused goals:\n\n";
-    let iter goal =
-      let msg = Printf.sprintf "%s\n" goal.Interface.goal_ccl in
-      view#buffer#insert msg
-    in
-    List.iter iter bg
   | Some { Interface.fg_goals = fg } ->
     mode view fg hints

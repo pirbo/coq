@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -11,6 +11,15 @@
    Ocaml linker and files to link (in addition to the default Coq files). *)
 
 open Unix
+
+(* In Win32 outside cygwin, Sys.command calls cmd.exe. When it executes
+   a command that may contains many double-quote, we should double-quote
+   the whole ! *)
+
+let safe_sys_command =
+  if Sys.os_type = "Win32" then
+    fun cmd -> Sys.command ("\""^cmd^"\"")
+  else Sys.command
 
 (* Objects to link *)
 
@@ -52,17 +61,19 @@ let top        = ref false
 let echo       = ref false
 let no_start   = ref false
 
-let src_dirs () =
+let is_ocaml4 = Coq_config.caml_version.[0] <> '3'
+
+let src_dirs =
   [ []; ["kernel";"byterun"]; [ "config" ]; [ "toplevel" ] ]
 
 let includes () =
-  let coqlib = Envars.coqlib () in
-  let camlp4lib = Envars.camlp4lib () in
-    List.fold_right
-      (fun d l -> "-I" :: ("\"" ^ List.fold_left Filename.concat coqlib d ^ "\"") :: l)
-      (src_dirs ())
-      (["-I"; "\"" ^ camlp4lib ^ "\""] @
-	  ["-I"; "\"" ^ coqlib ^ "\""])
+  (if !Flags.boot then [] (* the include flags are given on the cmdline *)
+   else
+      let coqlib = Envars.coqlib () in
+      let mkdir d = "\"" ^ List.fold_left Filename.concat coqlib d ^ "\"" in
+      let camlp4incl = ["-I"; "\"" ^ Envars.camlp4lib () ^ "\""] in
+      List.fold_right (fun d l -> "-I" :: mkdir d :: l)	src_dirs camlp4incl)
+  @ (if is_ocaml4 then ["-I"; "+compiler-libs"] else [])
 
 (* Transform bytecode object file names in native object file names *)
 let native_suffix f =
@@ -257,12 +268,14 @@ let main () =
     if !opt then begin
       (* native code *)
       if !top then failwith "no custom toplevel in native code !";
-      let ocamloptexec = Filename.concat camlbin "ocamlopt" in
+      let ocamloptexec = Filename.quote (Filename.concat camlbin "ocamlopt") in
         ocamloptexec^" -linkall"
     end else
       (* bytecode (we shunt ocamlmktop script which fails on win32) *)
-      let ocamlmktoplib = " toplevellib.cma" in
-      let ocamlcexec = Filename.concat camlbin "ocamlc" in
+      let ocamlmktoplib = if is_ocaml4
+	then " ocamlcommon.cma ocamlbytecomp.cma ocamltoplevel.cma"
+	else " toplevellib.cma" in
+      let ocamlcexec = Filename.quote (Filename.concat camlbin "ocamlc") in
       let ocamlccustom = Printf.sprintf "%s %s -linkall "
         ocamlcexec Coq_config.coqrunbyteflags in
       (if !top then ocamlccustom^ocamlmktoplib else ocamlccustom)
@@ -277,7 +290,7 @@ let main () =
       []
   in
   (* the list of the loaded modules *)
-  let main_file = create_tmp_main_file modules in
+  let main_file = Filename.quote (create_tmp_main_file modules) in
   try
     let args =
       options @ (includes ()) @ copts @ tolink @ dynlink @ [ main_file ] in
@@ -293,7 +306,7 @@ let main () =
 	       (string_of_int (String.length command)) ^ " characters)");
 	  flush Pervasives.stdout
 	end;
-      let retcode = Sys.command command in
+      let retcode = safe_sys_command command in
 	clean main_file;
 	(* command gives the exit code in HSB, and signal in LSB !!! *)
 	if retcode > 255 then retcode lsr 8 else retcode

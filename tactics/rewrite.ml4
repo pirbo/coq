@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -103,11 +103,6 @@ let mk_relation a = mkApp (Lazy.force coq_relation, [| a |])
 (* let mk_relation a = mkProd (Anonymous, a, mkProd (Anonymous, a, new_Type ())) *)
 
 let rewrite_relation_class = lazy (gen_constant ["Classes"; "RelationClasses"] "RewriteRelation")
-
-let arrow_morphism a b =
-  if isprop a && isprop b then
-    Lazy.force impl
-  else Lazy.force arrow
 
 let proper_type = lazy (constr_of_global (Lazy.force proper_class).cl_impl)
 
@@ -257,7 +252,7 @@ let decompose_applied_relation env sigma flags orig (c,l) left2right =
   let ctype = Typing.type_of env sigma c' in
   let find_rel ty =
     let eqclause = Clenv.make_clenv_binding_env_apply env sigma None (c',ty) l in
-    let (equiv, args) = decompose_app_rel env sigma (Clenv.clenv_type eqclause) in
+    let (equiv, args) = decompose_app_rel env eqclause.evd (Clenv.clenv_type eqclause) in
     let c1 = args.(0) and c2 = args.(1) in 
     let ty1, ty2 =
       Typing.type_of env eqclause.evd c1, Typing.type_of env eqclause.evd c2
@@ -463,6 +458,16 @@ let unfold_forall t =
 	  | Lambda (n, ty, b) -> mkProd (n, ty, b)
 	  | _ -> assert false)
     | _ -> assert false
+
+let arrow_morphism ta tb a b =
+  let ap = is_Prop ta and bp = is_Prop tb in
+    if ap && bp then mkApp (Lazy.force impl, [| a; b |]), unfold_impl
+    else if ap then (* Domain in Prop, CoDomain in Type *)
+      mkProd (Anonymous, a, b), (fun x -> x)
+    else if bp then (* Dummy forall *)
+      mkApp (Lazy.force coq_all, [| a; mkLambda (Anonymous, a, b) |]), unfold_forall
+    else (* None in Prop, use arrow *)
+      mkApp (Lazy.force arrow, [| a; b |]), unfold_impl
 
 let rec decomp_pointwise n c =
   if n = 0 then c
@@ -814,9 +819,10 @@ let subterm all flags (s : strategy) : strategy =
       | Prod (n, x, b) when noccurn 1 b ->
 	  let b = subst1 mkProp b in
 	  let tx = Typing.type_of env (goalevars evars) x and tb = Typing.type_of env (goalevars evars) b in
-	  let res = aux env avoid (mkApp (arrow_morphism tx tb, [| x; b |])) ty cstr evars in
+	  let mor, unfold = arrow_morphism tx tb x b in
+	  let res = aux env avoid mor ty cstr evars in
 	    (match res with
-	    | Some (Some r) -> Some (Some { r with rew_to = unfold_impl r.rew_to })
+	    | Some (Some r) -> Some (Some { r with rew_to = unfold r.rew_to })
 	    | _ -> res)
 
       (* 		if x' = None && flags.under_lambdas then *)
@@ -1048,6 +1054,22 @@ module Strategies =
 			   rew_prf = RewCast DEFAULTcast; 
 			   rew_evars = sigma, cstrevars evars })
 	  with _ -> None
+
+    let fold_glob c : strategy =
+      fun env avoid t ty cstr evars ->
+(* 	let sigma, (c,_) = Tacinterp.interp_open_constr_with_bindings is env (goalevars evars) c in *)
+	let sigma, c = Pretyping.Default.understand_tcc (goalevars evars) env c in
+	let unfolded =
+	  try Tacred.try_red_product env sigma c
+	  with _ -> error "fold: the term is not unfoldable !"
+	in
+	  try
+	    let sigma = Unification.w_unify env sigma CONV ~flags:Unification.elim_flags unfolded t in
+	    let c' = Evarutil.nf_evar sigma c in
+	      Some (Some { rew_car = ty; rew_from = t; rew_to = c';
+			   rew_prf = RewCast DEFAULTcast; 
+			   rew_evars = sigma, cstrevars evars })
+	  with _ -> None
   
 
 end
@@ -1095,8 +1117,6 @@ let nf_zeta =
 let map_rewprf f = function
   | RewPrf (rel, prf) -> RewPrf (f rel, f prf)
   | RewCast c -> RewCast c
-
-exception RewriteFailure
 
 type result = (evar_map * constr option * types) option option
 
@@ -1162,9 +1182,9 @@ let cl_rewrite_clause_tac ?abs strat meta clause gl =
   let evartac evd = Refiner.tclEVARS evd in
   let treat res =
     match res with
-    | None -> raise RewriteFailure
+    | None -> tclFAIL 0 (str "Nothing to rewrite")
     | Some None ->
-	tclFAIL 0 (str"setoid rewrite failed: no progress made")
+	tclFAIL 0 (str"No progress made")
     | Some (Some (undef, p, newt)) ->
 	let tac = 
 	  match clause, p with
@@ -1195,7 +1215,7 @@ let cl_rewrite_clause_tac ?abs strat meta clause gl =
     | Loc.Exc_located (_, TypeClassError (env, (UnsatisfiableConstraints _ as e)))
     | TypeClassError (env, (UnsatisfiableConstraints _ as e)) ->
 	Refiner.tclFAIL_lazy 0
-	  (lazy (str"setoid rewrite failed: unable to satisfy the rewriting constraints."
+	  (lazy (str"Unable to satisfy the rewriting constraints."
 		 ++ fnl () ++ Himsg.explain_typeclass_error env e))
   in tac gl
 
@@ -1243,12 +1263,15 @@ let assert_replacing id newt tac =
   in Proofview.tclTHEN (Proofview.tclSENSITIVE sens) 
        (Proofview.tclFOCUS 2 2 tac)
 
+let newfail n s = 
+  Proofview.tclZERO (Refiner.FailError (n, lazy s))
+
 let cl_rewrite_clause_newtac ?abs strat clause =
   let treat (res, is_hyp) = 
     match res with
-    | None -> raise RewriteFailure
+    | None -> newfail 0 (str "Nothing to rewrite")
     | Some None ->
-	fail 0 (str"setoid rewrite failed: no progress made")
+	newfail 0 (str"No progress made")
     | Some (Some res) ->
 	match is_hyp, res with
 	| Some id, (undef, Some p, newt) ->
@@ -1288,22 +1311,25 @@ let cl_rewrite_clause_newtac ?abs strat clause =
   
 let cl_rewrite_clause_new_strat ?abs strat clause =
   init_setoid ();
-    try cl_rewrite_clause_newtac ?abs strat clause
-    with RewriteFailure ->
-      fail 0 (str"setoid rewrite failed: strategy failed")
+  cl_rewrite_clause_newtac ?abs strat clause
 
 let cl_rewrite_clause_newtac' l left2right occs clause =
   Proof_global.run_tactic 
     (Proofview.tclFOCUS 1 1 
        (cl_rewrite_clause_new_strat (rewrite_with rewrite_unif_flags l left2right occs) clause))
 
-let cl_rewrite_clause_strat strat clause gl =
-    init_setoid ();
-    let meta = Evarutil.new_meta() in
-(*     let gl = { gl with sigma = Typeclasses.mark_unresolvables gl.sigma } in *)
+
+let tactic_init_setoid () = 
+  init_setoid (); tclIDTAC
+
+let cl_rewrite_clause_strat strat clause =
+  tclTHEN (tactic_init_setoid ())
+  (fun gl ->
+   let meta = Evarutil.new_meta() in
      try cl_rewrite_clause_tac strat (mkMeta meta) clause gl
-      with RewriteFailure ->
-        tclFAIL 0 (str"setoid rewrite failed: strategy failed") gl
+     with
+     | Refiner.FailError (n, pp) -> 
+       tclFAIL n (str"setoid rewrite failed: " ++ Lazy.force pp) gl)
 
 let cl_rewrite_clause l left2right occs clause gl =
   cl_rewrite_clause_strat (rewrite_with (general_rewrite_unif_flags ()) l left2right occs) clause gl
@@ -1329,12 +1355,24 @@ let apply_constr_expr c l2r occs = fun env avoid t ty cstr evars ->
     apply_lemma (general_rewrite_unif_flags ()) (evd, (c, NoBindings)) 
       l2r occs env avoid t ty cstr (evd, cstrevars evars)
 
+let apply_glob_constr c l2r occs = fun env avoid t ty cstr evars ->
+  let evd, c = (Pretyping.Default.understand_tcc (goalevars evars) env c) in
+    apply_lemma (general_rewrite_unif_flags ()) (evd, (c, NoBindings)) 
+      l2r occs env avoid t ty cstr (evd, cstrevars evars)
+
 let interp_constr_list env sigma =
   List.map (fun c -> 
 	      let evd, c = Constrintern.interp_open_constr sigma env c in
 		(evd, (c, NoBindings)), true)
 
+let interp_glob_constr_list env sigma =
+  List.map (fun c -> 
+	      let evd, c = Pretyping.Default.understand_tcc sigma env c in
+		(evd, (c, NoBindings)), true)
+
 open Pcoq
+
+(* Syntax for rewriting with strategies *)
 
 type constr_expr_with_bindings = constr_expr with_bindings
 type glob_constr_with_bindings = glob_constr_and_expr with_bindings
@@ -1343,7 +1381,7 @@ type glob_constr_with_bindings_sign = interp_sign * glob_constr_and_expr with_bi
 let pr_glob_constr_with_bindings_sign _ _ _ (ge : glob_constr_with_bindings_sign) = Printer.pr_glob_constr (fst (fst (snd ge)))
 let pr_glob_constr_with_bindings _ _ _ (ge : glob_constr_with_bindings) = Printer.pr_glob_constr (fst (fst ge))
 let pr_constr_expr_with_bindings prc _ _ (ge : constr_expr_with_bindings) = prc (fst ge)
-let interp_glob_constr_with_bindings ist gl c = (ist, c)
+let interp_glob_constr_with_bindings ist gl c = Tacmach.project gl , (ist, c)
 let glob_glob_constr_with_bindings ist l = Tacinterp.intern_constr_with_bindings ist l
 let subst_glob_constr_with_bindings s c = subst_glob_with_bindings s c
 
@@ -1364,57 +1402,127 @@ ARGUMENT EXTEND glob_constr_with_bindings
    [ constr_with_bindings(bl) ] -> [ bl ]
 END
 
-let _ =
-  (Genarg.create_arg "strategy" :
-      ((strategy, Genarg.tlevel) Genarg.abstract_argument_type *
-	  (strategy, Genarg.glevel) Genarg.abstract_argument_type *
-	  (strategy, Genarg.rlevel) Genarg.abstract_argument_type))
+type ('constr,'redexpr) strategy_ast = 
+  | StratId | StratFail | StratRefl
+  | StratUnary of string * ('constr,'redexpr) strategy_ast
+  | StratBinary of string * ('constr,'redexpr) strategy_ast * ('constr,'redexpr) strategy_ast
+  | StratConstr of 'constr * bool
+  | StratTerms of 'constr list
+  | StratHints of bool * string
+  | StratEval of 'redexpr 
+  | StratFold of 'constr
+
+let rec map_strategy (f : 'a -> 'a2) (g : 'b -> 'b2) : ('a,'b) strategy_ast -> ('a2,'b2) strategy_ast = function
+  | StratId | StratFail | StratRefl as s -> s
+  | StratUnary (s, str) -> StratUnary (s, map_strategy f g str)
+  | StratBinary (s, str, str') -> StratBinary (s, map_strategy f g str, map_strategy f g str')
+  | StratConstr (c, b) -> StratConstr (f c, b)
+  | StratTerms l -> StratTerms (List.map f l)
+  | StratHints (b, id) -> StratHints (b, id)
+  | StratEval r -> StratEval (g r)
+  | StratFold c -> StratFold (f c)
+
+let rec strategy_of_ast = function
+  | StratId -> Strategies.id
+  | StratFail -> Strategies.fail
+  | StratRefl -> Strategies.refl
+  | StratUnary (f, s) -> 
+    let s' = strategy_of_ast s in
+    let f' = match f with
+      | "subterms" -> all_subterms
+      | "subterm" -> one_subterm
+      | "innermost" -> Strategies.innermost
+      | "outermost" -> Strategies.outermost
+      | "bottomup" -> Strategies.bu
+      | "topdown" -> Strategies.td
+      | "progress" -> Strategies.progress
+      | "try" -> Strategies.try_
+      | "any" -> Strategies.any
+      | "repeat" -> Strategies.repeat
+      | _ -> anomalylabstrm "strategy_of_ast" (str"Unkwnon strategy: " ++ str f)
+    in f' s'
+  | StratBinary (f, s, t) ->
+    let s' = strategy_of_ast s in
+    let t' = strategy_of_ast t in
+    let f' = match f with
+      | "compose" -> Strategies.seq
+      | "choice" -> Strategies.choice
+      | _ -> anomalylabstrm "strategy_of_ast" (str"Unkwnon strategy: " ++ str f)
+    in f' s' t'
+  | StratConstr (c, b) -> apply_glob_constr (fst c) b all_occurrences
+  | StratHints (old, id) -> if old then Strategies.old_hints id else Strategies.hints id
+  | StratTerms l -> 
+    (fun env avoid t ty cstr evars ->
+     let l' = interp_glob_constr_list env (goalevars evars) (List.map fst l) in
+       Strategies.lemmas rewrite_unif_flags l' env avoid t ty cstr evars)
+  | StratEval r -> 
+    (fun env avoid t ty cstr evars ->
+     let (sigma,r_interp) = Tacinterp.interp_redexp env (goalevars evars) r in
+       Strategies.reduce r_interp env avoid t ty cstr (sigma,cstrevars evars))
+  | StratFold c -> Strategies.fold_glob (fst c)
 
 
+type raw_strategy = (constr_expr, Tacexpr.raw_red_expr) strategy_ast
+type glob_strategy = (glob_constr_and_expr, Tacexpr.raw_red_expr) strategy_ast
+
+let interp_strategy ist gl s = 
+  let sigma = project gl in
+    sigma, strategy_of_ast s
+let glob_strategy ist s = map_strategy (Tacinterp.intern_constr ist) (fun c -> c) s
+let subst_strategy s str = str
 
 let pr_strategy _ _ _ (s : strategy) = Pp.str "<strategy>"
+let pr_raw_strategy _ _ _ (s : raw_strategy) = Pp.str "<strategy>"
+let pr_glob_strategy _ _ _ (s : glob_strategy) = Pp.str "<strategy>"
 
-let interp_strategy ist gl c = c
-let glob_strategy ist l = l
-let subst_strategy evm l = l
-
-
-ARGUMENT EXTEND rewstrategy TYPED AS strategy
+ARGUMENT EXTEND rewstrategy
     PRINTED BY pr_strategy
+
     INTERPRETED BY interp_strategy
     GLOBALIZED BY glob_strategy
     SUBSTITUTED BY subst_strategy
 
-    [ constr(c) ] -> [ apply_constr_expr c true all_occurrences ]
-  | [ "<-" constr(c) ] -> [ apply_constr_expr c false all_occurrences ]
-  | [ "subterms" rewstrategy(h) ] -> [ all_subterms h ]
-  | [ "subterm" rewstrategy(h) ] -> [ one_subterm h ]
-  | [ "innermost" rewstrategy(h) ] -> [ Strategies.innermost h ]
-  | [ "outermost" rewstrategy(h) ] -> [ Strategies.outermost h ]
-  | [ "bottomup" rewstrategy(h) ] -> [ Strategies.bu h ]
-  | [ "topdown" rewstrategy(h) ] -> [ Strategies.td h ]
-  | [ "id" ] -> [ Strategies.id ]
-  | [ "refl" ] -> [ Strategies.refl ]
-  | [ "progress" rewstrategy(h) ] -> [ Strategies.progress h ]
-  | [ "fail" ] -> [ Strategies.fail ]
-  | [ "try" rewstrategy(h) ] -> [ Strategies.try_ h ]
-  | [ "any" rewstrategy(h) ] -> [ Strategies.any h ]
-  | [ "repeat" rewstrategy(h) ] -> [ Strategies.repeat h ]
-  | [ rewstrategy(h) ";" rewstrategy(h') ] -> [ Strategies.seq h h' ]
+    RAW_TYPED AS raw_strategy
+    RAW_PRINTED BY pr_raw_strategy
+
+    GLOB_TYPED AS glob_strategy
+    GLOB_PRINTED BY pr_glob_strategy
+
+    [ glob(c) ] -> [ StratConstr (c, true) ]
+  | [ "<-" constr(c) ] -> [ StratConstr (c, false) ]
+  | [ "subterms" rewstrategy(h) ] -> [ StratUnary ("all_subterms", h) ]
+  | [ "subterm" rewstrategy(h) ] -> [ StratUnary ("one_subterm", h) ]
+  | [ "innermost" rewstrategy(h) ] -> [ StratUnary("innermost", h) ]
+  | [ "outermost" rewstrategy(h) ] -> [ StratUnary("outermost", h) ]
+  | [ "bottomup" rewstrategy(h) ] -> [ StratUnary("bottomup", h) ]
+  | [ "topdown" rewstrategy(h) ] -> [ StratUnary("topdown", h) ]
+  | [ "id" ] -> [ StratId ]
+  | [ "fail" ] -> [ StratFail ]
+  | [ "refl" ] -> [ StratRefl ]
+  | [ "progress" rewstrategy(h) ] -> [ StratUnary ("progress", h) ]
+  | [ "try" rewstrategy(h) ] -> [ StratUnary ("try", h) ]
+  | [ "any" rewstrategy(h) ] -> [ StratUnary ("any", h) ]
+  | [ "repeat" rewstrategy(h) ] -> [ StratUnary ("repeat", h) ]
+  | [ rewstrategy(h) ";" rewstrategy(h') ] -> [ StratBinary ("compose", h, h') ]
   | [ "(" rewstrategy(h) ")" ] -> [ h ]
-  | [ "choice" rewstrategy(h) rewstrategy(h') ] -> [ Strategies.choice h h' ]
-  | [ "old_hints" preident(h) ] -> [ Strategies.old_hints h ]
-  | [ "hints" preident(h) ] -> [ Strategies.hints h ]
-  | [ "terms" constr_list(h) ] -> [ fun env avoid t ty cstr evars -> 
-      Strategies.lemmas rewrite_unif_flags (interp_constr_list env (goalevars evars) h) env avoid t ty cstr evars ]
-  | [ "eval" red_expr(r) ] -> [ fun env avoid t ty cstr evars -> 
-      Strategies.reduce (Tacinterp.interp_redexp env (goalevars evars) r) env avoid t ty cstr evars ]
-  | [ "fold" constr(c) ] -> [ Strategies.fold c ]
+  | [ "choice" rewstrategy(h) rewstrategy(h') ] -> [ StratBinary ("choice", h, h') ]
+  | [ "old_hints" preident(h) ] -> [ StratHints (true, h) ]
+  | [ "hints" preident(h) ] -> [ StratHints (false, h) ]
+  | [ "terms" constr_list(h) ] -> [ StratTerms h ]
+  | [ "eval" red_expr(r) ] -> [ StratEval r ]
+  | [ "fold" constr(c) ] -> [ StratFold c ]
 END
+
+(* By default the strategy for "rewrite_db" is top-down *)
+
+let db_strat db = Strategies.td (Strategies.hints db)
+let cl_rewrite_clause_db db cl = cl_rewrite_clause_strat (db_strat db) cl
 
 TACTIC EXTEND rewrite_strat
 | [ "rewrite_strat" rewstrategy(s) "in" hyp(id) ] -> [ cl_rewrite_clause_strat s (Some id) ]
 | [ "rewrite_strat" rewstrategy(s) ] -> [ cl_rewrite_clause_strat s None ]
+| [ "rewrite_db" preident(db) "in" hyp(id) ] -> [ cl_rewrite_clause_db db (Some id) ]
+| [ "rewrite_db" preident(db) ] -> [ cl_rewrite_clause_db db None ]
 END
 
 let clsubstitute o c =
@@ -1424,6 +1532,8 @@ let clsubstitute o c =
 	match cl with
 	  | Some id when is_tac id -> tclIDTAC
 	  | _ -> cl_rewrite_clause c o all_occurrences cl)
+
+open Extraargs
 
 TACTIC EXTEND substitute
 | [ "substitute" orient(o) glob_constr_with_bindings(c) ] -> [ clsubstitute o c ]
@@ -1536,7 +1646,7 @@ let declare_relation ?(binders=[]) a aeq n refl symm trans =
 type 'a binders_argtype = (local_binder list, 'a) Genarg.abstract_argument_type
 
 let _, _, rawwit_binders =
- (Genarg.create_arg "binders" :
+ (Genarg.create_arg None "binders" :
     Genarg.tlevel binders_argtype *
     Genarg.glevel binders_argtype *
     Genarg.rlevel binders_argtype)
@@ -1838,16 +1948,10 @@ let apply_lemma gl (c,l) cl l2r occs =
 let general_s_rewrite cl l2r occs (c,l) ~new_goals gl =
   let meta = Evarutil.new_meta() in
   let hypinfo, strat = apply_lemma gl (c,l) cl l2r occs in
-    try
-      tclWEAK_PROGRESS 
-	(tclTHEN
-           (Refiner.tclEVARS hypinfo.cl.evd)
-	   (cl_rewrite_clause_tac ~abs:hypinfo.abs strat (mkMeta meta) cl)) gl
-    with RewriteFailure ->
-      let {l2r=l2r; c1=x; c2=y} = hypinfo in
-	raise (Pretype_errors.PretypeError
-		  (pf_env gl,project gl,
-		  Pretype_errors.NoOccurrenceFound ((if l2r then x else y), cl)))
+    tclWEAK_PROGRESS 
+      (tclTHEN
+       (Refiner.tclEVARS hypinfo.cl.evd)
+       (cl_rewrite_clause_tac ~abs:hypinfo.abs strat (mkMeta meta) cl)) gl
 
 let general_s_rewrite_clause x =
   init_setoid ();
@@ -1867,7 +1971,8 @@ let setoid_proof gl ty fn fallback =
   let env = pf_env gl in
     try
       let rel, args = decompose_app_rel env (project gl) (pf_concl gl) in
-      let evm, car = project gl, pf_type_of gl args.(0) in
+      let evm = project gl in
+      let car = pi3 (List.hd (fst (Reduction.dest_prod env (Typing.type_of env evm rel)))) in
 	fn env evm car rel gl
     with e ->
       try fallback gl
@@ -1944,7 +2049,7 @@ let implify id gl =
 	let sigma = project gl in
 	let tyhd = Typing.type_of env sigma ty
 	and tyconcl = Typing.type_of (Environ.push_rel hd env) sigma concl in
-	let app = mkApp (arrow_morphism tyhd (subst1 mkProp tyconcl), [| ty; (subst1 mkProp concl) |]) in
+	let app, unfold = arrow_morphism tyhd (subst1 mkProp tyconcl) ty (subst1 mkProp concl) in
 	  it_mkProd_or_LetIn app tl
     | _ -> ctype
   in convert_hyp_no_check (id, b, ctype') gl

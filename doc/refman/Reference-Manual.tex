@@ -35,7 +35,7 @@
 \input{../common/title.tex}% extension .tex pour htmlgen
 %\input{headers}
 
-\usepackage[linktocpage,colorlinks,bookmarks=false]{hyperref}
+\usepackage[linktocpage,colorlinks]{hyperref}
 % The manual advises to load hyperref package last to be able to redefine
 % necessary commands.
 % The above should work for both latex and pdflatex. Even if PDF is produced
@@ -88,15 +88,16 @@ Options A and B of the licence are {\em not} elected.}
 
 \part{The proof engine}
 \include{RefMan-oth.v}% Vernacular commands
-\include{RefMan-pro}% Proof handling
+\include{RefMan-pro.v}% Proof handling
 \include{RefMan-tac.v}% Tactics and tacticals
 \include{RefMan-ltac.v}% Writing tactics
 \include{RefMan-tacex.v}% Detailed Examples of tactics
 \include{RefMan-decl.v}% The mathematical proof language
 
 \part{User extensions}
-\include{RefMan-syn.v}% The Syntax and the Grammad commands
+\include{RefMan-syn.v}% The Syntax and the Grammar commands
 %%SUPPRIME \include{RefMan-tus.v}% Writing tactics
+\include{RefMan-sch.v}% The Scheme commands
 
 \part{Practical tools}
 \include{RefMan-com}% The coq commands (coqc coqtop)

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -27,7 +27,6 @@ let safety_tag = function
 class type analyzed_views=
 object
   val mutable act_id : GtkSignal.id option
-  val mutable deact_id : GtkSignal.id option
   val input_buffer : GText.buffer
   val input_view : Undo.undoable_view
   val last_array : string array
@@ -65,7 +64,6 @@ object
   method backtrack_to : GText.iter -> unit
   method backtrack_to_no_lock : GText.iter -> unit
   method clear_message : unit
-  method disconnected_keypress_handler : GdkEvent.Key.t -> bool
   method find_phrase_starting_at :
     GText.iter -> (GText.iter * GText.iter) option
   method get_insert : GText.iter
@@ -84,6 +82,7 @@ object
   method reset_initial : unit
   method force_reset_initial : unit
   method set_message : string -> unit
+  method raw_coq_query : string -> unit
   method show_goals : unit
   method show_goals_full : unit
   method undo_last_step : unit
@@ -889,11 +888,32 @@ object(self)
         raise RestartCoqtop
       | e -> sync display_error (None, Printexc.to_string e); None
 
+  (* This method is intended to perform stateless commands *)
+  method raw_coq_query phrase =
+    let () = prerr_endline "raw_coq_query starting now" in
+    let display_error s =
+      if not (Glib.Utf8.validate s) then
+        flash_info "This error is so nasty that I can't even display it."
+      else begin
+        self#insert_message s;
+        message_view#misc#draw None
+      end
+    in
+    try
+      match Coq.interp !mycoqtop ~raw:true ~verbose:false phrase with
+      | Interface.Fail (_, err) -> sync display_error err
+      | Interface.Good msg -> sync self#insert_message msg
+    with
+    | End_of_file -> raise RestartCoqtop
+    | e -> sync display_error (Printexc.to_string e)
+
   method find_phrase_starting_at (start:GText.iter) =
     try
       let start = grab_sentence_start start self#get_start_of_input in
       let stop = grab_sentence_stop start in
-      if is_sentence_end stop#backward_char then Some (start,stop)
+      (* Is this phrase non-empty and complete ? *)
+      if stop#compare start > 0 && is_sentence_end stop#backward_char
+      then Some (start,stop)
       else None
     with Not_found -> None
 
@@ -1217,22 +1237,6 @@ object(self)
     let state = GdkEvent.Key.state k in
     begin
       match  state with
-        | l when List.mem `MOD1 l ->
-          let k = GdkEvent.Key.keyval k in
-          if GdkKeysyms._Return=k
-          then ignore(
-            if (input_buffer#insert_interactive "\n") then
-              begin
-                let i= self#get_insert#backward_word_start in
-                prerr_endline "active_kp_hf: Placing cursor";
-                self#process_until_iter_or_error i
-              end);
-          true
-        | l when List.mem `CONTROL l ->
-          let k = GdkEvent.Key.keyval k in
-          if GdkKeysyms._Break=k
-          then break ();
-          false
         | l ->
           if GdkEvent.Key.keyval k = GdkKeysyms._Tab then begin
             prerr_endline "active_kp_handler for Tab";
@@ -1241,18 +1245,6 @@ object(self)
           end else false
     end
 
-
-  method disconnected_keypress_handler k =
-    match GdkEvent.Key.state k with
-      | l when List.mem `CONTROL l ->
-        let k = GdkEvent.Key.keyval k in
-        if GdkKeysyms._c=k
-        then break ();
-        false
-      | l -> false
-
-
-  val mutable deact_id = None
   val mutable act_id = None
 
   method activate () = if not is_active then begin
@@ -1523,9 +1515,15 @@ let create_session file =
   script#buffer#place_cursor ~where:(script#buffer#start_iter);
   proof#misc#set_can_focus true;
   message#misc#set_can_focus true;
+  (* setting fonts *)
   script#misc#modify_font !current.text_font;
   proof#misc#modify_font !current.text_font;
   message#misc#modify_font !current.text_font;
+  (* setting colors *)
+  script#misc#modify_base [`NORMAL, `NAME !current.background_color];
+  proof#misc#modify_base [`NORMAL, `NAME !current.background_color];
+  message#misc#modify_base [`NORMAL, `NAME !current.background_color];
+
   { tab_label=basename;
     filename=begin match file with None -> "" |Some f -> f end;
     script=script;
@@ -1798,12 +1796,6 @@ let forbid_quit_to_save () =
 	else false)
 
 let main files =
-  (* Statup preferences *)
-  begin
-    try load_pref ()
-    with e ->
-      flash_info ("Could not load preferences ("^Printexc.to_string e^").");
-  end;
 
   (* Main window *)
   let w = GWindow.window
@@ -1823,9 +1815,9 @@ let main files =
   let vbox = GPack.vbox ~homogeneous:false ~packing:w#add () in
 
   let new_f _ =
-    match select_file_for_save ~title:"Create file" () with
-      | None -> ()
-      | Some f -> do_load f
+    let session = create_session None in
+    let index = session_notebook#append_term session in
+    session_notebook#goto_page index
   in
   let load_f _ =
     match select_file_for_open ~title:"Load file" () with
@@ -2181,6 +2173,7 @@ let main files =
 	     true))
   in reset_auto_save_timer (); (* to enable statup preferences timer *)
 (* end Preferences *)
+
   let do_or_activate f () =
     do_if_not_computing "do_or_activate"
       (fun current ->
@@ -2192,8 +2185,8 @@ let main files =
           "Oops, problem while fetching coq status."
         | Interface.Good status ->
           let path = match status.Interface.status_path with
-          | None -> ""
-          | Some p -> " in " ^ p
+          | [] | _ :: [] -> "" (* Drop the topmost level, usually "Top" *)
+          | _ :: l -> " in " ^ String.concat "." l
           in
           let name = match status.Interface.status_proofname with
           | None -> ""
@@ -2327,13 +2320,13 @@ let main files =
   in
 
   let file_actions = GAction.action_group ~name:"File" () in
-  let export_actions = GAction.action_group ~name:"Export" () in
   let edit_actions = GAction.action_group ~name:"Edit" () in
+  let view_actions = GAction.action_group ~name:"View" () in
+  let export_actions = GAction.action_group ~name:"Export" () in
   let navigation_actions = GAction.action_group ~name:"Navigation" () in
   let tactics_actions = GAction.action_group ~name:"Tactics" () in
   let templates_actions = GAction.action_group ~name:"Templates" () in
   let queries_actions = GAction.action_group ~name:"Queries" () in
-  let display_actions = GAction.action_group ~name:"Display" () in
   let compile_actions = GAction.action_group ~name:"Compile" () in
   let windows_actions = GAction.action_group ~name:"Windows" () in
   let help_actions = GAction.action_group ~name:"Help" () in
@@ -2362,10 +2355,18 @@ let main files =
     ~accel:(!current.modifier_for_tactics^sc)
     ~callback:(do_if_active (fun a -> a#insert_command
 			       ("progress "^s^".\n") (s^".\n"))) in
-  let query_shortcut s accel = GAction.add_action s ~label:("_"^s) ?accel
-    ~callback:(fun _ -> let term = get_current_word () in
-		 session_notebook#current_term.command#new_command ~command:s ~term ())
-  in let add_complex_template (name, label, text, offset, len, key) =
+  let query_callback command _ =
+    let word = get_current_word () in
+    if not (word = "") then
+      let term = session_notebook#current_term in
+      let query = command ^ " " ^ word ^ "." in
+      term.message_view#buffer#set_text "";
+      term.analyzed_view#raw_coq_query query
+  in
+  let query_shortcut s accel =
+    GAction.add_action s ~label:("_"^s) ?accel ~callback:(query_callback s)
+  in
+  let add_complex_template (name, label, text, offset, len, key) =
     (* Templates/Lemma *)
     let callback _ =
       let {script = view } = session_notebook#current_term in
@@ -2448,8 +2449,33 @@ let main files =
 	  try configure ~apply:update_notebook_pos ()
 	  with _ -> flash_info "Cannot save preferences"
 	end;
-	reset_revert_timer ()) ~stock:`PREFERENCES;
+	reset_revert_timer ()) ~accel:"<Ctrl>," ~stock:`PREFERENCES;
       (* GAction.add_action "Save preferences" ~label:"_Save preferences" ~callback:(fun _ -> save_pref ()); *) ];
+    GAction.add_actions view_actions [
+      GAction.add_action "View" ~label:"_View";
+      GAction.add_action "Previous tab" ~label:"_Previous tab" ~accel:("<ALT>Left") ~stock:`GO_BACK
+        ~callback:(fun _ -> session_notebook#previous_page ());
+      GAction.add_action "Next tab" ~label:"_Next tab" ~accel:("<ALT>Right") ~stock:`GO_FORWARD
+        ~callback:(fun _ -> session_notebook#next_page ());
+      GAction.add_toggle_action "Show Toolbar" ~label:"Show _Toolbar"
+        ~active:(!current.show_toolbar) ~callback:
+        (fun _ -> !current.show_toolbar <- not !current.show_toolbar;
+           !refresh_toolbar_hook ());
+      GAction.add_toggle_action "Show Query Pane" ~label:"Show _Query Pane"
+        ~callback:(fun _ -> let ccw = session_notebook#current_term.command in
+                     if ccw#frame#misc#visible
+                     then ccw#frame#misc#hide ()
+                     else ccw#frame#misc#show ())
+        ~accel:"Escape";
+    ];
+    List.iter
+      (fun (opts,name,label,key,dflt) ->
+         GAction.add_toggle_action name ~active:dflt ~label
+           ~accel:(!current.modifier_for_display^key)
+          ~callback:(fun v -> do_or_activate (fun a ->
+            let () = setopts !(session_notebook#current_term.toplvl) opts v#get_active in
+            a#show_goals) ()) view_actions)
+      print_items;
     GAction.add_actions navigation_actions [
       GAction.add_action "Navigation" ~label:"_Navigation";
       GAction.add_action "Forward" ~label:"_Forward" ~stock:`GO_DOWN
@@ -2532,15 +2558,6 @@ let main files =
       query_shortcut "Locate" None;
       query_shortcut "Whelp Locate" None;
     ];
-    GAction.add_action "Display" ~label:"_Display" display_actions;
-    List.iter
-      (fun (opts,name,label,key,dflt) ->
-         GAction.add_toggle_action name ~active:dflt ~label
-	   ~accel:(!current.modifier_for_display^key)
-          ~callback:(fun v -> do_or_activate (fun a ->
-            let () = setopts !(session_notebook#current_term.toplvl) opts v#get_active in
-            a#show_goals) ()) display_actions)
-      print_items;
     GAction.add_actions compile_actions [
       GAction.add_action "Compile" ~label:"_Compile";
       GAction.add_action "Compile buffer" ~label:"_Compile buffer" ~callback:compile_f;
@@ -2551,16 +2568,6 @@ let main files =
     ];
     GAction.add_actions windows_actions [
       GAction.add_action "Windows" ~label:"_Windows";
-      GAction.add_toggle_action "Show/Hide Query Pane" ~label:"Show/Hide _Query Pane"
-	~callback:(fun _ -> let ccw = session_notebook#current_term.command in
-		     if ccw#frame#misc#visible
-		     then ccw#frame#misc#hide ()
-		     else ccw#frame#misc#show ())
-	~accel:"Escape";
-      GAction.add_toggle_action "Show/Hide Toolbar" ~label:"Show/Hide _Toolbar"
-	~active:(!current.show_toolbar) ~callback:
-	(fun _ -> !current.show_toolbar <- not !current.show_toolbar;
-	   !show_toolbar !current.show_toolbar);
       GAction.add_action "Detach View" ~label:"Detach _View"
 	~callback:(fun _ -> do_if_not_computing "detach view"
 		     (function {script=v;analyzed_view=av} ->
@@ -2608,15 +2615,16 @@ let main files =
     Coqide_ui.ui_m#insert_action_group file_actions 0;
     Coqide_ui.ui_m#insert_action_group export_actions 0;
     Coqide_ui.ui_m#insert_action_group edit_actions 0;
+    Coqide_ui.ui_m#insert_action_group view_actions 0;
     Coqide_ui.ui_m#insert_action_group navigation_actions 0;
     Coqide_ui.ui_m#insert_action_group tactics_actions 0;
     Coqide_ui.ui_m#insert_action_group templates_actions 0;
     Coqide_ui.ui_m#insert_action_group queries_actions 0;
-    Coqide_ui.ui_m#insert_action_group display_actions 0;
     Coqide_ui.ui_m#insert_action_group compile_actions 0;
     Coqide_ui.ui_m#insert_action_group windows_actions 0;
     Coqide_ui.ui_m#insert_action_group help_actions 0;
     w#add_accel_group Coqide_ui.ui_m#get_accel_group ;
+    GtkMain.Rc.parse_string "gtk-can-change-accels = 1";
     if Coq_config.gtk_platform <> `QUARTZ
     then vbox#pack (Coqide_ui.ui_m#get_widget "/CoqIde MenuBar");
     let tbar = GtkButton.Toolbar.cast ((Coqide_ui.ui_m#get_widget "/CoqIde ToolBar")#as_widget)
@@ -2624,9 +2632,6 @@ let main files =
 	~tooltips:true tbar in
     let toolbar = new GObj.widget tbar in
     vbox#pack toolbar;
-
-    show_toolbar :=
-      (fun b -> if b then toolbar#misc#show () else toolbar#misc#hide ());
 
     ignore (w#event#connect#delete ~callback:(fun _ -> quit_f (); true));
 
@@ -2790,17 +2795,39 @@ let main files =
   (* Progress Bar *)
   lower_hbox#pack pbar#coerce;
   pbar#set_text "CoqIde started";
-  (* XXX *)
-  change_font :=
-    (fun fd ->
-      List.iter
-	(fun {script=view; proof_view=prf_v; message_view=msg_v} ->
-          view#misc#modify_font fd;
-          prf_v#misc#modify_font fd;
-          msg_v#misc#modify_font fd
-        )
-	session_notebook#pages;
+
+  (* Initializing hooks *)
+
+  refresh_toolbar_hook :=
+    (fun () -> if !current.show_toolbar then toolbar#misc#show () else toolbar#misc#hide ());
+  refresh_font_hook :=
+    (fun () ->
+      let fd = !current.text_font in
+      let iter_page p =
+        p.script#misc#modify_font fd;
+        p.proof_view#misc#modify_font fd;
+        p.message_view#misc#modify_font fd;
+        p.command#refresh_font ()
+      in
+      List.iter iter_page session_notebook#pages;
     );
+  refresh_background_color_hook :=
+    (fun () ->
+      let clr = Tags.color_of_string !current.background_color in
+      let iter_page p =
+        p.script#misc#modify_base [`NORMAL, `COLOR clr];
+        p.proof_view#misc#modify_base [`NORMAL, `COLOR clr];
+        p.message_view#misc#modify_base [`NORMAL, `COLOR clr];
+        p.command#refresh_color ()
+      in
+      List.iter iter_page session_notebook#pages;
+    );
+  resize_window_hook := (fun () ->
+    w#resize
+      ~width:!current.window_width
+      ~height:!current.window_height);
+  refresh_tabs_hook := update_notebook_pos;
+
   let about_full_string =
     "\nCoq is developed by the Coq Development Team\
      \n(INRIA - CNRS - LIX - LRI - PPS)\
@@ -2865,10 +2892,12 @@ let main files =
   (*
 
   *)
-  resize_window := (fun () ->
-    w#resize
-      ~width:!current.window_width
-      ~height:!current.window_height);
+(* Begin Color configuration *)
+
+  Tags.set_processing_color (Tags.color_of_string !current.processing_color);
+  Tags.set_processed_color (Tags.color_of_string !current.processed_color);
+
+(* End of color configuration *)
   ignore(nb#connect#switch_page
 	   ~callback:
 	   (fun i ->
@@ -2892,7 +2921,7 @@ let main files =
       session_notebook#goto_page index;
     end;
   initial_about session_notebook#current_term.proof_view#buffer;
-  !show_toolbar !current.show_toolbar;
+  !refresh_toolbar_hook ();
   session_notebook#current_term.script#misc#grab_focus ();;
 
 (* This function check every half of second if GeoProof has send
@@ -2921,43 +2950,24 @@ let rec check_for_geoproof_input () =
     in the path. Note that the -coqtop option to coqide allows to override
     this default coqtop path *)
 
-let default_coqtop_path () =
-  let prog = Sys.executable_name in
-  try
-    let pos = String.length prog - 6 in
-    let i = Str.search_backward (Str.regexp_string "coqide") prog pos in
-    String.blit "coqtop" 0 prog i 6;
-    prog
-  with _ -> "coqtop"
-
 let read_coqide_args argv =
   let rec filter_coqtop coqtop project_files out = function
     | "-coqtop" :: prog :: args ->
-      if coqtop = "" then filter_coqtop prog project_files out args
+      if coqtop = None then filter_coqtop (Some prog) project_files out args
       else
-	(output_string stderr "Error: multiple -coqtop options"; exit 1)
+       (output_string stderr "Error: multiple -coqtop options"; exit 1)
     | "-f" :: file :: args ->
 	filter_coqtop coqtop
 	  ((Minilib.canonical_path_name (Filename.dirname file),
 	    Project_file.read_project_file file) :: project_files) out args
     | "-f" :: [] -> output_string stderr "Error: missing project file name"; exit 1
+    | "-coqtop" :: [] -> output_string stderr "Error: missing argument after -coqtop"; exit 1
+    | "-debug"::args -> Ideutils.debug := true;
+      filter_coqtop coqtop project_files ("-debug"::out) args
     | arg::args -> filter_coqtop coqtop project_files (arg::out) args
-    | [] -> ((if coqtop = "" then default_coqtop_path () else coqtop),
-	     List.rev project_files,List.rev out)
+    | [] -> (coqtop,List.rev project_files,List.rev out)
   in
-  let coqtop,project_files,argv = filter_coqtop "" [] [] argv in
-    Minilib.coqtop_path := coqtop;
+  let coqtop,project_files,argv = filter_coqtop None [] [] argv in
+    Ideutils.custom_coqtop := coqtop;
     custom_project_files := project_files;
   argv
-
-let process_argv argv =
-  try
-    let continue,filtered = Coq.filter_coq_opts (List.tl argv) in
-    if not continue then
-      (List.iter Minilib.safe_prerr_endline filtered; exit 0);
-    let opts = List.filter (fun arg -> String.get arg 0 == '-') filtered in
-    if opts <> [] then
-      (Minilib.safe_prerr_endline ("Illegal option: "^List.hd opts); exit 1);
-    filtered
-  with _ ->
-    (Minilib.safe_prerr_endline "coqtop choked on one of your option"; exit 1)

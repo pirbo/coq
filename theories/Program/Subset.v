@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -10,7 +10,7 @@
 Require Import Coq.Program.Utils.
 Require Import Coq.Program.Equality.
 
-Open Local Scope program_scope.
+Local Open Scope program_scope.
 
 (** The following tactics implement a poor-man's solution for proof-irrelevance: it tries to
    factorize every proof of the same proposition in a goal so that equality of such proofs becomes trivial. *)
@@ -106,7 +106,7 @@ Ltac rewrite_match_eq H :=
     [ |- ?T ] =>
     match T with
       context [ match_eq ?A ?B ?t ?f ] =>
-      rewrite (match_eq_rewrite A B t f (exist _ _ (sym_eq H)))
+      rewrite (match_eq_rewrite A B t f (exist _ _ (eq_sym H)))
     end
   end.
 

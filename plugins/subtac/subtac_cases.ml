@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -1845,7 +1845,7 @@ let build_dependent_signature env evars avoid tomatchs arsign =
 			 refl_arg :: refl_args,
 			 pred slift,
 			 (Name id, b, t) :: argsign'))
-		   (env, 0, [], [], slift, []) args argsign
+		   (env, neqs, [], [], slift, []) args argsign
 	       in
 	       let eq = mk_JMeq
 		 (lift (nargeqs + slift) appt)

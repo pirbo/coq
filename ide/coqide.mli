@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,9 +15,6 @@ val sup_args : string list ref
 (** Filter the argv from coqide specific options, and set
     Minilib.coqtop_path accordingly *)
 val read_coqide_args : string list -> string list
-
-(** Ask coqtop the remaining options it doesn't recognize *)
-val process_argv : string list -> string list
 
 (** Prepare the widgets, load the given files in tabs *)
 val main : string list -> unit

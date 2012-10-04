@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -119,20 +119,42 @@ let make_one_printing_rule se (pt,e) =
 
 let make_printing_rule se = mlexpr_of_list (make_one_printing_rule se)
 
-let rec contains_epsilon = function
-  | List0ArgType _ -> true
-  | List1ArgType t -> contains_epsilon t
-  | OptArgType _ -> true
-  | PairArgType(t1,t2) -> contains_epsilon t1 && contains_epsilon t2
-  | ExtraArgType("hintbases") -> true
-  | _ -> false
-let is_atomic = function
-  | GramTerminal s :: l when
-      List.for_all (function
-          GramTerminal _ -> false
-	| GramNonTerminal(_,t,_,_) -> contains_epsilon t) l
-	-> [s]
-  | _ -> []
+let rec possibly_empty_subentries loc = function
+  | [] -> []
+  | (s,prodsl) :: l ->
+    let rec aux = function
+    | [] -> (false,<:expr< None >>)
+    | prods :: rest ->
+      try
+        let l = List.map (function
+        | GramNonTerminal(_,(List0ArgType _|
+                             OptArgType _|
+                             ExtraArgType _ as t),_,_)->
+            (* This possibly parses epsilon *)
+            let rawwit = make_rawwit loc t in
+            <:expr< match Genarg.default_empty_value $rawwit$ with
+                    [ None -> failwith ""
+                    | Some v ->
+                        Tacinterp.intern_genarg Tacinterp.fully_empty_glob_sign
+                          (Genarg.in_gen $rawwit$ v) ] >>
+        | GramTerminal _ | GramNonTerminal(_,_,_,_) ->
+            (* This does not parse epsilon (this Exit is static time) *)
+             raise Exit) prods in
+        if has_extraarg prods then
+          (true,<:expr< try Some $mlexpr_of_list (fun x -> x) l$
+                        with [ Failure "" -> $snd (aux rest)$ ] >>)
+        else
+          (true, <:expr< Some $mlexpr_of_list (fun x -> x) l$ >>)
+      with Exit -> aux rest in
+    let (nonempty,v) = aux prodsl in
+    if nonempty then (s,v) :: possibly_empty_subentries loc l
+    else possibly_empty_subentries loc l
+
+let possibly_atomic loc prods =
+  let l = list_map_filter (function
+    | GramTerminal s :: l, _ -> Some (s,l)
+    | _ -> None) prods in
+  possibly_empty_subentries loc (list_factorize_left l)
 
 let declare_tactic loc s cl =
   let se = mlexpr_of_string s in
@@ -151,19 +173,26 @@ let declare_tactic loc s cl =
   in
   let hidden = if List.length cl = 1 then List.map hide_tac cl else [] in
   let atomic_tactics =
-    mlexpr_of_list mlexpr_of_string
-      (List.flatten (List.map (fun (al,_) -> is_atomic al) cl)) in
+    mlexpr_of_list (mlexpr_of_pair mlexpr_of_string (fun x -> x))
+      (possibly_atomic loc cl) in
   declare_str_items loc
    (hidden @
     [ <:str_item< do {
       try
         let _=Tacinterp.add_tactic $se$ $make_fun_clauses loc s cl$ in
         List.iter
-          (fun s -> Tacinterp.add_primitive_tactic s
+          (fun (s,l) -> match l with
+           [ Some l ->
+              Tacinterp.add_primitive_tactic s
               (Tacexpr.TacAtom($default_loc$,
-                 Tacexpr.TacExtend($default_loc$,s,[]))))
+                 Tacexpr.TacExtend($default_loc$,$se$,l)))
+           | None -> () ])
           $atomic_tactics$
-      with e -> Pp.pp (Errors.print e);
+      with e ->
+	    Pp.msg_warning
+	      (Stream.iapp
+	        (Pp.str ("Exception in tactic extend " ^ $se$ ^": "))
+	        (Errors.print e));
       Egrammar.extend_tactic_grammar $se$ $gl$;
       List.iter Pptactic.declare_extra_tactic_pprule $pp$; } >>
     ])

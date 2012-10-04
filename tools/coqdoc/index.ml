@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -62,7 +62,7 @@ let add_def loc1 loc2 ty sp id =
   for loc = loc1 to loc2 do
     Hashtbl.add reftable (!current_library, loc) (Def (full_ident sp id, ty))
   done;
-  Hashtbl.add deftable id (Ref (!current_library, full_ident sp id, ty))
+  Hashtbl.add deftable id (Def (full_ident sp id, ty))
 
 let add_ref m loc m' sp id ty =
   if Hashtbl.mem reftable (m, loc) then ()
@@ -289,11 +289,11 @@ let all_entries () =
     let l = try Hashtbl.find bt t with Not_found -> [] in
       Hashtbl.replace bt t ((s,m) :: l)
   in
-  let classify (m,_) e = match e with
+  let classify m e = match e with
     | Def (s,t) -> add_g s m t; add_bt t s m
     | Ref _ | Mod _ -> ()
   in
-    Hashtbl.iter classify reftable;
+    Hashtbl.iter classify deftable;
     Hashtbl.iter (fun id m -> add_g id m Library; add_bt Library id m) modules;
     { idx_name = "global";
       idx_entries = sort_entries !gl;
@@ -359,7 +359,16 @@ let read_glob vfile f =
 		Scanf.sscanf s "R%d:%d %s %s %s %s"
 		  (fun loc1 loc2 lib_dp sp id ty ->
 		    for loc=loc1 to loc2 do
-		      add_ref !cur_mod loc lib_dp sp id (type_of_string ty)
+		      add_ref !cur_mod loc lib_dp sp id (type_of_string ty);
+
+                      (* Also add an entry for each module mentioned in [lib_dp],
+                       * to use in interpolation. *)
+                      ignore (List.fold_right (fun thisPiece priorPieces ->
+                                                let newPieces = match priorPieces with
+                                                                | "" -> thisPiece
+                                                                | _ -> thisPiece ^ "." ^ priorPieces in
+                                                add_ref !cur_mod loc "" "" newPieces Library;
+                                                newPieces) (Str.split (Str.regexp_string ".") lib_dp) "")
 		    done)
 	       with _ -> ())
 	  | _ ->

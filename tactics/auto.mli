@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -102,8 +102,6 @@ type hints_entry =
   | HintsTransparencyEntry of evaluable_global_reference list * bool
   | HintsExternEntry of
       int * (patvar list * constr_pattern) option * Tacexpr.glob_tactic_expr
-  | HintsDestructEntry of identifier * int * (bool,unit) Tacexpr.location *
-      (patvar list * constr_pattern) * Tacexpr.glob_tactic_expr
 
 val searchtable_map : hint_db_name -> hint_db
 
@@ -220,59 +218,51 @@ val conclPattern : constr -> constr_pattern option -> Tacexpr.glob_tactic_expr -
 
 val make_db_list : hint_db_name list -> hint_db list
 
-val auto : int -> open_constr list -> hint_db_name list -> tactic
+val auto : ?debug:Tacexpr.debug ->
+  int -> open_constr list -> hint_db_name list -> tactic
 
 (** Auto with more delta. *)
 
-val new_auto : int -> open_constr list -> hint_db_name list -> tactic
+val new_auto : ?debug:Tacexpr.debug ->
+  int -> open_constr list -> hint_db_name list -> tactic
 
 (** auto with default search depth and with the hint database "core" *)
 val default_auto : tactic
 
 (** auto with all hint databases except the "v62" compatibility database *)
-val full_auto : int -> open_constr list -> tactic
+val full_auto : ?debug:Tacexpr.debug ->
+  int -> open_constr list -> tactic
 
 (** auto with all hint databases except the "v62" compatibility database
    and doing delta *)
-val new_full_auto : int -> open_constr list -> tactic
+val new_full_auto : ?debug:Tacexpr.debug ->
+  int -> open_constr list -> tactic
 
 (** auto with default search depth and with all hint databases
    except the "v62" compatibility database *)
 val default_full_auto : tactic
 
 (** The generic form of auto (second arg [None] means all bases) *)
-val gen_auto : int option -> open_constr list -> hint_db_name list option -> tactic
+val gen_auto : ?debug:Tacexpr.debug ->
+  int option -> open_constr list -> hint_db_name list option -> tactic
 
 (** The hidden version of auto *)
-val h_auto   : int option -> open_constr list -> hint_db_name list option -> tactic
+val h_auto   : ?debug:Tacexpr.debug ->
+  int option -> open_constr list -> hint_db_name list option -> tactic
 
 (** Trivial *)
-val trivial : open_constr list -> hint_db_name list -> tactic
-val gen_trivial : open_constr list -> hint_db_name list option -> tactic
-val full_trivial : open_constr list -> tactic
-val h_trivial : open_constr list -> hint_db_name list option -> tactic
+
+val trivial : ?debug:Tacexpr.debug ->
+  open_constr list -> hint_db_name list -> tactic
+val gen_trivial : ?debug:Tacexpr.debug ->
+  open_constr list -> hint_db_name list option -> tactic
+val full_trivial : ?debug:Tacexpr.debug ->
+  open_constr list -> tactic
+val h_trivial : ?debug:Tacexpr.debug ->
+  open_constr list -> hint_db_name list option -> tactic
 
 val pr_autotactic : 'a auto_tactic -> Pp.std_ppcmds
 
-(** {6 The following is not yet up to date -- Papageno. } *)
-
-(** DAuto *)
-val dauto : int option * int option -> open_constr list -> tactic
-val default_search_decomp : int ref
-val default_dauto : tactic
-
-val h_dauto : int option * int option -> open_constr list -> tactic
-
-(** SuperAuto *)
-
-type autoArguments =
-  | UsingTDB
-  | Destructing
-
-(*
-val superauto : int -> (identifier * constr) list -> autoArguments list -> tactic
-*)
-
-val h_superauto : int option -> reference list -> bool -> bool -> tactic
+(** Hook for changing the initialization of auto *)
 
 val add_auto_init : (unit -> unit) -> unit

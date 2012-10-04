@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -54,7 +54,7 @@ Hint Immediate eq_add_S: core.
 
 Theorem not_eq_S : forall n m:nat, n <> m -> S n <> S m.
 Proof.
-  red in |- *; auto.
+  red; auto.
 Qed.
 Hint Resolve not_eq_S: core.
 
@@ -93,7 +93,7 @@ Hint Resolve (f_equal2 (A1:=nat) (A2:=nat)): core.
 
 Lemma plus_n_O : forall n:nat, n = n + 0.
 Proof.
-  induction n; simpl in |- *; auto.
+  induction n; simpl; auto.
 Qed.
 Hint Resolve plus_n_O: core.
 
@@ -104,7 +104,7 @@ Qed.
 
 Lemma plus_n_Sm : forall n m:nat, S (n + m) = n + S m.
 Proof.
-  intros n m; induction n; simpl in |- *; auto.
+  intros n m; induction n; simpl; auto.
 Qed.
 Hint Resolve plus_n_Sm: core.
 
@@ -115,8 +115,8 @@ Qed.
 
 (** Standard associated names *)
 
-Notation plus_0_r_reverse := plus_n_O (only parsing).
-Notation plus_succ_r_reverse := plus_n_Sm (only parsing).
+Notation plus_0_r_reverse := plus_n_O (compat "8.2").
+Notation plus_succ_r_reverse := plus_n_Sm (compat "8.2").
 
 (** Multiplication *)
 
@@ -132,22 +132,22 @@ Hint Resolve (f_equal2 mult): core.
 
 Lemma mult_n_O : forall n:nat, 0 = n * 0.
 Proof.
-  induction n; simpl in |- *; auto.
+  induction n; simpl; auto.
 Qed.
 Hint Resolve mult_n_O: core.
 
 Lemma mult_n_Sm : forall n m:nat, n * m + n = n * S m.
 Proof.
-  intros; induction n as [| p H]; simpl in |- *; auto.
-  destruct H; rewrite <- plus_n_Sm; apply (f_equal S).
-  pattern m at 1 3 in |- *; elim m; simpl in |- *; auto.
+  intros; induction n as [| p H]; simpl; auto.
+  destruct H; rewrite <- plus_n_Sm; apply eq_S.
+  pattern m at 1 3; elim m; simpl; auto.
 Qed.
 Hint Resolve mult_n_Sm: core.
 
 (** Standard associated names *)
 
-Notation mult_0_r_reverse := mult_n_O (only parsing).
-Notation mult_succ_r_reverse := mult_n_Sm (only parsing).
+Notation mult_0_r_reverse := mult_n_O (compat "8.2").
+Notation mult_succ_r_reverse := mult_n_Sm (compat "8.2").
 
 (** Truncated subtraction: [m-n] is [0] if [n>=m] *)
 
@@ -219,7 +219,7 @@ Theorem nat_double_ind :
    (forall n m:nat, R n m -> R (S n) (S m)) -> forall n m:nat, R n m.
 Proof.
   induction n; auto.
-  destruct m as [| n0]; auto.
+  destruct m; auto.
 Qed.
 
 (** Maximum and minimum : definitions and specifications *)

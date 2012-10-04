@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -65,7 +65,33 @@ val get_options : (option_name * option_state) list call
     to check that everything is correct. *)
 val set_options : (option_name * option_value) list -> unit call
 
+(** Quit gracefully the interpreter. *)
+val quit : unit call
+
+(** The structure that coqtop should implement *)
+
+type handler = {
+  interp : raw * verbose * string -> string;
+  rewind : int -> int;
+  goals : unit -> goals option;
+  evars : unit -> evar list option;
+  hints : unit -> (hint list * hint) option;
+  status : unit -> status;
+  search : search_flags -> string coq_object list;
+  get_options : unit -> (option_name * option_state) list;
+  set_options : (option_name * option_value) list -> unit;
+  inloadpath : string -> bool;
+  mkcases : string -> string list list;
+  quit : unit -> unit;
+  about : unit -> coq_info;
+  handle_exn : exn -> location * string;
+}
+
 val abstract_eval_call : handler -> 'a call -> 'a value
+
+(** * Protocol version *)
+
+val protocol_version : string
 
 (** * XML data marshalling *)
 

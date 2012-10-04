@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -77,8 +77,9 @@ let rec list_try_compile f = function
   | [] -> anomaly "try_find_f"
   | h::t ->
       try f h
-      with UserError _ | TypeError _ | PretypeError _
-	| Loc.Exc_located (_,(UserError _ | TypeError _ | PretypeError _)) ->
+      with UserError _ | TypeError _ | PretypeError _ | PatternMatchingError _
+	| Loc.Exc_located
+	    (_, (UserError _ | TypeError _ | PretypeError _ | PatternMatchingError _)) ->
 	    list_try_compile f t
 
 let force_name =

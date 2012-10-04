@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -39,6 +39,10 @@ val comments : ((int * int) * string) list ref
 (** {6 Concatenation. } *)
 
 val (++) : std_ppcmds -> std_ppcmds -> std_ppcmds
+
+(** {6 Evaluation. } *)
+
+val eval_ppcmds : std_ppcmds -> std_ppcmds
 
 (** {6 Derived commands. } *)
 
@@ -112,5 +116,8 @@ val msgnl : std_ppcmds -> unit
 val msgerr : std_ppcmds -> unit
 val msgerrnl : std_ppcmds -> unit
 val msg_warning : std_ppcmds -> unit
+
+(** Same specific display in emacs as warning, but without the "Warning:" **)
+val msg_debug : std_ppcmds -> unit
 
 val string_of_ppcmds : std_ppcmds -> string

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -450,12 +450,6 @@ let is_instance = function
       is_class (IndRef ind)
   | _ -> false
 
-let is_implicit_arg k =
-  match k with
-      ImplicitArg (ref, (n, id), b) -> true
-    | InternalHole -> true
-    | _ -> false
-
 
 (* To embed a boolean for resolvability status.
    This is essentially a hack to mark which evars correspond to
@@ -473,26 +467,36 @@ let is_resolvable evi =
   assert (evi.evar_body = Evar_empty);
   Option.default true (resolvable.get evi.evar_extra)
 
-let mark_unresolvable_undef evi =
-  let t = resolvable.set false evi.evar_extra in
+let mark_resolvability_undef b evi =
+  let t = resolvable.set b evi.evar_extra in
   { evi with evar_extra = t }
 
-let mark_unresolvable evi =
+let mark_resolvability b evi =
   assert (evi.evar_body = Evar_empty);
-  mark_unresolvable_undef evi
+  mark_resolvability_undef b evi
 
-let mark_unresolvables sigma =
+let mark_unresolvable evi = mark_resolvability false evi
+let mark_resolvable evi = mark_resolvability true evi
+
+let mark_resolvability b sigma =
   Evd.fold_undefined (fun ev evi evs ->
-    Evd.add evs ev (mark_unresolvable_undef evi))
+    Evd.add evs ev (mark_resolvability_undef b evi))
     sigma (Evd.defined_evars sigma)
+
+let mark_unresolvables sigma = mark_resolvability false sigma
 
 let has_typeclasses evd =
   Evd.fold_undefined (fun ev evi has -> has ||
-    (is_class_evar evd evi && is_resolvable evi))
+    (is_resolvable evi && is_class_evar evd evi))
     evd false
 
 let solve_instanciations_problem = ref (fun _ _ _ _ _ -> assert false)
 
-let resolve_typeclasses ?(onlyargs=false) ?(split=true) ?(fail=true) env evd =
+type evar_filter = hole_kind -> bool
+
+let no_goals = function GoalEvar -> false | _ -> true
+let all_evars _ = true
+
+let resolve_typeclasses ?(filter=no_goals) ?(split=true) ?(fail=true) env evd =
   if not (has_typeclasses evd) then evd
-  else !solve_instanciations_problem env evd onlyargs split fail
+  else !solve_instanciations_problem env evd filter split fail

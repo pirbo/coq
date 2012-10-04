@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -247,6 +247,7 @@ let declare_option cast uncast
       declare_object {(default_object ("G  "^nickname key)) with
 		       cache_function = (fun (_,v) -> write v);
 		       classify_function = (fun v -> Substitute v);
+		       subst_function = (fun (_,v) -> v);
 		       discharge_function = (fun (_,v) -> Some v);
 		       load_function = (fun _ (_,v) -> write v)}
     in

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -87,7 +87,11 @@ let interp_definition bl red_option c ctypopt =
 	let typ = nf_evar !evdref (it_mkProd_or_LetIn ty ctx) in
 	check_evars env Evd.empty !evdref body;
 	check_evars env Evd.empty !evdref typ;
-	imps1@(Impargs.lift_implicits nb_args imps2),
+	(* Check that all implicit arguments inferable from the term is inferable from the type *)
+	if not (try List.for_all (fun (key,va) -> List.assoc key impsty = va) imps2 with Not_found -> false)
+	then warn (str "Implicit arguments declaration relies on type." ++
+		     spc () ++ str "The term declares more implicits than the type here.");
+	imps1@(Impargs.lift_implicits nb_args impsty),
 	{ const_entry_body = body;
           const_entry_secctx = None;
 	  const_entry_type = Some typ;
@@ -250,7 +254,7 @@ let interp_mutual_inductive (paramsl,indl) notations finite =
   let mldatas = List.map2 (mk_mltype_data evdref env_params params) arities indnames in
 
   let constructors =
-    States.with_state_protection (fun () ->
+    Metasyntax.with_syntax_protection (fun () ->
      (* Temporary declaration of notations and scopes *)
      List.iter (Metasyntax.set_notation_for_interpretation impls) notations;
      (* Interpret the constructor types *)
@@ -259,7 +263,7 @@ let interp_mutual_inductive (paramsl,indl) notations finite =
 
   (* Instantiate evars and check all are resolved *)
   let evd = consider_remaining_unif_problems env_params !evdref in
-  let evd = Typeclasses.resolve_typeclasses ~onlyargs:false ~fail:true env_params evd in
+  let evd = Typeclasses.resolve_typeclasses ~filter:(Typeclasses.no_goals) ~fail:true env_params evd in
   let sigma = evd in
   let constructors = List.map (fun (idl,cl,impsl) -> (idl,List.map (nf_evar sigma) cl,impsl)) constructors in
   let ctx_params = Sign.map_rel_context (nf_evar sigma) ctx_params in
@@ -290,17 +294,14 @@ let interp_mutual_inductive (paramsl,indl) notations finite =
     mind_entry_inds = entries },
     impls
 
-let eq_constr_expr c1 c2 =
-  try let _ = Constrextern.check_same_type c1 c2 in true with _ -> false
-
 (* Very syntactical equality *)
 let eq_local_binder d1 d2 = match d1,d2 with
   | LocalRawAssum (nal1,k1,c1), LocalRawAssum (nal2,k2,c2) ->
       List.length nal1 = List.length nal2 && k1 = k2 &&
       List.for_all2 (fun (_,na1) (_,na2) -> na1 = na2) nal1 nal2 &&
-      eq_constr_expr c1 c2
+      Constrextern.is_same_type c1 c2
   | LocalRawDef ((_,id1),c1), LocalRawDef ((_,id2),c2) ->
-      id1 = id2 && eq_constr_expr c1 c2
+      id1 = id2 && Constrextern.is_same_type c1 c2
   | _ ->
       false
 
@@ -459,12 +460,12 @@ type structured_fixpoint_expr = {
 let interp_fix_context evdref env isfix fix =
   let before, after = if isfix then split_at_annot fix.fix_binders fix.fix_annot else [], fix.fix_binders in
   let impl_env, ((env', ctx), imps) = interp_context_evars evdref env before in
-  let _, ((env'', ctx'), imps') = interp_context_evars ~impl_env evdref env' after in
+  let impl_env', ((env'', ctx'), imps') = interp_context_evars ~impl_env evdref env' after in
   let annot = Option.map (fun _ -> List.length (assums_of_rel_context ctx)) fix.fix_annot in
-    ((env'', ctx' @ ctx), imps @ imps', annot)
-      
-let interp_fix_ccl evdref (env,_) fix =
-  interp_type_evars evdref env fix.fix_type
+    ((env'', ctx' @ ctx), (impl_env',imps @ imps'), annot)
+
+let interp_fix_ccl evdref impls (env,_) fix =
+  interp_type_evars_impls ~impls ~evdref ~fail_evar:false env fix.fix_type
 
 let interp_fix_body evdref env_rec impls (_,ctx) fix ccl =
   Option.map (fun body ->
@@ -514,11 +515,15 @@ let interp_recursive isfix fixl notations =
 
   (* Interp arities allowing for unresolved types *)
   let evdref = ref Evd.empty in
-  let fixctxs, fiximps, fixannots =
+  let fixctxs, fiximppairs, fixannots =
     list_split3 (List.map (interp_fix_context evdref env isfix) fixl) in
-  let fixccls = List.map2 (interp_fix_ccl evdref) fixctxs fixl in
+  let fixctximpenvs, fixctximps = List.split fiximppairs in
+  let fixccls,fixcclimps = List.split (list_map3 (interp_fix_ccl evdref) fixctximpenvs fixctxs fixl) in
   let fixtypes = List.map2 build_fix_type fixctxs fixccls in
   let fixtypes = List.map (nf_evar !evdref) fixtypes in
+  let fiximps = list_map3
+    (fun ctximps cclimps (_,ctx) -> ctximps@(Impargs.lift_implicits (List.length ctx) cclimps))
+    fixctximps fixcclimps fixctxs in
   let env_rec = push_named_types env fixnames fixtypes in
 
   (* Get interpretation metadatas *)
@@ -526,9 +531,11 @@ let interp_recursive isfix fixl notations =
 
   (* Interp bodies with rollback because temp use of notations/implicit *)
   let fixdefs =
-    States.with_state_protection (fun () ->
+    Metasyntax.with_syntax_protection (fun () ->
       List.iter (Metasyntax.set_notation_for_interpretation impls) notations;
-      list_map3 (interp_fix_body evdref env_rec impls) fixctxs fixl fixccls)
+      list_map4
+	(fun fixctximpenv -> interp_fix_body evdref env_rec (Idmap.fold Idmap.add fixctximpenv impls))
+	fixctximpenvs fixctxs fixl fixccls)
       () in
 
   (* Instantiate evars and check all are resolved *)
@@ -536,7 +543,7 @@ let interp_recursive isfix fixl notations =
   let fixdefs = List.map (Option.map (nf_evar evd)) fixdefs in
   let fixtypes = List.map (nf_evar evd) fixtypes in
   let fixctxnames = List.map (fun (_,ctx) -> List.map pi1 ctx) fixctxs in
-  let evd = Typeclasses.resolve_typeclasses ~onlyargs:false ~fail:true env evd in
+  let evd = Typeclasses.resolve_typeclasses ~filter:Typeclasses.no_goals ~fail:true env evd in
   List.iter (Option.iter (check_evars env_rec Evd.empty evd)) fixdefs;
   List.iter (check_evars env Evd.empty evd) fixtypes;
   if not (List.mem None fixdefs) then begin

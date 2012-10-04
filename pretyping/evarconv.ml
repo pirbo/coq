@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -195,7 +195,7 @@ let rec evar_conv_x ts env evd pbty term1 term2 =
           evar_eqappr_x ts env evd pbty
             (decompose_app term1) (decompose_app term2)
 
-and evar_eqappr_x ?(rhs_is_stuck_proj = false)
+and evar_eqappr_x ?(rhs_is_already_stuck = false)
   ts env evd pbty (term1,l1 as appr1) (term2,l2 as appr2) =
   (* Evar must be undefined since we have flushed evars *)
   match (flex_kind_of_term term1 l1, flex_kind_of_term term2 l2) with
@@ -324,13 +324,25 @@ and evar_eqappr_x ?(rhs_is_stuck_proj = false)
           (* heuristic: unfold second argument first, exception made
              if the first argument is a beta-redex (expand a constant
              only if necessary) or the second argument is potentially
-             usable as a canonical projection *)
-          let rhs_is_stuck_proj =
-            rhs_is_stuck_proj || is_open_canonical_projection env i appr2 in
-	  if isLambda flex1 || rhs_is_stuck_proj then
+             usable as a canonical projection or canonical value *)
+          let rec is_unnamed (hd, args) = match kind_of_term hd with
+            | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) -> false
+            | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
+            | Evar _ -> false (* immediate solution without Canon Struct *)
+            | Lambda _ -> assert(args = []); true
+            | LetIn (_,b,_,c) -> 
+                is_unnamed (evar_apprec ts env i args (subst1 b c))
+            | App _| Cast _ -> assert false in
+          let rhs_is_stuck_and_unnamed () =
+            match eval_flexible_term ts env flex2 with
+            | None -> false
+            | Some v2 -> is_unnamed (evar_apprec ts env i l2 v2) in
+          let rhs_is_already_stuck =
+            rhs_is_already_stuck || rhs_is_stuck_and_unnamed () in
+	  if isLambda flex1 || rhs_is_already_stuck then
 	    match eval_flexible_term ts env flex1 with
 	    | Some v1 ->
-		evar_eqappr_x ~rhs_is_stuck_proj 
+		evar_eqappr_x ~rhs_is_already_stuck 
                   ts env i pbty (evar_apprec ts env i l1 v1) appr2
 	    | None ->
 		match eval_flexible_term ts env flex2 with
@@ -544,7 +556,7 @@ and conv_record trs env evd (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) 
     (fun i -> evar_conv_x trs env i CONV c1 (applist (c,(List.rev ks))));
     (fun i -> ise_list2 i (fun i -> evar_conv_x trs env i CONV) ts ts1)]
 
-(* getting rid of the optional argument rhs_is_stuck_proj *)
+(* getting rid of the optional argument rhs_is_already_stuck *)
 let evar_eqappr_x ts env evd pbty appr1 appr2 =
   evar_eqappr_x ts env evd pbty appr1 appr2
 
@@ -567,8 +579,8 @@ let choose_less_dependent_instance evk evd term args =
   let evi = Evd.find_undefined evd evk in
   let subst = make_pure_subst evi args in
   let subst' = List.filter (fun (id,c) -> eq_constr c term) subst in
-  if subst' = [] then error "Too complex unification problem." else
-  Evd.define evk (mkVar (fst (List.hd subst'))) evd
+  if subst' = [] then evd, false else
+  Evd.define evk (mkVar (fst (List.hd subst'))) evd, true
 
 let apply_on_subterm f c t =
   let rec applyrec (k,c as kc) t =
@@ -582,17 +594,19 @@ let apply_on_subterm f c t =
   in
   applyrec (0,c) t
 
-let filter_possible_projections c args =
+let filter_possible_projections c ty ctxt args =
   let fv1 = free_rels c in
   let fv2 = collect_vars c in
-  List.map (fun a ->
+  let tyvars = collect_vars ty in
+  List.map2 (fun (id,_,_) a ->
     a == c ||
     (* Here we make an approximation, for instance, we could also be *)
     (* interested in finding a term u convertible to c such that a occurs *)
     (* in u *)
     isRel a && Intset.mem (destRel a) fv1 ||
-    isVar a && Idset.mem (destVar a) fv2)
-    args
+    isVar a && Idset.mem (destVar a) fv2 ||
+    Idset.mem id tyvars)
+    ctxt args
 
 let initial_evar_data evi =
   let ids = List.map pi1 (evar_context evi) in
@@ -629,16 +643,17 @@ let second_order_matching ts env_rhs evd (evk,args) argoccs rhs =
   let instance = List.map mkVar (List.map pi1 ctxt) in
 
   let rec make_subst = function
-  | (id,_,t)::ctxt, c::l, occs::occsl when isVarId id c ->
+  | (id,_,t)::ctxt', c::l, occs::occsl when isVarId id c ->
       if occs<>None then
         error "Cannot force abstraction on identity instance."
       else
-        make_subst (ctxt,l,occsl)
-  | (id,_,t)::ctxt, c::l, occs::occsl ->
+        make_subst (ctxt',l,occsl)
+  | (id,_,t)::ctxt', c::l, occs::occsl ->
       let evs = ref [] in
-      let filter = List.map2 (&&) filter (filter_possible_projections c args) in
       let ty = Retyping.get_type_of env_rhs evd c in
-      (id,t,c,ty,evs,filter,occs) :: make_subst (ctxt,l,occsl)
+      let filter' = filter_possible_projections c ty ctxt args in
+      let filter = List.map2 (&&) filter filter' in
+      (id,t,c,ty,evs,filter,occs) :: make_subst (ctxt',l,occsl)
   | [], [], [] -> []
   | _ -> anomaly "Signature, instance and occurrences list do not match" in
 
@@ -718,12 +733,18 @@ let apply_conversion_problem_heuristic ts env evd pbty t1 t2 =
       & array_for_all (fun a -> eq_constr a term2 or isEvar a) args1 ->
       (* The typical kind of constraint coming from pattern-matching return
          type inference *)
-      choose_less_dependent_instance evk1 evd term2 args1, true
+    choose_less_dependent_instance evk1 evd term2 args1
   | (Rel _|Var _), Evar (evk2,args2) when l1 = [] & l2 = []
       & array_for_all (fun a -> eq_constr a term1 or isEvar a) args2 ->
       (* The typical kind of constraint coming from pattern-matching return
          type inference *)
-      choose_less_dependent_instance evk2 evd term1 args2, true
+    choose_less_dependent_instance evk2 evd term1 args2
+  | Evar (evk1,args1), Evar (evk2,args2) when evk1 = evk2 ->
+      let f env evd pbty x y = (evd,is_trans_fconv pbty ts env evd x y) in
+      solve_refl ~can_drop:true f env evd evk1 args1 args2, true
+  | Evar ev1, Evar ev2 ->
+      solve_evar_evar ~force:true
+        (evar_define (evar_conv_x ts)) (evar_conv_x ts) env evd ev1 ev2, true
   | Evar ev1,_ when List.length l1 <= List.length l2 ->
       (* On "?n t1 .. tn = u u1 .. u(n+p)", try first-order unification *)
       (* and otherwise second-order matching *)
@@ -753,22 +774,76 @@ let check_problems_are_solved env evd =
   | (pbty,env,t1,t2)::_ -> Pretype_errors.error_cannot_unify env evd (t1, t2)
   | _ -> ()
 
+let max_undefined_with_candidates evd =
+  (* If evar were ordered with highest index first, fold_undefined
+     would be going decreasingly and we could use fold_undefined to
+     find the undefined evar of maximum index (alternatively,
+     max_bindings from ocaml 3.12 could be used); instead we traverse
+     the whole map *)
+  let l = Evd.fold_undefined
+    (fun evk ev_info evars ->
+        match ev_info.evar_candidates with
+        | None -> evars
+        | Some l -> (evk,ev_info,l)::evars) evd [] in
+  match l with
+  | [] -> None
+  | a::l -> Some (list_last (a::l))
+
+let rec solve_unconstrained_evars_with_canditates evd =
+  (* max_undefined is supposed to return the most recent, hence
+     possibly most dependent evar *)
+  match max_undefined_with_candidates evd with
+  | None -> evd
+  | Some (evk,ev_info,l) ->
+      let rec aux = function
+      | [] -> error "Unsolvable existential variables."
+      | a::l ->
+          try
+            let conv_algo = evar_conv_x full_transparent_state in
+            let evd = check_evar_instance evd evk a conv_algo in
+            let evd = Evd.define evk a evd in
+            let evd,b = reconsider_conv_pbs conv_algo evd in
+            if b then solve_unconstrained_evars_with_canditates evd
+            else aux l
+          with e when Pretype_errors.precatchable_exception e ->
+            aux l in
+      (* List.rev is there to favor most dependent solutions *)
+      (* and favor progress when used with the refine tactics *)
+      let evd = aux (List.rev l) in
+      solve_unconstrained_evars_with_canditates evd
+
+let solve_unconstrained_impossible_cases evd =
+  Evd.fold_undefined (fun evk ev_info evd' ->
+    match ev_info.evar_source with
+    | _,ImpossibleCase -> Evd.define evk (j_type (coq_unit_judge ())) evd'
+    | _ -> evd') evd evd
+
+
 let consider_remaining_unif_problems ?(ts=full_transparent_state) env evd =
-  let (evd,pbs) = extract_all_conv_pbs evd in
-  let heuristic_solved_evd = List.fold_left
-    (fun evd (pbty,env,t1,t2) ->
+  let evd = solve_unconstrained_evars_with_canditates evd in
+  let rec aux evd pbs progress stuck =
+    match pbs with
+    | (pbty,env,t1,t2 as pb) :: pbs ->
       let evd', b = apply_conversion_problem_heuristic ts env evd pbty t1 t2 in
-	if b then evd' else Pretype_errors.error_cannot_unify env evd (t1, t2))
-    evd pbs in
+	if b then 
+	  let (evd', rest) = extract_all_conv_pbs evd' in
+	    if rest = [] then aux evd' pbs true stuck
+	    else (* Unification got actually stuck, postpone *)
+	      aux evd pbs progress (pb :: stuck)
+	else Pretype_errors.error_cannot_unify env evd (t1, t2)
+    | _ -> 
+	if progress then aux evd stuck false []
+	else 
+	  match stuck with
+	  | [] -> (* We're finished *) evd
+	  | (pbty,env,t1,t2) :: _ ->
+	      (* There remains stuck problems *)
+	      Pretype_errors.error_cannot_unify env evd (t1, t2)
+  in
+  let (evd,pbs) = extract_all_conv_pbs evd in
+  let heuristic_solved_evd = aux evd pbs false [] in
   check_problems_are_solved env heuristic_solved_evd;
-  Evd.fold_undefined (fun ev ev_info evd' -> match ev_info.evar_source with
-			  |_,ImpossibleCase -> 
-			     Evd.define ev (j_type (coq_unit_judge ())) evd'
-			  |_ ->
-                             match ev_info.evar_candidates with
-                             | Some (a::l) -> Evd.define ev a evd'
-                             | Some [] -> error "Unsolvable existential variables"
-                             | None -> evd') heuristic_solved_evd heuristic_solved_evd
+  solve_unconstrained_impossible_cases heuristic_solved_evd
 
 (* Main entry points *)
 
@@ -782,12 +857,12 @@ let the_conv_x_leq ?(ts=full_transparent_state) env t1 t2 evd =
       (evd', true) -> evd'
     | _ -> raise Reduction.NotConvertible
 
-let e_conv ?(ts=full_transparent_state) env evd t1 t2 =
-  match evar_conv_x ts env !evd CONV t1 t2 with
-      (evd',true) -> evd := evd'; true
+let e_conv ?(ts=full_transparent_state) env evdref t1 t2 =
+  match evar_conv_x ts env !evdref CONV t1 t2 with
+      (evd',true) -> evdref := evd'; true
     | _ -> false
 
-let e_cumul ?(ts=full_transparent_state) env evd t1 t2 =
-  match evar_conv_x ts env !evd CUMUL t1 t2 with
-      (evd',true) -> evd := evd'; true
+let e_cumul ?(ts=full_transparent_state) env evdref t1 t2 =
+  match evar_conv_x ts env !evdref CUMUL t1 t2 with
+      (evd',true) -> evdref := evd'; true
     | _ -> false

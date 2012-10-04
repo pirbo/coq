@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -35,13 +35,19 @@ let delayed_emacs_cmd s =
 (**********************************************************************)
 (** Terms                                                             *)
 
-  (* [at_top] means ids of env must be avoided in bound variables *)
-let pr_constr_core at_top env t =
-  pr_constr_expr (extern_constr at_top env t)
-let pr_lconstr_core at_top env t =
-  pr_lconstr_expr (extern_constr at_top env t)
+(* [goal_concl_style] means that all names of goal/section variables
+   and all names of rel variables (if any) in the given env and all short
+   names of global definitions of the current module must be avoided while
+   printing bound variables.
+   Otherwise, short names of global definitions are printed qualified
+   and only names of goal/section variables and rel names that do
+   _not_ occur in the scope of the binder to be printed are avoided. *)
 
-let pr_lconstr_env_at_top env = pr_lconstr_core true env
+let pr_constr_core goal_concl_style env t =
+  pr_constr_expr (extern_constr goal_concl_style env t)
+let pr_lconstr_core goal_concl_style env t =
+  pr_lconstr_expr (extern_constr goal_concl_style env t)
+
 let pr_lconstr_env env = pr_lconstr_core false env
 let pr_constr_env env = pr_constr_core false env
 
@@ -68,12 +74,12 @@ let pr_lconstr_under_binders_env = pr_constr_under_binders_env_gen pr_lconstr_en
 let pr_constr_under_binders c = pr_constr_under_binders_env (Global.env()) c
 let pr_lconstr_under_binders c = pr_lconstr_under_binders_env (Global.env()) c
 
-let pr_type_core at_top env t =
-  pr_constr_expr (extern_type at_top env t)
-let pr_ltype_core at_top env t =
-  pr_lconstr_expr (extern_type at_top env t)
+let pr_type_core goal_concl_style env t =
+  pr_constr_expr (extern_type goal_concl_style env t)
+let pr_ltype_core goal_concl_style env t =
+  pr_lconstr_expr (extern_type goal_concl_style env t)
 
-let pr_ltype_env_at_top env = pr_ltype_core true env
+let pr_goal_concl_style_env env = pr_ltype_core true env
 let pr_ltype_env env = pr_ltype_core false env
 let pr_type_env env = pr_type_core false env
 
@@ -262,7 +268,7 @@ let default_pr_goal gs =
   let preamb,thesis,penv,pc =
     mt (), mt (),
     pr_context_of env,
-    pr_ltype_env_at_top env (Goal.V82.concl sigma g)
+    pr_goal_concl_style_env env (Goal.V82.concl sigma g)
   in
     preamb ++
     str"  " ++ hv 0 (penv ++ fnl () ++
@@ -279,7 +285,7 @@ let pr_goal_tag g =
 let pr_concl n sigma g =
   let (g,sigma) = Goal.V82.nf_evar sigma g in
   let env = Goal.V82.env sigma g in
-  let pc = pr_ltype_env_at_top env (Goal.V82.concl sigma g) in
+  let pc = pr_goal_concl_style_env env (Goal.V82.concl sigma g) in
     str (emacs_str "")  ++
       str "subgoal " ++ int n ++ pr_goal_tag g ++
       str " is:" ++ cut () ++ str" "  ++ pc
@@ -327,7 +333,7 @@ let default_pr_subgoal n sigma =
 
 let emacs_print_dependent_evars sigma seeds =
   let evars () =
-    let evars = Evarutil.evars_of_evars_in_types_of_list sigma seeds in
+    let evars = Evarutil.gather_dependent_evars sigma seeds in
     let evars =
       Intmap.fold begin fun e i s ->
 	let e' = str (string_of_existential e) in
@@ -347,8 +353,34 @@ let emacs_print_dependent_evars sigma seeds =
 
 (* Print open subgoals. Checks for uninstantiated existential variables *)
 (* spiwack: [seeds] is for printing dependent evars in emacs mode. *)
-let default_pr_subgoals close_cmd sigma seeds = function
-  | [] ->
+(* spiwack: [pr_first] is true when the first goal must be singled out
+   and printed in its entirety. *)
+(* courtieu: in emacs mode, even less cases where the first goal is printed
+   in its entirety *)
+let default_pr_subgoals ?(pr_first=true) close_cmd sigma seeds stack goals =
+  let rec print_stack a = function
+    | [] -> Pp.int a
+    | b::l -> Pp.int a ++ str"-" ++ print_stack b l
+  in
+  let print_unfocused a l =
+    str"unfocused: " ++ print_stack a l
+  in
+  let rec pr_rec n = function
+    | [] -> (mt ())
+    | g::rest ->
+        let pc = pr_concl n sigma g in
+        let prest = pr_rec (n+1) rest in
+        (cut () ++ pc ++ prest)
+  in
+  let print_multiple_goals g l =
+    if pr_first then
+      default_pr_goal { it = g ; sigma = sigma } ++
+      pr_rec 2 l
+    else 
+      pr_rec 1 (g::l)
+  in
+  match goals,stack with
+  | [],_ ->
       begin
 	match close_cmd with
 	  Some cmd ->
@@ -356,36 +388,43 @@ let default_pr_subgoals close_cmd sigma seeds = function
 	       str "." ++ fnl ())
 	| None ->
 	    let exl = Evarutil.non_instantiated sigma in
-	      if exl = [] then
-		(str"No more subgoals." ++ fnl ()
-		 ++ emacs_print_dependent_evars sigma seeds)
-	      else
-		let pei = pr_evars_int 1 exl in
-		  (str "No more subgoals but non-instantiated existential " ++
-		     str "variables:" ++ fnl () ++ (hov 0 pei)
-		   ++ emacs_print_dependent_evars sigma seeds ++ fnl () ++
-                   str "You can use Grab Existential Variables.")
+	    if exl = [] then
+	      (str"No more subgoals."
+	       ++ emacs_print_dependent_evars sigma seeds)
+	    else
+	      let pei = pr_evars_int 1 exl in
+	      (str "No more subgoals but non-instantiated existential " ++
+		 str "variables:" ++ fnl () ++ (hov 0 pei)
+	       ++ emacs_print_dependent_evars sigma seeds ++ fnl () ++
+                 str "You can use Grab Existential Variables.")
       end
-  | [g] ->
+  | [g],[] when not !Flags.print_emacs ->
       let pg = default_pr_goal { it = g ; sigma = sigma } in
       v 0 (
-	str ("1 "^"subgoal") ++ pr_goal_tag g ++ cut () ++ pg
+	str "1 subgoal" ++ pr_goal_tag g ++ cut () ++ pg
 	++ emacs_print_dependent_evars sigma seeds
       )
-  | g1::rest ->
-      let rec pr_rec n = function
-        | [] -> (mt ())
-        | g::rest ->
-            let pc = pr_concl n sigma g in
-            let prest = pr_rec (n+1) rest in
-            (cut () ++ pc ++ prest)
-      in
-      let pg1 = default_pr_goal { it = g1 ; sigma = sigma } in
-      let prest = pr_rec 2 rest in
+  | [g],a::l when not !Flags.print_emacs ->
+      let pg = default_pr_goal { it = g ; sigma = sigma } in
+      v 0 (
+	str "1 focused subgoal (" ++ print_unfocused a l ++ str")" ++ pr_goal_tag g ++ cut () ++ pg
+	++ emacs_print_dependent_evars sigma seeds
+      )
+  | g1::rest,[] ->
+      let goals = print_multiple_goals g1 rest in
       v 0 (
 	int(List.length rest+1) ++ str" subgoals" ++
           str (emacs_str ", subgoal 1") ++ pr_goal_tag g1 ++ cut ()
-	++ pg1 ++ prest ++ fnl ()
+	++ goals
+	++ emacs_print_dependent_evars sigma seeds
+      )
+  | g1::rest,a::l ->
+      let goals = print_multiple_goals g1 rest in
+      v 0 (
+	int(List.length rest+1) ++ str" focused subgoals (" ++
+          print_unfocused a l ++ str")" ++ cut () ++
+          str (emacs_str ", subgoal 1") ++ pr_goal_tag g1 ++ cut ()
+	++ goals
 	++ emacs_print_dependent_evars sigma seeds
       )
 
@@ -394,7 +433,7 @@ let default_pr_subgoals close_cmd sigma seeds = function
 
 
 type printer_pr = {
- pr_subgoals            : string option -> evar_map -> evar list -> goal list -> std_ppcmds;
+ pr_subgoals            : ?pr_first:bool -> string option -> evar_map -> evar list -> int list -> goal list -> std_ppcmds;
  pr_subgoal             : int -> evar_map -> goal list -> std_ppcmds;
  pr_goal                : goal sigma -> std_ppcmds;
 }
@@ -409,7 +448,7 @@ let printer_pr = ref default_printer_pr
 
 let set_printer_pr = (:=) printer_pr
 
-let pr_subgoals x = !printer_pr.pr_subgoals x
+let pr_subgoals ?pr_first x = !printer_pr.pr_subgoals ?pr_first x
 let pr_subgoal  x = !printer_pr.pr_subgoal  x
 let pr_goal     x = !printer_pr.pr_goal     x
 
@@ -417,24 +456,26 @@ let pr_goal     x = !printer_pr.pr_goal     x
 (**********************************************************************)
 
 let pr_open_subgoals () =
+  (* spiwack: it shouldn't be the job of the printer to look up stuff
+     in the [evar_map], I did stuff that way because it was more
+     straightforward, but seriously, [Proof.proof] should return
+     [evar_info]-s instead. *)
   let p = Proof_global.give_me_the_proof () in
-  let { Evd.it = goals ; sigma = sigma } = Proof.V82.subgoals p in
+  let (goals , stack , sigma ) = Proof.proof p in
+  let stack = List.map (fun (l,r) -> List.length l + List.length r) stack in
   let seeds = Proof.V82.top_evars p in
   begin match goals with
   | [] -> let { Evd.it = bgoals ; sigma = bsigma } = Proof.V82.background_subgoals p in
-            begin match bgoals with
-	    | [] -> pr_subgoals None sigma seeds goals
-	    | _ -> pr_subgoals None bsigma seeds bgoals ++ fnl () ++ fnl () ++
-		      str"This subproof is complete, but there are still unfocused goals:"
-		(* spiwack: to stay compatible with the proof general and coqide,
-		    I use print the message after the goal. It would be better to have
-		    something like:
- 		      str"This subproof is complete, but there are still unfocused goals:" 
-		      ++ fnl () ++ fnl () ++ pr_subgoals None bsigma bgoals
-		    instead. But it doesn't quite work.
-		*)
-	    end
-  | _ -> pr_subgoals None sigma seeds goals
+          begin match bgoals with
+	  | [] -> pr_subgoals None sigma seeds stack goals
+	  | _ ->
+	    (* emacs mode: xml-like flag for detecting information message *)
+	    str (emacs_str "<infomsg>") ++
+	    str"This subproof is complete, but there are still unfocused goals."
+	    ++ str (emacs_str "</infomsg>")
+	    ++ fnl () ++ fnl () ++ pr_subgoals ~pr_first:false None bsigma seeds [] bgoals
+	  end
+  | _ -> pr_subgoals None sigma seeds stack goals
   end
 
 let pr_nth_open_subgoal n =

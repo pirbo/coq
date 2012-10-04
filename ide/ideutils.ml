@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -63,28 +63,25 @@ let print_id id =
 let do_convert s =
   Utf8_convert.f
     (if Glib.Utf8.validate s then begin
-       prerr_endline "Input is UTF-8";s
-     end else
-       let from_loc () =
-	 let _,char_set = Glib.Convert.get_charset () in
-	 flash_info
-	   ("Converting from locale ("^char_set^")");
-	 Glib.Convert.convert_with_fallback ~to_codeset:"UTF-8" ~from_codeset:char_set s
-       in
-       let from_manual () =
-	 flash_info
-	   ("Converting from "^ !current.encoding_manual);
-	 Glib.Convert.convert s ~to_codeset:"UTF-8" ~from_codeset:!current.encoding_manual
-       in
-       if !current.encoding_use_utf8 || !current.encoding_use_locale then begin
-	 try
-	   from_loc ()
-	 with _ -> from_manual ()
-       end else begin
-	 try
-	   from_manual ()
-	 with _ -> from_loc ()
-       end)
+      prerr_endline "Input is UTF-8";s
+    end else
+	let from_loc () =
+	  let _,char_set = Glib.Convert.get_charset () in
+	  flash_info
+	    ("Converting from locale ("^char_set^")");
+	  Glib.Convert.convert_with_fallback ~to_codeset:"UTF-8" ~from_codeset:char_set s
+	in
+	let from_manual enc =
+	  flash_info
+	    ("Converting from "^ enc);
+	  Glib.Convert.convert s ~to_codeset:"UTF-8" ~from_codeset:enc
+	in
+	match !current.encoding with
+	  |Preferences.Eutf8 | Preferences.Elocale -> from_loc ()
+	  |Emanual enc ->
+	    try
+	      from_manual enc
+	    with _ -> from_loc ())
 
 let try_convert s =
   try
@@ -96,18 +93,21 @@ Please choose a correct encoding in the preference panel.*)";;
 
 let try_export file_name s =
   try let s =
-    try if !current.encoding_use_utf8 then begin
-      (prerr_endline "UTF-8 is enforced" ;s)
-    end else if !current.encoding_use_locale then begin
-      let is_unicode,char_set = Glib.Convert.get_charset () in
-      if is_unicode then
-	(prerr_endline "Locale is UTF-8" ;s)
-      else
-	(prerr_endline ("Locale is "^char_set);
-	 Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:char_set s)
-    end else
-      (prerr_endline ("Manual charset is "^ !current.encoding_manual);
-       Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:!current.encoding_manual s)
+    try match !current.encoding with
+      |Eutf8 -> begin
+	(prerr_endline "UTF-8 is enforced" ;s)
+      end
+      |Elocale -> begin
+	let is_unicode,char_set = Glib.Convert.get_charset () in
+	if is_unicode then
+	  (prerr_endline "Locale is UTF-8" ;s)
+	else
+	  (prerr_endline ("Locale is "^char_set);
+	   Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:char_set s)
+      end
+      |Emanual enc ->
+	(prerr_endline ("Manual charset is "^ enc);
+       Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:enc s)
     with e -> (prerr_endline ("Error ("^(Printexc.to_string e)^") in transcoding: falling back to UTF-8") ;s)
   in
   let oc = open_out file_name in
@@ -252,14 +252,40 @@ let stock_to_widget ?(size=`DIALOG) s =
   in img#set_stock s;
   img#coerce
 
+let custom_coqtop = ref None
+
+let coqtop_path () =
+  let file = match !custom_coqtop with
+    | Some s -> s
+    | None ->
+      match !current.cmd_coqtop with
+	| Some s -> s
+	| None ->
+	  let prog = String.copy Sys.executable_name in
+	  try
+	    let pos = String.length prog - 6 in
+	    let i = Str.search_backward (Str.regexp_string "coqide") prog pos in
+	    String.blit "coqtop" 0 prog i 6;
+	    prog
+	  with Not_found -> "coqtop"
+  in file
+
 let rec print_list print fmt = function
   | [] -> ()
   | [x] -> print fmt x
   | x :: r -> print fmt x; print_list print fmt r
 
+(* In win32, when a command-line is to be executed via cmd.exe
+   (i.e. Sys.command, Unix.open_process, ...), it cannot contain several
+   quoted "..." zones otherwise some quotes are lost. Solution: we re-quote
+   everything. Reference: http://ss64.com/nt/cmd.html *)
+
+let requote cmd = if Sys.os_type = "Win32" then "\""^cmd^"\"" else cmd
+
 (* TODO: allow to report output as soon as it comes (user-fiendlier
    for long commands like make...) *)
 let run_command f c =
+  let c = requote c in
   let result = Buffer.create 127 in
   let cin,cout,cerr = Unix.open_process_full c (Unix.environment ()) in
   let buff = String.make 127 ' ' in
@@ -279,11 +305,12 @@ let run_command f c =
 
 let browse f url =
   let com = Minilib.subst_command_placeholder !current.cmd_browse url in
-  let s = Sys.command com in
+  let _ = Unix.open_process_out com in ()
+(* This beautiful message will wait for twt ...
   if s = 127 then
     f ("Could not execute\n\""^com^
        "\"\ncheck your preferences for setting a valid browser command\n")
-
+*)
 let doc_url () =
   if !current.doc_url = use_default_doc_url || !current.doc_url = "" then
     let addr = List.fold_left Filename.concat (Coq_config.docdir) ["html";"refman";"index.html"] in

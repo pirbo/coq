@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,7 +12,7 @@
 
 Require Export ZArith_base.
 Require Export Rdefinitions.
-Open Local Scope R_scope.
+Local Open Scope R_scope.
 
 (*********************************************************)
 (** *            Field axioms                            *)
@@ -122,8 +122,8 @@ Arguments INR n%nat.
 Definition IZR (z:Z) : R :=
   match z with
   | Z0 => 0
-  | Zpos n => INR (nat_of_P n)
-  | Zneg n => - INR (nat_of_P n)
+  | Zpos n => INR (Pos.to_nat n)
+  | Zneg n => - INR (Pos.to_nat n)
   end.
 Arguments IZR z%Z.
 

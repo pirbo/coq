@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -252,6 +252,14 @@ let new_instance ?(abstract=false) ?(global=false) ctx (instid, bk, cl) props
 	      let term = Termops.it_mkLambda_or_LetIn def ctx in
 		Some term, termtype
 	in
+	let _ = 
+	  evars := Evarutil.nf_evar_map !evars;
+	  evars := Typeclasses.resolve_typeclasses ~filter:Typeclasses.no_goals ~fail:true
+            env !evars;
+	  (* Try resolving fields that are typeclasses automatically. *)
+	  evars := Typeclasses.resolve_typeclasses ~filter:Typeclasses.all_evars ~fail:false
+	    env !evars
+	in
 	let termtype = Evarutil.nf_evar !evars termtype in
 	let term = Option.map (Evarutil.nf_evar !evars) term in
 	let evm = undefined_evars !evars in
@@ -259,7 +267,6 @@ let new_instance ?(abstract=false) ?(global=false) ctx (instid, bk, cl) props
 	  if Evd.is_empty evm && term <> None then
 	    declare_instance_constant k pri global imps ?hook id (Option.get term) termtype
 	  else begin
-	    evars := Typeclasses.resolve_typeclasses ~onlyargs:true ~fail:true env !evars;
 	    let kind = Decl_kinds.Global, Decl_kinds.DefinitionBody Decl_kinds.Instance in
 	      Flags.silently (fun () ->
 		Lemmas.start_proof id kind termtype (fun _ -> instance_hook k pri global imps ?hook);

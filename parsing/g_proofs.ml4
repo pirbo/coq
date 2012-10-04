@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -23,11 +23,6 @@ let thm_token = G_vernac.thm_token
 GEXTEND Gram
   GLOBAL: command;
 
-  destruct_location :
-  [ [ IDENT "Conclusion"  -> Tacexpr.ConclLocation ()
-    | discard = [ IDENT "Discardable" -> true | -> false ]; "Hypothesis"
-	-> Tacexpr.HypLocation discard ] ]
-  ;
   opt_hintbases:
   [ [ -> []
     | ":"; l = LIST1 [id = IDENT -> id ] -> l ] ]
@@ -58,9 +53,6 @@ GEXTEND Gram
       | IDENT "Defined" -> VernacEndProof (Proved (false,None))
       |	IDENT "Defined"; id=identref ->
 	  VernacEndProof (Proved (false,Some (id,None)))
-      | IDENT "Suspend" -> VernacSuspend
-      | IDENT "Resume" -> VernacResume None
-      | IDENT "Resume"; id = identref -> VernacResume (Some id)
       | IDENT "Restart" -> VernacRestart
       | IDENT "Undo" -> VernacUndo 1
       | IDENT "Undo"; n = natural -> VernacUndo n
@@ -68,9 +60,7 @@ GEXTEND Gram
       | IDENT "Focus" -> VernacFocus None
       | IDENT "Focus"; n = natural -> VernacFocus (Some n)
       | IDENT "Unfocus" -> VernacUnfocus
-      | IDENT "BeginSubproof" -> VernacSubproof None
-      | IDENT "BeginSubproof"; n = natural -> VernacSubproof (Some n)
-      | IDENT "EndSubproof" -> VernacEndSubproof
+      | IDENT "Unfocused" -> VernacUnfocused
       | IDENT "Show" -> VernacShow (ShowGoal OpenSubgoals)
       | IDENT "Show"; n = natural -> VernacShow (ShowGoal (NthGoal n))
       | IDENT "Show"; IDENT "Goal"; n = string ->
@@ -118,14 +108,7 @@ GEXTEND Gram
       | IDENT "Constructors"; lc = LIST1 global -> HintsConstructors lc
       | IDENT "Extern"; n = natural; c = OPT constr_pattern ; "=>";
           tac = tactic ->
-	  HintsExtern (n,c,tac)
-      | IDENT "Destruct";
-          id = ident; ":=";
-          pri = natural;
-          dloc = destruct_location;
-          hyptyp = constr_pattern;
-          "=>"; tac = tactic ->
-            HintsDestruct(id,pri,dloc,hyptyp,tac) ] ]
+	  HintsExtern (n,c,tac) ] ]
     ;
   constr_body:
     [ [ ":="; c = lconstr -> c

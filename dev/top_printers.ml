@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -62,7 +62,7 @@ let pptype = (fun x -> try pp(pr_ltype x) with e -> pp (str (Printexc.to_string 
 
 let ppfconstr c = ppconstr (Closure.term_of_fconstr c)
 
-let ppbigint n = pp (Bigint.pr_bigint n);;
+let ppbigint n = pp (str (Bigint.to_string n));;
 
 let prset pr l = str "[" ++ hov 0 (prlist_with_sep spc pr l) ++ str "]"
 let ppintset l = pp (prset int (Intset.elements l))

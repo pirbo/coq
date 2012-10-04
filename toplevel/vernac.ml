@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -26,6 +26,30 @@ exception DuringCommandInterp of Util.loc * exn
 
 exception HasNotFailed
 
+(* When doing Load on a file, two behaviors are possible:
+
+   - either the history stack is grown by only one command,
+     the "Load" itself. This is mandatory for command-counting
+     interfaces (CoqIDE).
+
+   - either each individual sub-commands in the file is added
+     to the history stack. This allows commands like Show Script
+     to work across the loaded file boundary (cf. bug #2820).
+
+   The best of the two could probably be combined someday,
+   in the meanwhile we use a flag. *)
+
+let atomic_load = ref true
+
+let _ =
+  Goptions.declare_bool_option
+    { Goptions.optsync  = true;
+      Goptions.optdepr  = false;
+      Goptions.optname  = "atomic registration of commands in a Load";
+      Goptions.optkey   = ["Atomic";"Load"];
+      Goptions.optread  = (fun () -> !atomic_load);
+      Goptions.optwrite = ((:=) atomic_load) }
+
 (* Specifies which file is read. The intermediate file names are
    discarded here. The Drop exception becomes an error. We forget
    if the error ocurred during interpretation or not *)
@@ -50,6 +74,8 @@ let real_error = function
   | Loc.Exc_located (_, e) -> e
   | Error_in_file (_, _, e) -> e
   | e -> e
+
+let user_error loc s = Util.user_err_loc (loc,"_",str s)
 
 (** Timeout handling *)
 
@@ -97,6 +123,18 @@ let restore_timeout = function
     (* restore handler *)
     Sys.set_signal Sys.sigalrm psh
 
+
+(* Open an utf-8 encoded file and skip the byte-order mark if any *)
+
+let open_utf8_file_in fname =
+  let is_bom s =
+    Char.code s.[0] = 0xEF && Char.code s.[1] = 0xBB && Char.code s.[2] = 0xBF
+  in
+  let in_chan = open_in fname in
+  let s = "   " in
+  if input in_chan s 0 3 < 3 || not (is_bom s) then seek_in in_chan 0;
+  in_chan
+
 (* Opening and closing a channel. Open it twice when verbose: the first
    channel is used to read the commands, and the second one to print them.
    Note: we could use only one thanks to seek_in, but seeking on and on in
@@ -106,8 +144,9 @@ let open_file_twice_if verbosely fname =
   let paths = Library.get_load_paths () in
   let _,longfname =
     find_file_in_path ~warn:(Flags.is_verbose()) paths fname in
-  let in_chan = open_in longfname in
-  let verb_ch = if verbosely then Some (open_in longfname) else None in
+  let in_chan = open_utf8_file_in longfname in
+  let verb_ch =
+    if verbosely then Some (open_utf8_file_in longfname) else None in
   let po = Pcoq.Gram.parsable (Stream.of_channel in_chan) in
   (in_chan, longfname, (po, verb_ch))
 
@@ -166,7 +205,7 @@ let pr_new_syntax loc ocom =
   States.unfreeze fs;
   Format.set_formatter_out_channel stdout
 
-let rec vernac_com interpfun (loc,com) =
+let rec vernac_com interpfun checknav (loc,com) =
   let rec interp = function
     | VernacLoad (verbosely, fname) ->
 	let fname = expand_path_macros fname in
@@ -204,8 +243,10 @@ let rec vernac_com interpfun (loc,com) =
 
     | VernacList l -> List.iter (fun (_,v) -> interp v) l
 
+    | v when !just_parsing -> ()
+
     | VernacFail v ->
-	if not !just_parsing then begin try
+	begin try
 	  (* If the command actually works, ignore its effects on the state *)
 	  States.with_state_protection
 	    (fun v -> interp v; raise HasNotFailed) v
@@ -221,22 +262,17 @@ let rec vernac_com interpfun (loc,com) =
 	end
 
     | VernacTime v ->
-	if not !just_parsing then begin
 	  let tstart = System.get_time() in
           interp v;
 	  let tend = System.get_time() in
           msgnl (str"Finished transaction in " ++
                    System.fmt_time_difference tstart tend)
-	end
 
     | VernacTimeout(n,v) ->
-	if not !just_parsing then begin
 	  current_timeout := Some n;
 	  interp v
-	end
 
     | v ->
-        if not !just_parsing then
 	  let psh = default_set_timeout () in
 	  try
             States.with_heavy_rollback interpfun
@@ -245,6 +281,7 @@ let rec vernac_com interpfun (loc,com) =
 	  with e -> restore_timeout psh; raise e
   in
     try
+      checknav loc com;
       current_timeout := !default_timeout;
       if do_beautify () then pr_new_syntax loc (Some com);
       interp com
@@ -258,13 +295,25 @@ and read_vernac_file verbosely s =
     if verbosely then Vernacentries.interp
     else Flags.silently Vernacentries.interp
   in
+  let checknav loc cmd =
+    if is_navigation_vernac cmd && not (is_reset cmd) then
+	user_error loc "Navigation commands forbidden in files"
+  in
+  let end_inner_command cmd =
+    if !atomic_load || is_reset cmd then
+      Lib.mark_end_of_command () (* for Reset in coqc or coqtop -l *)
+    else
+      Backtrack.mark_command cmd; (* for Show Script, cf bug #2820 *)
+  in
   let (in_chan, fname, input) =
     open_file_twice_if verbosely s in
   try
     (* we go out of the following infinite loop when a End_of_input is
      * raised, which means that we raised the end of the file being loaded *)
     while true do
-      vernac_com interpfun (parse_sentence input);
+      let loc_ast = parse_sentence input in
+      vernac_com interpfun checknav loc_ast;
+      end_inner_command (snd loc_ast);
       pp_flush ()
     done
   with e ->   (* whatever the exception *)
@@ -275,15 +324,21 @@ and read_vernac_file verbosely s =
           if do_beautify () then pr_new_syntax (make_loc (max_int,max_int)) None
       | _ -> raise_with_file fname e
 
+(** [eval_expr : ?preserving:bool -> Pp.loc * Vernacexpr.vernac_expr -> unit]
+   It executes one vernacular command. By default the command is
+   considered as non-state-preserving, in which case we add it to the
+   Backtrack stack (triggering a save of a frozen state and the generation
+   of a new state label). An example of state-preserving command is one coming
+   from the query panel of Coqide. *)
 
-(* eval_expr : Util.loc * Vernacexpr.vernac_expr -> unit
- * execute one vernacular command. Marks the end of the command in the lib_stk
- * with a new label to make vernac undoing easier. Also freeze state to speed up
- * backtracking. *)
-let eval_expr last =
-  vernac_com Vernacentries.interp last;
-  Lib.add_frozen_state();
-  Lib.mark_end_of_command()
+let checknav loc ast =
+  if is_deep_navigation_vernac ast then
+    user_error loc "Navigation commands forbidden in nested commands"
+
+let eval_expr ?(preserving=false) loc_ast =
+  vernac_com Vernacentries.interp checknav loc_ast;
+  if not preserving && not (is_navigation_vernac (snd loc_ast)) then
+    Backtrack.mark_command (snd loc_ast)
 
 (* raw_do_vernac : Pcoq.Gram.parsable -> unit
  * vernac_step . parse_sentence *)
@@ -301,6 +356,7 @@ let load_vernac verb file =
   chan_beautify :=
     if !Flags.beautify_file then open_out (file^beautify_suffix) else stdout;
   try
+    Lib.mark_end_of_command (); (* in case we're still in coqtop init *)
     read_vernac_file verb file;
     if !Flags.beautify_file then close_out !chan_beautify;
   with e ->
@@ -319,5 +375,3 @@ let compile verbosely f =
   if !Flags.xml_export then !xml_end_library ();
   Dumpglob.end_dump_glob ();
   Library.save_library_to ldir (long_f_dot_v ^ "o")
-
-

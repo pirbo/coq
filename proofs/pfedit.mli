@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -85,24 +85,6 @@ val start_proof :
 val restart_proof : unit -> unit
 
 (** {6 ... } *)
-(** [resume_last_proof ()] focus on the last unfocused proof or fails
-   if there is no suspended proofs *)
-
-val resume_last_proof : unit -> unit
-
-(** [resume_proof name] focuses on the proof of name [name] or
-   raises [NoSuchProof] if no proof has name [name]. 
-
-    It doesn't [suspend_proof ()] before. *)
-
-val resume_proof : identifier located -> unit
-
-(** [suspend_proof ()] unfocuses the current focused proof or
-   failed with [UserError] if no proof is currently focused *)
-
-val suspend_proof : unit -> unit
-
-(** {6 ... } *)
 (** [cook_proof opacity] turns the current proof (assumed completed) into
     a constant with its name, kind and possible hook (see [start_proof]);
     it fails if there is no current proof of if it is not completed;
@@ -143,7 +125,9 @@ val current_proof_statement :
 
 val get_current_proof_name : unit -> identifier
 
-(** [get_all_proof_names ()] returns the list of all pending proof names *)
+(** [get_all_proof_names ()] returns the list of all pending proof names.
+    The first name is the current proof, the other names may come in
+    any order. *)
 
 val get_all_proof_names : unit -> identifier list
 

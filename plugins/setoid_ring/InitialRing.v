@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -27,14 +27,14 @@ Definition NotConstant := false.
 Lemma Zsth : Setoid_Theory Z (@eq Z).
 Proof (Eqsth Z).
 
-Lemma Zeqe : ring_eq_ext Zplus Zmult Zopp (@eq Z).
-Proof (Eq_ext Zplus Zmult Zopp).
+Lemma Zeqe : ring_eq_ext Z.add Z.mul Z.opp (@eq Z).
+Proof (Eq_ext Z.add Z.mul Z.opp).
 
-Lemma Zth : ring_theory Z0 (Zpos xH) Zplus Zmult Zminus Zopp (@eq Z).
+Lemma Zth : ring_theory Z0 (Zpos xH) Z.add Z.mul Z.sub Z.opp (@eq Z).
 Proof.
- constructor. exact Zplus_0_l. exact Zplus_comm. exact Zplus_assoc.
- exact Zmult_1_l. exact Zmult_comm. exact Zmult_assoc.
- exact Zmult_plus_distr_l. trivial. exact Zminus_diag.
+ constructor. exact Z.add_0_l. exact Z.add_comm. exact Z.add_assoc.
+ exact Z.mul_1_l. exact Z.mul_comm. exact Z.mul_assoc.
+ exact Z.mul_add_distr_r. trivial. exact Z.sub_diag.
 Qed.
 
 (** Two generic morphisms from Z to (abrbitrary) rings, *)
@@ -92,12 +92,12 @@ Section ZMORPHISM.
   | _ => None
   end.
 
- Lemma get_signZ_th : sign_theory Zopp Zeq_bool get_signZ.
+ Lemma get_signZ_th : sign_theory Z.opp Zeq_bool get_signZ.
  Proof.
   constructor.
   destruct c;intros;try discriminate.
   injection H;clear H;intros H1;subst c'.
-  simpl. unfold Zeq_bool. rewrite Zcompare_refl. trivial.
+  simpl. unfold Zeq_bool. rewrite Z.compare_refl. trivial.
  Qed.
 
 
@@ -116,7 +116,7 @@ Section ZMORPHISM.
  Qed.
 
  Lemma ARgen_phiPOS_Psucc : forall x,
-   gen_phiPOS1 (Psucc x) == 1 + (gen_phiPOS1 x).
+   gen_phiPOS1 (Pos.succ x) == 1 + (gen_phiPOS1 x).
  Proof.
   induction x;simpl;norm.
   rewrite IHx;norm.
@@ -127,7 +127,7 @@ Section ZMORPHISM.
    gen_phiPOS1 (x + y) == (gen_phiPOS1 x) + (gen_phiPOS1 y).
  Proof.
   induction x;destruct y;simpl;norm.
-  rewrite Pplus_carry_spec.
+  rewrite Pos.add_carry_spec.
   rewrite ARgen_phiPOS_Psucc.
   rewrite IHx;norm.
   add_push (gen_phiPOS1 y);add_push 1;rrefl.
@@ -208,10 +208,10 @@ Section ZMORPHISM.
 (*proof that [.] satisfies morphism specifications*)
  Lemma gen_phiZ_morph :
   ring_morph 0 1 radd rmul rsub ropp req Z0 (Zpos xH)
-   Zplus Zmult Zminus Zopp Zeq_bool gen_phiZ.
+   Z.add Z.mul Z.sub Z.opp Zeq_bool gen_phiZ.
  Proof.
   assert ( SRmorph : semi_morph 0 1 radd rmul req Z0 (Zpos xH)
-                  Zplus Zmult Zeq_bool gen_phiZ).
+                  Z.add Z.mul Zeq_bool gen_phiZ).
    apply mkRmorph;simpl;try rrefl.
    apply gen_phiZ_add.  apply gen_phiZ_mul. apply gen_Zeqb_ok.
   apply  (Smorph_morph Rsth Reqe Rth Zth SRmorph gen_phiZ_ext).
@@ -396,14 +396,14 @@ Section NWORDMORPHISM.
 
  Lemma gen_phiNword0_ok : forall w, Nw_is0 w = true -> gen_phiNword w == 0.
 Proof.
-induction w; simpl in |- *; intros; auto.
+induction w; simpl; intros; auto.
  reflexivity.
 
  destruct a.
   destruct w.
    reflexivity.
 
-   rewrite IHw in |- *; trivial.
+   rewrite IHw; trivial.
    apply (ARopp_zero Rsth Reqe ARth).
 
    discriminate.
@@ -412,7 +412,7 @@ Qed.
   Lemma gen_phiNword_cons : forall w n,
     gen_phiNword (n::w) == gen_phiN rO rI radd rmul n - gen_phiNword w.
 induction w.
- destruct n; simpl in |- *; norm.
+ destruct n; simpl; norm.
 
  intros.
  destruct n; norm.
@@ -423,27 +423,27 @@ Qed.
 destruct w; intros.
  destruct n; norm.
 
- unfold Nwcons in |- *.
- rewrite gen_phiNword_cons in |- *.
+ unfold Nwcons.
+ rewrite gen_phiNword_cons.
  reflexivity.
 Qed.
 
  Lemma gen_phiNword_ok : forall w1 w2,
    Nweq_bool w1 w2 = true -> gen_phiNword w1 == gen_phiNword w2.
 induction w1; intros.
- simpl in |- *.
- rewrite (gen_phiNword0_ok _ H) in |- *.
+ simpl.
+ rewrite (gen_phiNword0_ok _ H).
  reflexivity.
 
- rewrite gen_phiNword_cons in |- *.
+ rewrite gen_phiNword_cons.
  destruct w2.
   simpl in H.
   destruct a; try  discriminate.
-  rewrite (gen_phiNword0_ok _ H) in |- *.
+  rewrite (gen_phiNword0_ok _ H).
   norm.
 
   simpl in H.
-  rewrite gen_phiNword_cons in |- *.
+  rewrite gen_phiNword_cons.
   case_eq (N.eqb a n); intros H0.
    rewrite H0 in H.
    apply N.eqb_eq in H0. rewrite <- H0.
@@ -457,27 +457,27 @@ Qed.
 Lemma Nwadd_ok : forall x y,
    gen_phiNword (Nwadd x y) == gen_phiNword x + gen_phiNword y.
 induction x; intros.
- simpl in |- *.
+ simpl.
  norm.
 
  destruct y.
   simpl Nwadd; norm.
 
-  simpl Nwadd in |- *.
-  repeat rewrite gen_phiNword_cons in |- *.
-  rewrite (fun sreq => gen_phiN_add Rsth sreq (ARth_SRth ARth)) in |- * by
+  simpl Nwadd.
+  repeat rewrite gen_phiNword_cons.
+  rewrite (fun sreq => gen_phiN_add Rsth sreq (ARth_SRth ARth)) by
     (destruct Reqe; constructor; trivial).
 
-  rewrite IHx in |- *.
+  rewrite IHx.
   norm.
   add_push (- gen_phiNword x); reflexivity.
 Qed.
 
 Lemma Nwopp_ok : forall x, gen_phiNword (Nwopp x) == - gen_phiNword x.
-simpl in |- *.
-unfold Nwopp in |- *; simpl in |- *.
+simpl.
+unfold Nwopp; simpl.
 intros.
-rewrite gen_phiNword_Nwcons in |- *; norm.
+rewrite gen_phiNword_Nwcons; norm.
 Qed.
 
 Lemma Nwscal_ok : forall n x,
@@ -485,12 +485,12 @@ Lemma Nwscal_ok : forall n x,
 induction x; intros.
  norm.
 
- simpl Nwscal in |- *.
- repeat rewrite gen_phiNword_cons in |- *.
- rewrite (fun sreq => gen_phiN_mult Rsth sreq (ARth_SRth ARth)) in |- *
+ simpl Nwscal.
+ repeat rewrite gen_phiNword_cons.
+ rewrite (fun sreq => gen_phiN_mult Rsth sreq (ARth_SRth ARth))
    by (destruct Reqe; constructor; trivial).
 
-  rewrite IHx in |- *.
+  rewrite IHx.
   norm.
 Qed.
 
@@ -500,19 +500,19 @@ induction x; intros.
  norm.
 
  destruct a.
-  simpl Nwmul in |- *.
-  rewrite Nwopp_ok in |- *.
-  rewrite IHx in |- *.
-  rewrite gen_phiNword_cons in |- *.
+  simpl Nwmul.
+  rewrite Nwopp_ok.
+  rewrite IHx.
+  rewrite gen_phiNword_cons.
   norm.
 
-  simpl Nwmul in |- *.
-  unfold Nwsub in |- *.
-  rewrite Nwadd_ok in |- *.
-  rewrite Nwscal_ok in |- *.
-  rewrite Nwopp_ok in |- *.
-  rewrite IHx in |- *.
-  rewrite gen_phiNword_cons in |- *.
+  simpl Nwmul.
+  unfold Nwsub.
+  rewrite Nwadd_ok.
+  rewrite Nwscal_ok.
+  rewrite Nwopp_ok.
+  rewrite IHx.
+  rewrite gen_phiNword_cons.
   norm.
 Qed.
 
@@ -528,9 +528,9 @@ constructor.
  exact Nwadd_ok.
 
  intros.
- unfold Nwsub in |- *.
- rewrite Nwadd_ok in |- *.
- rewrite Nwopp_ok in |- *.
+ unfold Nwsub.
+ rewrite Nwadd_ok.
+ rewrite Nwopp_ok.
  norm.
 
  exact Nwmul_ok.
@@ -741,10 +741,10 @@ Ltac gen_ring_sign morph sspec :=
 Ltac default_div_spec set reqe arth morph :=
  match type of morph with
  | @ring_morph ?R ?r0 ?rI ?radd ?rmul ?rsub ?ropp ?req
-               Z ?c0 ?c1 Zplus Zmult ?csub ?copp ?ceq_b ?phi =>
+               Z ?c0 ?c1 Z.add Z.mul ?csub ?copp ?ceq_b ?phi =>
       constr:(mkhypo (Ztriv_div_th set phi))
  | @ring_morph ?R ?r0 ?rI ?radd ?rmul ?rsub ?ropp ?req
-               N ?c0 ?c1 Nplus Nmult ?csub ?copp ?ceq_b ?phi =>
+               N ?c0 ?c1 N.add N.mul ?csub ?copp ?ceq_b ?phi =>
       constr:(mkhypo (Ntriv_div_th set phi))
  | @ring_morph ?R ?r0 ?rI ?radd ?rmul ?rsub ?ropp ?req
                ?C ?c0 ?c1 ?cadd ?cmul ?csub ?copp ?ceq_b ?phi =>
@@ -836,7 +836,7 @@ Ltac isPcst t :=
   | xO ?p => isPcst p
   | xH => constr:true
   (* nat -> positive *)
-  | P_of_succ_nat ?n => isnatcst n
+  | Pos.of_succ_nat ?n => isnatcst n
   | _ => constr:false
   end.
 
@@ -853,9 +853,9 @@ Ltac isZcst t :=
   | Zpos ?p => isPcst p
   | Zneg ?p => isPcst p
   (* injection nat -> Z *)
-  | Z_of_nat ?n => isnatcst n
+  | Z.of_nat ?n => isnatcst n
   (* injection N -> Z *)
-  | Z_of_N ?n => isNcst n
+  | Z.of_N ?n => isNcst n
   (* *)
   | _ => constr:false
   end.

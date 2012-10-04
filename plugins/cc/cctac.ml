@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -35,11 +35,11 @@ let _f_equal = constant ["Init";"Logic"] "f_equal"
 
 let _eq_rect = constant ["Init";"Logic"] "eq_rect"
 
-let _refl_equal = constant ["Init";"Logic"] "refl_equal"
+let _refl_equal = constant ["Init";"Logic"] "eq_refl"
 
-let _sym_eq = constant ["Init";"Logic"] "sym_eq"
+let _sym_eq = constant ["Init";"Logic"] "eq_sym"
 
-let _trans_eq = constant ["Init";"Logic"] "trans_eq"
+let _trans_eq = constant ["Init";"Logic"] "eq_trans"
 
 let _eq = constant ["Init";"Logic"] "eq"
 

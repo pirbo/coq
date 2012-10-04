@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -72,7 +72,7 @@ Hint Resolve andb_prop: bool.
 Lemma andb_true_intro :
   forall b1 b2:bool, b1 = true /\ b2 = true -> andb b1 b2 = true.
 Proof.
-  destruct b1; destruct b2; simpl in |- *; tauto || auto with bool.
+  destruct b1; destruct b2; simpl; intros [? ?]; assumption.
 Qed.
 Hint Resolve andb_true_intro: bool.
 
@@ -203,7 +203,7 @@ Lemma injective_projections :
   forall (A B:Type) (p1 p2:A * B),
     fst p1 = fst p2 -> snd p1 = snd p2 -> p1 = p2.
 Proof.
-  destruct p1; destruct p2; simpl in |- *; intros Hfst Hsnd.
+  destruct p1; destruct p2; simpl; intros Hfst Hsnd.
   rewrite Hfst; rewrite Hsnd; reflexivity.
 Qed.
 
@@ -344,14 +344,14 @@ Definition id : ID := fun A x => x.
 
 (* Compatibility *)
 
-Notation prodT := prod (only parsing).
-Notation pairT := pair (only parsing).
-Notation prodT_rect := prod_rect (only parsing).
-Notation prodT_rec := prod_rec (only parsing).
-Notation prodT_ind := prod_ind (only parsing).
-Notation fstT := fst (only parsing).
-Notation sndT := snd (only parsing).
-Notation prodT_uncurry := prod_uncurry (only parsing).
-Notation prodT_curry := prod_curry (only parsing).
+Notation prodT := prod (compat "8.2").
+Notation pairT := pair (compat "8.2").
+Notation prodT_rect := prod_rect (compat "8.2").
+Notation prodT_rec := prod_rec (compat "8.2").
+Notation prodT_ind := prod_ind (compat "8.2").
+Notation fstT := fst (compat "8.2").
+Notation sndT := snd (compat "8.2").
+Notation prodT_uncurry := prod_uncurry (compat "8.2").
+Notation prodT_curry := prod_curry (compat "8.2").
 
 (* end hide *)

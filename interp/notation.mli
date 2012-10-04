@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -177,3 +177,5 @@ val declare_notation_printing_rule : notation -> unparsing_rule -> unit
 val find_notation_printing_rule : notation -> unparsing_rule
 
 (** Rem: printing rules for primitive token are canonical *)
+
+val with_notation_protection : ('a -> 'b) -> 'a -> 'b

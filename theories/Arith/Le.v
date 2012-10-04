@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -16,7 +16,7 @@ where "n <= m" := (le n m) : nat_scope.
 >>
  *)
 
-Open Local Scope nat_scope.
+Local Open Scope nat_scope.
 
 Implicit Types m n p : nat.
 
@@ -46,8 +46,8 @@ Qed.
 
 Theorem le_Sn_0 : forall n, ~ S n <= 0.
 Proof.
-  red in |- *; intros n H.
-  change (IsSucc 0) in |- *; elim H; simpl in |- *; auto with arith.
+  red; intros n H.
+  change (IsSucc 0); elim H; simpl; auto with arith.
 Qed.
 
 Hint Resolve le_0_n le_Sn_0: arith v62.

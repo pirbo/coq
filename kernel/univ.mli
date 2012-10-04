@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -90,6 +90,10 @@ val subst_large_constraints :
   (universe * universe) list -> universe -> universe
 
 val no_upper_constraints : universe -> constraints -> bool
+
+(** Is u mentionned in v (or equals to v) ? *)
+
+val univ_depends : universe -> universe -> bool
 
 (** {6 Pretty-printing of universes. } *)
 

@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -344,7 +344,7 @@ Lemma rel_choice_and_proof_irrel_imp_guarded_rel_choice :
   RelationalChoice -> ProofIrrelevance -> GuardedRelationalChoice.
 Proof.
   intros rel_choice proof_irrel.
-  red in |- *; intros A B P R H.
+  red; intros A B P R H.
   destruct (rel_choice _ _ (fun (x:sigT P) (y:B) => R (projT1 x) y)) as (R',(HR'R,H0)).
   intros (x,HPx).
   destruct (H x HPx) as (y,HRxy).
@@ -385,7 +385,7 @@ Qed.
 Lemma subset_types_imp_guarded_rel_choice_iff_rel_choice :
   ProofIrrelevance -> (GuardedRelationalChoice <-> RelationalChoice).
 Proof.
-  auto decomp using
+  intuition auto using
     guarded_rel_choice_imp_rel_choice,
     rel_choice_and_proof_irrel_imp_guarded_rel_choice.
 Qed.
@@ -439,7 +439,7 @@ Corollary fun_choice_and_indep_general_prem_iff_guarded_fun_choice :
   FunctionalChoiceOnInhabitedSet /\ IndependenceOfGeneralPremises
   <-> GuardedFunctionalChoice.
 Proof.
-  auto decomp using
+  intuition auto using
     guarded_fun_choice_imp_indep_of_general_premises,
     guarded_fun_choice_imp_fun_choice,
     fun_choice_and_indep_general_prem_imp_guarded_fun_choice.
@@ -480,7 +480,7 @@ Corollary fun_choice_and_small_drinker_iff_omniscient_fun_choice :
   FunctionalChoiceOnInhabitedSet /\ SmallDrinker'sParadox
   <-> OmniscientFunctionalChoice.
 Proof.
-  auto decomp using
+  intuition auto using
     omniscient_fun_choice_imp_small_drinker,
     omniscient_fun_choice_imp_fun_choice,
     fun_choice_and_small_drinker_imp_omniscient_fun_choice.
@@ -547,7 +547,7 @@ Theorem constructive_indefinite_description_and_small_drinker_iff_epsilon :
   (EpsilonStatement ->
    SmallDrinker'sParadox * ConstructiveIndefiniteDescription).
 Proof.
-  auto decomp using
+  intuition auto using
     epsilon_imp_constructive_indefinite_description,
     constructive_indefinite_description_and_small_drinker_imp_epsilon,
     epsilon_imp_small_drinker.
@@ -580,7 +580,7 @@ Lemma classical_denumerable_description_imp_fun_choice :
       (forall x y, decidable (R x y)) -> FunctionalChoice_on_rel R.
 Proof.
   intros A Descr.
-  red in |- *; intros R Rdec H.
+  red; intros R Rdec H.
   set (R':= fun x y => R x y /\ forall y', R x y' -> y <= y').
   destruct (Descr R') as (f,Hf).
   intro x.
@@ -689,7 +689,7 @@ Qed.
 Corollary dep_iff_non_dep_functional_rel_reification :
   FunctionalRelReification <-> DependentFunctionalRelReification.
 Proof.
-  auto decomp using
+  intuition auto using
     non_dep_dep_functional_rel_reification,
     dep_non_dep_functional_rel_reification.
 Qed.
@@ -814,9 +814,9 @@ Corollary fun_reification_descr_computational_excluded_middle_in_prop_context :
   (forall P:Prop, P \/ ~ P) ->
   forall C:Prop, ((forall P:Prop, {P} + {~ P}) -> C) -> C.
 Proof.
-  intros FunReify EM C; auto decomp using
-    constructive_definite_descr_excluded_middle,
-    (relative_non_contradiction_of_definite_descr (C:=C)).
+  intros FunReify EM C H.
+  apply relative_non_contradiction_of_definite_descr; trivial.
+  auto using constructive_definite_descr_excluded_middle.
 Qed.
 
 (**********************************************************************)

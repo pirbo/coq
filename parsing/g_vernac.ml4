@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -143,7 +143,7 @@ let test_plurial_form_types = function
 (* Gallina declarations *)
 GEXTEND Gram
   GLOBAL: gallina gallina_ext thm_token def_body of_type_with_opt_coercion
-    typeclass_constraint record_field decl_notation rec_definition;
+    record_field decl_notation rec_definition;
 
   gallina:
       (* Definition, Theorem, Variable, Axiom, ... *)
@@ -927,9 +927,8 @@ GEXTEND Gram
       | IDENT "Restore"; IDENT "State"; s = ne_string -> VernacRestoreState s
 
 (* Resetting *)
-      | IDENT "Reset"; id = identref -> VernacResetName id
-      | IDENT "Delete"; id = identref -> VernacRemoveName id
       | IDENT "Reset"; IDENT "Initial" -> VernacResetInitial
+      | IDENT "Reset"; id = identref -> VernacResetName id
       | IDENT "Back" -> VernacBack 1
       | IDENT "Back"; n = natural -> VernacBack n
       | IDENT "BackTo"; n = natural -> VernacBackTo n
@@ -977,8 +976,7 @@ GEXTEND Gram
 	 sc = OPT [ ":"; sc = IDENT -> sc ] ->
          VernacInfix (enforce_module_locality local,(op,modl),p,sc)
      | IDENT "Notation"; local = obsolete_locality; id = identref;
-	 idl = LIST0 ident; ":="; c = constr;
-	 b = [ "("; IDENT "only"; IDENT "parsing"; ")" -> true | -> false ] ->
+	 idl = LIST0 ident; ":="; c = constr; b = only_parsing ->
            VernacSyntacticDefinition
 	     (id,(idl,c),enforce_module_locality local,b)
      | IDENT "Notation"; local = obsolete_locality; s = ne_lstring; ":=";
@@ -1006,6 +1004,13 @@ GEXTEND Gram
         to factorize with other "Print"-based vernac entries *)
   ] ]
   ;
+  only_parsing:
+    [ [ "("; IDENT "only"; IDENT "parsing"; ")" ->
+         Some Flags.Current
+      | "("; IDENT "compat"; s = STRING; ")" ->
+         Some (Coqinit.get_compat_version s)
+      | -> None ] ]
+  ;
   obsolete_locality:
     [ [ IDENT "Local" -> true | -> false ] ]
   ;
@@ -1021,7 +1026,10 @@ GEXTEND Gram
       | IDENT "left"; IDENT "associativity" -> SetAssoc LeftA
       | IDENT "right"; IDENT "associativity" -> SetAssoc RightA
       | IDENT "no"; IDENT "associativity" -> SetAssoc NonA
-      | IDENT "only"; IDENT "parsing" -> SetOnlyParsing
+      | IDENT "only"; IDENT "parsing" ->
+        SetOnlyParsing Flags.Current
+      | IDENT "compat"; s = STRING ->
+        SetOnlyParsing (Coqinit.get_compat_version s)
       | IDENT "format"; s = [s = STRING -> (loc,s)] -> SetFormat s
       | x = IDENT; ","; l = LIST1 [id = IDENT -> id ] SEP ","; "at";
         lev = level -> SetItemLevel (x::l,lev)

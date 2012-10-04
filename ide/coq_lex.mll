@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -24,7 +24,7 @@
     let one_word_commands =
       [ "Add" ; "Check"; "Eval"; "Extraction" ;
 	"Load" ; "Undo"; "Goal";
-	"Proof" ; "Print";"Save" ;
+	"Proof" ; "Print";"Save" ; "Restart";
 	"End" ; "Section"; "Chapter"; "Transparent"; "Opaque"; "Comments" ]
     in
     let one_word_declarations =
@@ -37,7 +37,8 @@
         (* Inductive *)
         "Inductive" ; "CoInductive" ; "Record" ; "Structure" ;
         (* Other *)
-	"Ltac" ; "Typeclasses"; "Instance"; "Include"; "Context"; "Class" ]
+	"Ltac" ; "Instance"; "Include"; "Context"; "Class" ;
+	 "Arguments" ]
     in
     let proof_declarations =
       [ "Theorem" ; "Lemma" ; " Fact" ; "Remark" ; "Corollary" ;
@@ -85,33 +86,28 @@ let multiword_declaration =
 | "Existing" space+ "Instance" "s"?
 | "Canonical" space+ "Structure"
 
-let locality = ("Local" space+)?
+let locality = (space+ "Local")?
 
 let multiword_command =
-  "Set" (space+ ident)*
-| "Unset" (space+ ident)*
-| "Open" space+ locality "Scope"
-| "Close" space+ locality "Scope"
-| "Bind" space+ "Scope"
-| "Arguments" space+ "Scope"
-| "Reserved" space+ "Notation" space+ locality
-| "Delimit" space+ "Scope"
+  ("Uns" | "S")" et" (space+ ident)*
+| (("Open" | "Close") locality | "Bind" | " Delimit" )
+    space+ "Scope"
+| (("Reserved" space+)? "Notation" | "Infix") locality space+
 | "Next" space+ "Obligation"
 | "Solve" space+ "Obligations"
 | "Require" space+ ("Import"|"Export")?
-| "Infix" space+ locality
-| "Notation" space+ locality
-| "Hint" space+ locality ident
+| "Hint" locality space+ ident
 | "Reset" (space+ "Initial")?
 | "Tactic" space+ "Notation"
-| "Implicit" space+ "Arguments"
-| "Implicit" space+ ("Type"|"Types")
+| "Implicit" space+ "Type" "s"?
 | "Combined" space+ "Scheme"
 | "Extraction" space+ (("Language" space+ ("Ocaml"|"Haskell"|"Scheme"|"Toplevel"))|
     ("Library"|"Inline"|"NoInline"|"Blacklist"))
 | "Recursive" space+ "Extraction" (space+ "Library")?
 | ("Print"|"Reset") space+ "Extraction" space+ ("Inline"|"Blacklist")
 | "Extract" space+ (("Inlined" space+) "Constant"| "Inductive")
+| "Typeclasses" space+ ("eauto" | "Transparent" | "Opaque")
+| ("Generalizable" space+) ("All" | "No")? "Variable" "s"?
 
 (* At least still missing: "Inline" + decl, variants of "Identity
   Coercion", variants of Print, Add, ... *)

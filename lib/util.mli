@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -135,6 +135,8 @@ val list_duplicates : 'a list -> 'a list
 val list_filter2 : ('a -> 'b -> bool) -> 'a list * 'b list -> 'a list * 'b list
 val list_map_filter : ('a -> 'b option) -> 'a list -> 'b list
 val list_map_filter_i : (int -> 'a -> 'b option) -> 'a list -> 'b list
+val list_filter_with : bool list -> 'a list -> 'a list
+val list_filter_along : ('a -> bool) -> 'a list -> 'b list -> 'b list
 
 (** [list_smartmap f [a1...an] = List.map f [a1...an]] but if for all i
    [ f ai == ai], then [list_smartmap f l==l] *)
@@ -147,6 +149,7 @@ val list_map3 :
   ('a -> 'b -> 'c -> 'd) -> 'a list -> 'b list -> 'c list -> 'd list
 val list_map4 :
   ('a -> 'b -> 'c -> 'd -> 'e) -> 'a list -> 'b list -> 'c list -> 'd list -> 'e list
+val list_map_to_array : ('a -> 'b) -> 'a list -> 'b array
 val list_filter_i :
   (int -> 'a -> bool) -> 'a list -> 'a list
 
@@ -239,6 +242,7 @@ val list_cartesians_filter :
   ('a -> 'b -> 'b option) -> 'b -> 'a list list -> 'b list
 
 val list_union_map : ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b
+val list_factorize_left : ('a * 'b) list -> ('a * 'b list) list
 
 (** {6 Arrays. } *)
 
@@ -291,6 +295,8 @@ val array_fold_map2' :
 val array_distinct : 'a array -> bool
 val array_union_map : ('a -> 'b -> 'b) -> 'a array -> 'b -> 'b
 val array_rev_to_list : 'a array -> 'a list
+val array_filter_along : ('a -> bool) -> 'a list -> 'b array -> 'b array
+val array_filter_with : bool list -> 'a array -> 'a array
 
 (** {6 Streams. } *)
 

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -29,17 +29,17 @@ Proof. now apply (Z.pow_0_l (Zpos p)). Qed.
 Lemma Zpower_pos_pos x p : 0 < x -> 0 < Z.pow_pos x p.
 Proof. intros. now apply (Z.pow_pos_nonneg x (Zpos p)). Qed.
 
-Notation Zpower_1_r := Z.pow_1_r (only parsing).
-Notation Zpower_1_l := Z.pow_1_l (only parsing).
-Notation Zpower_0_l := Z.pow_0_l' (only parsing).
-Notation Zpower_0_r := Z.pow_0_r (only parsing).
-Notation Zpower_2 := Z.pow_2_r (only parsing).
-Notation Zpower_gt_0 := Z.pow_pos_nonneg (only parsing).
-Notation Zpower_ge_0 := Z.pow_nonneg (only parsing).
-Notation Zpower_Zabs := Z.abs_pow (only parsing).
-Notation Zpower_Zsucc := Z.pow_succ_r (only parsing).
-Notation Zpower_mult := Z.pow_mul_r (only parsing).
-Notation Zpower_le_monotone2 := Z.pow_le_mono_r (only parsing).
+Notation Zpower_1_r := Z.pow_1_r (compat "8.3").
+Notation Zpower_1_l := Z.pow_1_l (compat "8.3").
+Notation Zpower_0_l := Z.pow_0_l' (compat "8.3").
+Notation Zpower_0_r := Z.pow_0_r (compat "8.3").
+Notation Zpower_2 := Z.pow_2_r (compat "8.3").
+Notation Zpower_gt_0 := Z.pow_pos_nonneg (compat "8.3").
+Notation Zpower_ge_0 := Z.pow_nonneg (compat "8.3").
+Notation Zpower_Zabs := Z.abs_pow (compat "8.3").
+Notation Zpower_Zsucc := Z.pow_succ_r (compat "8.3").
+Notation Zpower_mult := Z.pow_mul_r (compat "8.3").
+Notation Zpower_le_monotone2 := Z.pow_le_mono_r (compat "8.3").
 
 Theorem Zpower_le_monotone a b c :
  0 < a -> 0 <= b <= c -> a^b <= a^c.
@@ -85,15 +85,15 @@ Proof.
   assert (Hn := Nat2Z.is_nonneg n).
   destruct p; simpl Pos.size_nat.
   - specialize IHn with p.
-    rewrite Z.pos_xI, Nat2Z.inj_succ, Z.pow_succ_r; omega.
+    rewrite Pos2Z.inj_xI, Nat2Z.inj_succ, Z.pow_succ_r; omega.
   - specialize IHn with p.
-    rewrite Z.pos_xO, Nat2Z.inj_succ, Z.pow_succ_r; omega.
+    rewrite Pos2Z.inj_xO, Nat2Z.inj_succ, Z.pow_succ_r; omega.
   - split; auto with zarith.
     intros _. apply Z.pow_gt_1. easy.
     now rewrite Nat2Z.inj_succ, Z.lt_succ_r.
 Qed.
 
-(** * Zpower and modulo *)
+(** * Z.pow and modulo *)
 
 Theorem Zpower_mod p q n :
   0 < n -> (p^q) mod n = ((p mod n)^q) mod n.
@@ -106,7 +106,7 @@ Proof.
   - rewrite !Z.pow_neg_r; auto with zarith.
 Qed.
 
-(** A direct way to compute Zpower modulo **)
+(** A direct way to compute Z.pow modulo **)
 
 Fixpoint Zpow_mod_pos (a: Z)(m: positive)(n : Z) : Z :=
   match m with
@@ -231,9 +231,9 @@ Proof.
   exists n; destruct H; rewrite Z.mul_0_r in H; auto.
 Qed.
 
-(** * Zsquare: a direct definition of [z^2] *)
+(** * Z.square: a direct definition of [z^2] *)
 
-Notation Psquare := Pos.square (only parsing).
-Notation Zsquare := Z.square (only parsing).
-Notation Psquare_correct := Pos.square_spec (only parsing).
-Notation Zsquare_correct := Z.square_spec (only parsing).
+Notation Psquare := Pos.square (compat "8.3").
+Notation Zsquare := Z.square (compat "8.3").
+Notation Psquare_correct := Pos.square_spec (compat "8.3").
+Notation Zsquare_correct := Z.square_spec (compat "8.3").
