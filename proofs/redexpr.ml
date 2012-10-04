@@ -1,18 +1,19 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Term
 open Declarations
-open Libnames
-open Glob_term
+open Globnames
+open Genredexpr
 open Pattern
 open Reductionops
 open Tacred
@@ -20,6 +21,7 @@ open Closure
 open RedFlags
 open Libobject
 open Summary
+open Misctypes
 
 (* call by value normalisation function using the virtual machine *)
 let cbv_vm env _ c =
@@ -54,9 +56,9 @@ let cache_strategy (_,str) =
 
 let subst_strategy (subs,(local,obj)) =
   local,
-  list_smartmap
+  List.smartmap
     (fun (k,ql as entry) ->
-      let ql' = list_smartmap (Mod_subst.subst_evaluable_reference subs) ql in
+      let ql' = List.smartmap (Mod_subst.subst_evaluable_reference subs) ql in
       if ql==ql' then entry else (k,ql'))
     obj
 
@@ -168,8 +170,8 @@ let out_arg = function
   | ArgVar _ -> anomaly "Unevaluated or_var variable"
   | ArgArg x -> x
 
-let out_with_occurrences ((b,l),c) =
-  ((b,List.map out_arg l), c)
+let out_with_occurrences (occs,c) =
+  (Locusops.occurrences_map (List.map out_arg) occs, c)
 
 let rec reduction_of_red_expr = function
   | Red internal ->
@@ -221,7 +223,7 @@ let subst_red_expr subs e =
   subst_gen_red_expr
     (Mod_subst.subst_mps subs)
     (Mod_subst.subst_evaluable_reference subs)
-    (Pattern.subst_pattern subs)
+    (Patternops.subst_pattern subs)
     e
 
 let inReduction : bool * string * red_expr -> obj =

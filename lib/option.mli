@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -67,7 +67,7 @@ val fold_right : ('a -> 'b -> 'b) -> 'a option -> 'b -> 'b
 (** [fold_map f a x] is [a, f y] if [x] is [Some y], and [a] otherwise. *)
 val fold_map : ('a -> 'b -> 'a * 'c) -> 'a -> 'b option -> 'a * 'c option
 
-(** [cata e f x] is [e] if [x] is [None] and [f a] if [x] is [Some a] *)
+(** [cata f e x] is [e] if [x] is [None] and [f a] if [x] is [Some a] *)
 val cata : ('a -> 'b) -> 'b -> 'a option -> 'b
 
 (** {6 More Specific Operations} ***)
@@ -100,6 +100,8 @@ module List : sig
   (** [List.flatten l] is the list of all the [y]s such that [l] contains
       [Some y] (in the same order). *)
   val flatten : 'a option list -> 'a list
+
+  val find : ('a -> 'b option) -> 'a list -> 'b option
 end
 
 

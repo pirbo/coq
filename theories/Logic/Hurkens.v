@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -46,7 +46,7 @@ Lemma Omega : forall i:U -> bool, induct i -> b2p (i WF).
 Proof.
 intros i y.
 apply y.
-unfold le, WF, induct in |- *.
+unfold le, WF, induct.
 apply p2p2.
 intros x H0.
 apply y.
@@ -55,7 +55,7 @@ Qed.
 
 Lemma lemma1 : induct (fun u => p2b (I u)).
 Proof.
-unfold induct in |- *.
+unfold induct.
 intros x p.
 apply (p2p2 (I x)).
 intro q.

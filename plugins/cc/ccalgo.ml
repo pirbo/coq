@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,6 +9,7 @@
 (* This file implements the basic congruence-closure algorithm by *)
 (* Downey,Sethi and Tarjan. *)
 
+open Errors
 open Util
 open Pp
 open Goptions
@@ -16,14 +17,13 @@ open Names
 open Term
 open Tacmach
 open Evd
-open Proof_type
 
 let init_size=5
 
 let cc_verbose=ref false
 
-let debug f x =
-  if !cc_verbose then f x
+let debug x =
+  if !cc_verbose then msg_debug x
 
 let _=
   let gdopt=
@@ -58,8 +58,6 @@ module ST=struct
 
   let query sign st=Hashtbl.find st.toterm sign
 
-  let rev_query term st=Hashtbl.find st.tosign term
-
   let delete st t=
     try let sign=Hashtbl.find st.tosign t in
 	Hashtbl.remove st.toterm sign;
@@ -67,7 +65,7 @@ module ST=struct
     with
 	Not_found -> ()
 
-  let rec delete_set st s = Intset.iter (delete st) s
+  let delete_set st s = Intset.iter (delete st) s
 
 end
 
@@ -115,7 +113,7 @@ let rec term_equal t1 t2 =
       i1 = i2 && j1 = j2 && eq_constructor c1 c2
     | _ -> t1 = t2
 
-open Hashtbl_alt.Combine
+open Hashset.Combine
 
 let rec hash_term = function
   | Symb c -> combine 1 (hash_constr c)
@@ -396,7 +394,7 @@ let rec canonize_name c =
       | LetIn (na,b,t,ct) ->
 	  mkLetIn (na, func b,func t,func ct)
       | App (ct,l) ->
-	  mkApp (func ct,array_smartmap func l)
+	  mkApp (func ct,Array.smartmap func l)
       | _ -> c
 
 (* rebuild a term from a pattern and a substitution *)
@@ -502,7 +500,7 @@ let is_redundant state id args =
     let prev_args = Identhash.find_all state.q_history id in
     List.exists
       (fun old_args ->
-	 Util.array_for_all2 (fun i j -> i = find state.uf j)
+	 Util.Array.for_all2 (fun i j -> i = find state.uf j)
          norm_args old_args)
       prev_args
     with Not_found -> false
@@ -511,14 +509,14 @@ let add_inst state (inst,int_subst) =
   check_for_interrupt ();
   if state.rew_depth > 0 then
   if is_redundant state inst.qe_hyp_id int_subst then
-    debug msgnl (str "discarding redundant (dis)equality")
+    debug (str "discarding redundant (dis)equality")
   else
     begin
       Identhash.add state.q_history inst.qe_hyp_id int_subst;
       let subst = build_subst (forest state) int_subst in
       let prfhead= mkVar inst.qe_hyp_id in
       let args = Array.map constr_of_term subst in
-      let _ = array_rev args in (* highest deBruijn index first *)
+      let _ = Array.rev args in (* highest deBruijn index first *)
       let prf= mkApp(prfhead,args) in
 	  let s = inst_pattern subst inst.qe_lhs
 	  and t = inst_pattern subst inst.qe_rhs in
@@ -526,20 +524,18 @@ let add_inst state (inst,int_subst) =
 	    state.rew_depth<-pred state.rew_depth;
 	    if inst.qe_pol then
 	      begin
-		debug (fun () ->
-		  msgnl
-		   (str "Adding new equality, depth="++ int state.rew_depth);
-	          msgnl (str "  [" ++ Termops.print_constr prf ++ str " : " ++
-			   pr_term s ++ str " == " ++ pr_term t ++ str "]")) ();
+		debug (
+		   (str "Adding new equality, depth="++ int state.rew_depth) ++ fnl () ++
+	          (str "  [" ++ Termops.print_constr prf ++ str " : " ++
+			   pr_term s ++ str " == " ++ pr_term t ++ str "]"));
 		add_equality state prf s t
 	      end
 	    else
 	      begin
-		debug (fun () ->
-		  msgnl
-		   (str "Adding new disequality, depth="++ int state.rew_depth);
-	          msgnl (str "  [" ++ Termops.print_constr prf ++ str " : " ++
-			   pr_term s ++ str " <> " ++ pr_term t ++ str "]")) ();
+		debug (
+		   (str "Adding new disequality, depth="++ int state.rew_depth) ++ fnl () ++
+	          (str "  [" ++ Termops.print_constr prf ++ str " : " ++
+			   pr_term s ++ str " <> " ++ pr_term t ++ str "]"));
 		add_disequality state (Hyp prf) s t
 	      end
   end
@@ -565,8 +561,8 @@ let join_path uf i j=
   min_path (down_path uf i [],down_path uf j [])
 
 let union state i1 i2 eq=
-  debug (fun () -> msgnl (str "Linking " ++ pr_idx_term state i1 ++
-		 str " and " ++ pr_idx_term state i2 ++ str ".")) ();
+  debug (str "Linking " ++ pr_idx_term state i1 ++
+		 str " and " ++ pr_idx_term state i2 ++ str ".");
   let r1= get_representative state.uf i1
   and r2= get_representative state.uf i2 in
     link state.uf i1 i2 eq;
@@ -605,9 +601,9 @@ let union state i1 i2 eq=
 	| _,_ -> ()
 
 let merge eq state = (* merge and no-merge *)
-  debug (fun () -> msgnl
+  debug
     (str "Merging " ++ pr_idx_term state eq.lhs ++
-       str " and " ++ pr_idx_term state eq.rhs ++ str ".")) ();
+       str " and " ++ pr_idx_term state eq.rhs ++ str ".");
   let uf=state.uf in
   let i=find uf eq.lhs
   and j=find uf eq.rhs in
@@ -618,8 +614,8 @@ let merge eq state = (* merge and no-merge *)
 	union state j i (swap eq)
 
 let update t state = (* update 1 and 2 *)
-  debug (fun () -> msgnl
-    (str "Updating term " ++ pr_idx_term state t ++ str ".")) ();
+  debug
+    (str "Updating term " ++ pr_idx_term state t ++ str ".");
   let (i,j) as sign = signature state.uf t in
   let (u,v) = subterms state.uf t in
   let rep = get_representative state.uf i in
@@ -679,8 +675,8 @@ let process_constructor_mark t i rep pac state =
 	    end
 
 let process_mark t m state =
-  debug (fun () -> msgnl
-    (str "Processing mark for term " ++ pr_idx_term state t ++ str ".")) ();
+  debug
+    (str "Processing mark for term " ++ pr_idx_term state t ++ str ".");
   let i=find state.uf t in
   let rep=get_representative state.uf i in
     match m with
@@ -695,14 +691,15 @@ type explanation =
 let check_disequalities state =
   let uf=state.uf in
   let rec check_aux = function
-      dis::q ->
-	debug (fun () -> msg
-	(str "Checking if " ++ pr_idx_term state dis.lhs ++ str " = " ++
-	 pr_idx_term state dis.rhs ++ str " ... ")) ();
-	if find uf dis.lhs=find uf dis.rhs then
-	  begin debug msgnl (str "Yes");Some dis end
-	else
-	  begin debug msgnl (str "No");check_aux q end
+    | dis::q ->
+        let (info, ans) =
+          if find uf dis.lhs = find uf dis.rhs then (str "Yes", Some dis)
+          else (str "No", check_aux q)
+        in
+        let _ = debug
+        (str "Checking if " ++ pr_idx_term state dis.lhs ++ str " = " ++
+         pr_idx_term state dis.rhs ++ str " ... " ++ info) in
+        ans
     | [] -> None
   in
     check_aux state.diseq
@@ -781,7 +778,7 @@ let make_fun_table state =
     !funtab
 
 
-let rec do_match state res pb_stack =
+let do_match state res pb_stack =
   let mp=Stack.pop pb_stack in
     match mp.mp_stack with
 	[] ->
@@ -887,7 +884,7 @@ let find_instances state =
   let pb_stack= init_pb_stack state in
   let res =ref [] in
   let _ =
-    debug msgnl (str "Running E-matching algorithm ... ");
+    debug (str "Running E-matching algorithm ... ");
     try
       while true do
 	check_for_interrupt ();
@@ -898,7 +895,7 @@ let find_instances state =
     !res
 
 let rec execute first_run state =
-  debug msgnl (str "Executing ... ");
+  debug (str "Executing ... ");
   try
     while
       check_for_interrupt ();
@@ -908,7 +905,7 @@ let rec execute first_run state =
 	None ->
 	  if not(Intset.is_empty state.pa_classes) then
 	    begin
-	      debug msgnl (str "First run was incomplete, completing ... ");
+	      debug (str "First run was incomplete, completing ... ");
 	      complete state;
 	      execute false state
 	    end
@@ -923,12 +920,12 @@ let rec execute first_run state =
 		  end
 		else
 	      begin
-		debug msgnl (str "Out of instances ... ");
+		debug (str "Out of instances ... ");
 		None
 	      end
 	    else
 	      begin
-		debug msgnl (str "Out of depth ... ");
+		debug (str "Out of depth ... ");
 		None
 	      end
       | Some dis -> Some

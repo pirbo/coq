@@ -1,29 +1,23 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pp
+open Errors
 open Util
 open Names
 open Term
 open Termops
-open Environ
-open Libnames
-open Reduction
 open Inductiveops
-open Proof_type
-open Clenv
 open Hipattern
 open Tacmach
 open Tacticals
 open Tactics
-open Hiddentac
-open Genarg
 open Tacexpr
+open Misctypes
 
 let introElimAssumsThen tac ba =
   let nassums =
@@ -43,12 +37,12 @@ let introCaseAssumsThen tac ba =
   let n1 = List.length case_thin_sign in
   let n2 = List.length ba.branchnames in
   let (l1,l2),l3 =
-    if n1 < n2 then list_chop n1 ba.branchnames, []
+    if n1 < n2 then List.chop n1 ba.branchnames, []
     else
       (ba.branchnames, []),
-       if n1 > n2 then snd (list_chop n2 case_thin_sign) else [] in
+       if n1 > n2 then snd (List.chop n2 case_thin_sign) else [] in
   let introCaseAssums =
-    tclTHEN (intros_pattern no_move l1) (intros_clearing l3) in
+    tclTHEN (intros_pattern MoveLast l1) (intros_clearing l3) in
   (tclTHEN introCaseAssums (case_on_ba (tac l2) ba))
 
 (* The following tactic Decompose repeatedly applies the

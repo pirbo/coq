@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -10,33 +10,45 @@
 
 exception Comment
 
-let coqtop = ref (stdin, stdout)
+type coqtop = {
+  in_chan : in_channel;
+  out_chan : out_channel;
+  xml_parser : Xml_parser.t;
+}
 
-let p = Xml_parser.make ()
-let () = Xml_parser.check_eof p false
+let logger level content = ()
 
-let eval_call (call:'a Ide_intf.call) =
-  prerr_endline (Ide_intf.pr_call call);
-  let xml_query = Ide_intf.of_call call in
-  Xml_utils.print_xml (snd !coqtop) xml_query;
-  flush (snd !coqtop);
-  let xml_answer = Xml_parser.parse p (Xml_parser.SChannel (fst !coqtop)) in
-  let res = Ide_intf.to_answer xml_answer in
-  prerr_endline (Ide_intf.pr_full_value call res);
+let eval_call call coqtop =
+  prerr_endline (Serialize.pr_call call);
+  let xml_query = Serialize.of_call call in
+  Xml_utils.print_xml coqtop.out_chan xml_query;
+  flush coqtop.out_chan;
+  let rec loop () =
+    let xml = Xml_parser.parse coqtop.xml_parser in
+    if Serialize.is_message xml then
+      let message = Serialize.to_message xml in
+      let level = message.Interface.message_level in
+      let content = message.Interface.message_content in
+      let () = logger level content in
+      loop ()
+    else (Serialize.to_answer xml call)
+  in
+  let res = loop () in
+  prerr_endline (Serialize.pr_full_value call res);
   match res with Interface.Fail _ -> exit 1 | _ -> ()
 
 let commands =
-  [ "INTERPRAWSILENT", (fun s -> eval_call (Ide_intf.interp (true,false,s)));
-    "INTERPRAW", (fun s -> eval_call (Ide_intf.interp (true,true,s)));
-    "INTERPSILENT", (fun s -> eval_call (Ide_intf.interp (false,false,s)));
-    "INTERP", (fun s -> eval_call (Ide_intf.interp (false,true,s)));
-    "REWIND", (fun s -> eval_call (Ide_intf.rewind (int_of_string s)));
-    "GOALS", (fun _ -> eval_call Ide_intf.goals);
-    "HINTS", (fun _ -> eval_call Ide_intf.hints);
-    "GETOPTIONS", (fun _ -> eval_call Ide_intf.get_options);
-    "STATUS", (fun _ -> eval_call Ide_intf.status);
-    "INLOADPATH", (fun s -> eval_call (Ide_intf.inloadpath s));
-    "MKCASES", (fun s -> eval_call (Ide_intf.mkcases s));
+  [ "INTERPRAWSILENT", (fun s -> eval_call (Serialize.interp (true,false,s)));
+    "INTERPRAW", (fun s -> eval_call (Serialize.interp (true,true,s)));
+    "INTERPSILENT", (fun s -> eval_call (Serialize.interp (false,false,s)));
+    "INTERP", (fun s -> eval_call (Serialize.interp (false,true,s)));
+    "REWIND", (fun s -> eval_call (Serialize.rewind (int_of_string s)));
+    "GOALS", (fun _ -> eval_call Serialize.goals);
+    "HINTS", (fun _ -> eval_call Serialize.hints);
+    "GETOPTIONS", (fun _ -> eval_call Serialize.get_options);
+    "STATUS", (fun _ -> eval_call Serialize.status);
+    "INLOADPATH", (fun s -> eval_call (Serialize.inloadpath s));
+    "MKCASES", (fun s -> eval_call (Serialize.mkcases s));
     "#", (fun _ -> raise Comment);
   ]
 
@@ -72,11 +84,19 @@ let main =
     | 2 when Sys.argv.(1) <> "-help" -> Sys.argv.(1)
     | _ -> usage ()
   in
-  coqtop := Unix.open_process (coqtop_name^" -ideslave");
+  let coqtop =
+    let (cin, cout) = Unix.open_process (coqtop_name^" -ideslave") in
+    let p = Xml_parser.make (Xml_parser.SChannel cin) in
+    let () = Xml_parser.check_eof p false in {
+      in_chan = cin;
+      out_chan = cout;
+      xml_parser = p;
+    }
+  in
   while true do
     let l = try read_line () with End_of_file -> exit 0
     in
-    try read_eval_print l
+    try read_eval_print l coqtop
     with
       | Comment -> ()
       | e ->

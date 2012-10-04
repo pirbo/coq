@@ -17,23 +17,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *)
 
-open Printf
-open Xml_parser
+open Serialize
 
 exception Not_element of xml
 exception Not_pcdata of xml
 exception No_attribute of string
-
-let default_parser = Xml_parser.make()
-
-let parse (p:Xml_parser.t) (source:Xml_parser.source) =
-	(* local cast Xml.xml -> xml *)
-	(Obj.magic Xml_parser.parse p source : xml)
-
-let parse_in ch = parse default_parser (Xml_parser.SChannel ch)
-let parse_string str = parse default_parser (Xml_parser.SString str)
-
-let parse_file f = parse default_parser (Xml_parser.SFile f)
 
 let tag = function
 	| Element (tag,_,_) -> tag
@@ -127,7 +115,7 @@ let buffer_attr (n,v) =
 	done;
 	Buffer.add_char tmp '"'
 
-let rec print_attr chan (n, v) =
+let print_attr chan (n, v) =
   Printf.fprintf chan " %s=\"" n;
   let l = String.length v in
   for p = 0 to l-1 do

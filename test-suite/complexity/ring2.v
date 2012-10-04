@@ -3,7 +3,7 @@
 
 Require Import BinInt Zbool.
 
-Definition Zplus x y :=
+Definition Zadd x y :=
 match x with
 | 0%Z => y
 | Zpos x' =>
@@ -30,9 +30,10 @@ match x with
     end
 end.
 
+
 Require Import Ring.
 
-Lemma Zth : ring_theory Z0 (Zpos xH) Zplus Zmult Zminus Zopp (@eq Z).
+Lemma Zth : ring_theory Z0 (Zpos xH) Zadd Z.mul Z.sub Z.opp (@eq Z).
 Admitted.
 
 Ltac Zcst t :=
@@ -45,7 +46,7 @@ Add Ring Zr : Zth
   (decidable Zeq_bool_eq, constants [Zcst]).
 
 Open Scope Z_scope.
-Infix "+" := Zplus : Z_scope.
+Infix "+" := Zadd : Z_scope.
 
 Goal forall a, a+a+a+a+a+a+a+a+a+a+a+a+a = a*13.
 Timeout 5 Time intro; ring.

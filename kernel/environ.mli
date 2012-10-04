@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -81,6 +81,7 @@ val map_named_val :
    (constr -> constr) -> named_context_val -> named_context_val
 
 val push_named : named_declaration -> env -> env
+val push_named_context : named_context -> env -> env
 val push_named_context_val  :
     named_declaration -> named_context_val -> named_context_val
 

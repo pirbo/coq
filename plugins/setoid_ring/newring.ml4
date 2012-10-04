@@ -1,28 +1,25 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Pp
+open Errors
 open Util
 open Names
 open Term
 open Closure
 open Environ
 open Libnames
-open Tactics
+open Globnames
 open Glob_term
 open Tacticals
 open Tacexpr
-open Pcoq
-open Tactic
-open Constr
-open Proof_type
 open Coqlib
 open Tacmach
 open Mod_subst
@@ -32,6 +29,7 @@ open Printer
 open Declare
 open Decl_kinds
 open Entries
+open Misctypes
 
 (****************************************************************************)
 (* controlled reduction *)
@@ -62,7 +60,7 @@ let rec mk_clos_but f_map subs t =
 and mk_clos_app_but f_map subs f args n =
   if n >= Array.length args then mk_atom(mkApp(f, args))
   else
-    let fargs, args' = array_chop n args in
+    let fargs, args' = Array.chop n args in
     let f' = mkApp(f,fargs) in
     match f_map f' with
         Some map ->
@@ -72,19 +70,8 @@ and mk_clos_app_but f_map subs f args n =
             (mkApp (mark_arg (-1) f', Array.mapi mark_arg args'))
       | None -> mk_clos_app_but f_map subs f args (n+1)
 
-
-let interp_map l c =
-  try
-    let (im,am) = List.assoc c l in
-    Some(fun i ->
-      if List.mem i im then Eval
-      else if List.mem i am then Prot
-      else if i = -1 then Eval
-      else Rec)
-  with Not_found -> None
-
 let interp_map l t =
-  try Some(list_assoc_f eq_constr t l) with Not_found -> None
+  try Some(List.assoc_f eq_constr t l) with Not_found -> None
 
 let protect_maps = ref Stringmap.empty
 let add_map s m = protect_maps := Stringmap.add s m !protect_maps
@@ -101,7 +88,7 @@ let protect_tac map =
   Tactics.reduct_option (protect_red map,DEFAULTcast) None ;;
 
 let protect_tac_in map id =
-  Tactics.reduct_option (protect_red map,DEFAULTcast) (Some(id, Termops.InHyp));;
+  Tactics.reduct_option (protect_red map,DEFAULTcast) (Some(id, Locus.InHyp));;
 
 
 TACTIC EXTEND protect_fv
@@ -125,26 +112,26 @@ TACTIC EXTEND closed_term
 END
 ;;
 
-TACTIC EXTEND echo
+(* TACTIC EXTEND echo
 | [ "echo" constr(t) ] ->
   [ Pp.msg (Termops.print_constr t);  Tacinterp.eval_tactic (TacId []) ]
-END;;
+END;;*)
 
 (*
 let closed_term_ast l =
   TacFun([Some(id_of_string"t")],
-  TacAtom(dummy_loc,TacExtend(dummy_loc,"closed_term",
+  TacAtom(Loc.ghost,TacExtend(Loc.ghost,"closed_term",
   [Genarg.in_gen Genarg.wit_constr (mkVar(id_of_string"t"));
    Genarg.in_gen (Genarg.wit_list1 Genarg.wit_ref) l])))
 *)
 let closed_term_ast l =
-  let l = List.map (fun gr -> ArgArg(dummy_loc,gr)) l in
+  let l = List.map (fun gr -> ArgArg(Loc.ghost,gr)) l in
   TacFun([Some(id_of_string"t")],
-  TacAtom(dummy_loc,TacExtend(dummy_loc,"closed_term",
-  [Genarg.in_gen Genarg.globwit_constr (GVar(dummy_loc,id_of_string"t"),None);
+  TacAtom(Loc.ghost,TacExtend(Loc.ghost,"closed_term",
+  [Genarg.in_gen Genarg.globwit_constr (GVar(Loc.ghost,id_of_string"t"),None);
    Genarg.in_gen (Genarg.wit_list1 Genarg.globwit_ref) l])))
 (*
-let _ = add_tacdef false ((dummy_loc,id_of_string"ring_closed_term"
+let _ = add_tacdef false ((Loc.ghost,id_of_string"ring_closed_term"
 *)
 
 (****************************************************************************)
@@ -165,14 +152,14 @@ let decl_constant na c =
 
 (* Calling a global tactic *)
 let ltac_call tac (args:glob_tactic_arg list) =
-  TacArg(dummy_loc,TacCall(dummy_loc, ArgArg(dummy_loc, Lazy.force tac),args))
+  TacArg(Loc.ghost,TacCall(Loc.ghost, ArgArg(Loc.ghost, Lazy.force tac),args))
 
 (* Calling a locally bound tactic *)
 let ltac_lcall tac args =
-  TacArg(dummy_loc,TacCall(dummy_loc, ArgVar(dummy_loc, id_of_string tac),args))
+  TacArg(Loc.ghost,TacCall(Loc.ghost, ArgVar(Loc.ghost, id_of_string tac),args))
 
 let ltac_letin (x, e1) e2 =
-  TacLetIn(false,[(dummy_loc,id_of_string x),e1],e2)
+  TacLetIn(false,[(Loc.ghost,id_of_string x),e1],e2)
 
 let ltac_apply (f:glob_tactic_expr) (args:glob_tactic_arg list) =
   Tacinterp.eval_tactic
@@ -182,7 +169,7 @@ let ltac_record flds =
   TacFun([Some(id_of_string"proj")], ltac_lcall "proj" flds)
 
 
-let carg c = TacDynamic(dummy_loc,Pretyping.constr_in c)
+let carg c = TacDynamic(Loc.ghost,Pretyping.constr_in c)
 
 let dummy_goal env =
   let (gl,_,sigma) = 
@@ -191,7 +178,7 @@ let dummy_goal env =
    Evd.sigma = sigma}
 
 let exec_tactic env n f args =
-  let lid = list_tabulate(fun i -> id_of_string("x"^string_of_int i)) n in
+  let lid = List.tabulate(fun i -> id_of_string("x"^string_of_int i)) n in
   let res = ref [||] in
   let get_res ist =
     let l = List.map (fun id ->  List.assoc id ist.lfun) lid in
@@ -549,7 +536,7 @@ let ring_equality (r,add,mul,opp,req) =
 		let op_morph =
 		  op_morph r add mul opp req add_m_lem mul_m_lem opp_m_lem in
 		  Flags.if_verbose
-		    msgnl
+		    msg_info
 		    (str"Using setoid \""++pr_constr req++str"\""++spc()++
 			str"and morphisms \""++pr_constr add_m_lem ++
 			str"\","++spc()++ str"\""++pr_constr mul_m_lem++
@@ -558,7 +545,7 @@ let ring_equality (r,add,mul,opp,req) =
 		  op_morph)
             | None ->
 		(Flags.if_verbose
-		    msgnl
+		    msg_info
 		    (str"Using setoid \""++pr_constr req ++str"\"" ++ spc() ++
 			str"and morphisms \""++pr_constr add_m_lem ++
 			str"\""++spc()++str"and \""++
@@ -624,24 +611,24 @@ let interp_cst_tac env sigma rk kind (zero,one,add,mul,opp) cst_tac =
     | None ->
         (match rk, opp, kind with
             Abstract, None, _ ->
-              let t = ArgArg(dummy_loc,Lazy.force ltac_inv_morphN) in
-              TacArg(dummy_loc,TacCall(dummy_loc,t,List.map carg [zero;one;add;mul]))
+              let t = ArgArg(Loc.ghost,Lazy.force ltac_inv_morphN) in
+              TacArg(Loc.ghost,TacCall(Loc.ghost,t,List.map carg [zero;one;add;mul]))
           | Abstract, Some opp, Some _ ->
-              let t = ArgArg(dummy_loc, Lazy.force ltac_inv_morphZ) in
-              TacArg(dummy_loc,TacCall(dummy_loc,t,List.map carg [zero;one;add;mul;opp]))
+              let t = ArgArg(Loc.ghost, Lazy.force ltac_inv_morphZ) in
+              TacArg(Loc.ghost,TacCall(Loc.ghost,t,List.map carg [zero;one;add;mul;opp]))
           | Abstract, Some opp, None ->
-              let t = ArgArg(dummy_loc, Lazy.force ltac_inv_morphNword) in
+              let t = ArgArg(Loc.ghost, Lazy.force ltac_inv_morphNword) in
               TacArg
-                (dummy_loc,TacCall(dummy_loc,t,List.map carg [zero;one;add;mul;opp]))
+                (Loc.ghost,TacCall(Loc.ghost,t,List.map carg [zero;one;add;mul;opp]))
           | Computational _,_,_ ->
-              let t = ArgArg(dummy_loc, Lazy.force ltac_inv_morph_gen) in
+              let t = ArgArg(Loc.ghost, Lazy.force ltac_inv_morph_gen) in
               TacArg
-                (dummy_loc,TacCall(dummy_loc,t,List.map carg [zero;one;zero;one]))
+                (Loc.ghost,TacCall(Loc.ghost,t,List.map carg [zero;one;zero;one]))
           | Morphism mth,_,_ ->
               let (_,czero,cone,_,_,_,_,_,_) = dest_morph env sigma mth in
-              let t = ArgArg(dummy_loc, Lazy.force ltac_inv_morph_gen) in
+              let t = ArgArg(Loc.ghost, Lazy.force ltac_inv_morph_gen) in
               TacArg
-                (dummy_loc,TacCall(dummy_loc,t,List.map carg [zero;one;czero;cone])))
+                (Loc.ghost,TacCall(Loc.ghost,t,List.map carg [zero;one;czero;cone])))
 
 let make_hyp env c =
   let t = Retyping.get_type_of env Evd.empty c in
@@ -657,8 +644,8 @@ let interp_power env pow =
   let carrier = Lazy.force coq_hypo in
   match pow with
   | None ->
-      let t = ArgArg(dummy_loc, Lazy.force ltac_inv_morph_nothing) in
-      (TacArg(dummy_loc,TacCall(dummy_loc,t,[])), lapp coq_None [|carrier|])
+      let t = ArgArg(Loc.ghost, Lazy.force ltac_inv_morph_nothing) in
+      (TacArg(Loc.ghost,TacCall(Loc.ghost,t,[])), lapp coq_None [|carrier|])
   | Some (tac, spec) ->
       let tac =
         match tac with
@@ -736,11 +723,11 @@ type ring_mod =
   | Const_tac of cst_tac_spec
   | Pre_tac of raw_tactic_expr
   | Post_tac of raw_tactic_expr
-  | Setoid of Topconstr.constr_expr * Topconstr.constr_expr
-  | Pow_spec of cst_tac_spec * Topconstr.constr_expr
+  | Setoid of Constrexpr.constr_expr * Constrexpr.constr_expr
+  | Pow_spec of cst_tac_spec * Constrexpr.constr_expr
            (* Syntaxification tactic , correctness lemma *)
-  | Sign_spec of Topconstr.constr_expr
-  | Div_spec of Topconstr.constr_expr
+  | Sign_spec of Constrexpr.constr_expr
+  | Div_spec of Constrexpr.constr_expr
 
 
 VERNAC ARGUMENT EXTEND ring_mod
@@ -831,7 +818,7 @@ let ring_lookup (f:glob_tactic_expr) lH rl t gl =
 
 TACTIC EXTEND ring_lookup
 | [ "ring_lookup" tactic0(f) "[" constr_list(lH) "]" ne_constr_list(lrt) ] ->
-    [ let (t,lr) = list_sep_last lrt in ring_lookup f lH lr t]
+    [ let (t,lr) = List.sep_last lrt in ring_lookup f lH lr t]
 END
 
 
@@ -1094,7 +1081,7 @@ let add_field_theory name fth eqth morphth cst_tac inj (pre,post) power sign odi
 
 type field_mod =
     Ring_mod of ring_mod
-  | Inject of Topconstr.constr_expr
+  | Inject of Constrexpr.constr_expr
 
 VERNAC ARGUMENT EXTEND field_mod
   | [ ring_mod(m) ] -> [ Ring_mod m ]
@@ -1159,5 +1146,5 @@ let field_lookup (f:glob_tactic_expr) lH rl t gl =
 
 TACTIC EXTEND field_lookup
 | [ "field_lookup" tactic(f) "[" constr_list(lH) "]" ne_constr_list(lt) ] ->
-      [ let (t,l) = list_sep_last lt in field_lookup f lH l t ]
+      [ let (t,l) = List.sep_last lt in field_lookup f lH l t ]
 END

@@ -1,41 +1,31 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Pp
+open Errors
 open Util
 open Names
-open Nameops
 open Term
 open Termops
-open Sign
 open Reduction
 open Proof_type
-open Declarations
 open Tacticals
 open Tacmach
-open Evar_refiner
 open Tactics
-open Pattern
+open Patternops
 open Clenv
-open Auto
-open Glob_term
-open Hiddentac
 open Typeclasses
-open Typeclasses_errors
-open Classes
-open Topconstr
-open Pfedit
-open Command
-open Libnames
+open Globnames
 open Evd
-open Compat
+open Locus
+open Misctypes
 
 let typeclasses_db = "typeclass_instances"
 let typeclasses_debug = ref false
@@ -156,7 +146,7 @@ and e_my_find_search db_list local_db hdc complete concl =
   let prods, concl = decompose_prod_assum concl in
   let nprods = List.length prods in
   let hintl =
-    list_map_append
+    List.map_append
       (fun db ->
 	if Hint_db.use_dn db then
 	  let flags = flags_of_state (Hint_db.transparent_state db) in
@@ -176,7 +166,7 @@ and e_my_find_search db_list local_db hdc complete concl =
 	  | Res_pf_THEN_trivial_fail (term,cl) ->
               tclTHEN (with_prods nprods (term,cl) (unify_e_resolve flags))
 	        (if complete then tclIDTAC else e_trivial_fail_db db_list local_db)
-	  | Unfold_nth c -> tclWEAK_PROGRESS (unfold_in_concl [all_occurrences,c])
+	  | Unfold_nth c -> tclWEAK_PROGRESS (unfold_in_concl [AllOccurrences,c])
 	  | Extern tacast -> 
 (* 	    tclTHEN *)
 (* 	      (fun gl -> Refiner.tclEVARS (mark_unresolvables (project gl)) gl) *)
@@ -212,7 +202,7 @@ let nb_empty_evars s =
 
 let pr_ev evs ev = Printer.pr_constr_env (Goal.V82.env evs ev) (Evarutil.nf_evar evs (Goal.V82.concl evs ev))
 
-let pr_depth l = prlist_with_sep (fun () -> str ".") pr_int (List.rev l)
+let pr_depth l = prlist_with_sep (fun () -> str ".") int (List.rev l)
 
 type autoinfo = { hints : Auto.hint_db; is_evar: existential_key option;
 		  only_classes: bool; auto_depth: int list; auto_last_tac: std_ppcmds Lazy.t;
@@ -248,14 +238,14 @@ let make_resolve_hyp env sigma st flags only_classes pri (id, _, cty) =
       let hints =
 	if is_class then
 	  let hints = build_subclasses ~check:false env sigma (VarRef id) None in
-	    (list_map_append
+	    (List.map_append
 	       (fun (pri, c) -> make_resolves env sigma 
 		  (true,false,Flags.is_verbose()) pri c) 
 	       hints)
 	else []
       in
-        (hints @ map_succeed 
-	 (fun f -> try f (c,cty) with UserError _ -> failwith "") 
+        (hints @ List.map_filter
+	 (fun f -> try Some (f (c, cty)) with Failure _ | UserError _ -> None) 
 	 [make_exact_entry ~name sigma pri; make_apply_entry ~name env sigma flags pri])
     else []
 
@@ -351,10 +341,10 @@ let hints_tac hints =
 	       | None -> aux i foundone tl
 	       | Some {it = gls; sigma = s'} ->
 	    	   if !typeclasses_debug then
-		     msgnl (pr_depth (i :: info.auto_depth) ++ str": " ++ Lazy.force pp
+		     msg_debug (pr_depth (i :: info.auto_depth) ++ str": " ++ Lazy.force pp
 			    ++ str" on" ++ spc () ++ pr_ev s gl);
 		   let fk =
-		     (fun () -> if !typeclasses_debug then msgnl (str"backtracked after " ++ Lazy.force pp);
+		     (fun () -> if !typeclasses_debug then msg_debug (str"backtracked after " ++ Lazy.force pp);
 			aux (succ i) true tl)
 		   in
 		   let sgls =
@@ -373,7 +363,7 @@ let hints_tac hints =
 			 (* Reorder with dependent subgoals. *)
 			 (gls' @ List.map (fun (ev, x) -> Some ev, x) evgls, s')
 		   in
-		   let gls' = list_map_i
+		   let gls' = List.map_i
 		     (fun j (evar, g) ->
 			let info =
 			  { info with auto_depth = j :: i :: info.auto_depth; auto_last_tac = pp;
@@ -389,7 +379,7 @@ let hints_tac hints =
 		     sk glsv fk)
 	| [] ->
 	  if not foundone && !typeclasses_debug then
-	    msgnl (pr_depth info.auto_depth ++ str": no match for " ++
+	    msg_debug (pr_depth info.auto_depth ++ str": no match for " ++
 		     Printer.pr_constr_env (Goal.V82.env s gl) concl ++
 		     spc () ++ int (List.length poss) ++ str" possibilities");
 	  fk ()
@@ -420,7 +410,7 @@ let then_list (second : atac) (sk : (auto_result, 'a) sk) : (auto_result, 'a) sk
 		  in
 		  let fk'' = 
 		    if not needs_backtrack then
-		      (if !typeclasses_debug then msgnl (str"no backtrack on " ++ pr_ev s gl ++ 
+		      (if !typeclasses_debug then msg_debug (str"no backtrack on " ++ pr_ev s gl ++ 
 							 str " after " ++ Lazy.force info.auto_last_tac); fk) 
 		    else fk' 
 		  in aux s' (gls'::acc) fk'' gls)
@@ -469,7 +459,7 @@ let cut_of_hints h =
 
 let make_autogoals ?(only_classes=true) ?(st=full_transparent_state) hints gs evm' =
   let cut = cut_of_hints hints in
-  { it = list_map_i (fun i g -> 
+  { it = List.map_i (fun i g -> 
     let (gl, auto) = make_autogoal ~only_classes ~st cut (Some (fst g)) {it = snd g; sigma = evm'} in
       (gl, { auto with auto_depth = [i]})) 1 gs; sigma = evm' }
 
@@ -584,8 +574,8 @@ let is_inference_forced p evd ev =
     then
       let (loc, k) = evar_source ev evd in
       match k with
-	| ImplicitArg (_, _, b) -> b
-	| QuestionMark _ -> false
+	| Evar_kinds.ImplicitArg (_, _, b) -> b
+	| Evar_kinds.QuestionMark _ -> false
 	| _ -> true
     else true
   with Not_found -> assert false
@@ -634,6 +624,23 @@ let has_undefined p oevd evd =
     snd (p oevd ev evi))
     evd false
 
+(** Revert the resolvability status of evars after resolution,
+    potentially unprotecting some evars that were set unresolvable
+    just for this call to resolution. *)
+
+let revert_resolvability oevd evd = 
+  Evd.fold_undefined
+    (fun ev evi evm ->
+     try 
+       if not (Typeclasses.is_resolvable evi) then
+	 let evi' = Evd.find_undefined oevd ev in
+	   if Typeclasses.is_resolvable evi' then
+	     Evd.add evm ev (Typeclasses.mark_resolvable evi)
+	   else evm
+       else evm
+     with Not_found -> evm)
+  evd evd
+
 (** If [do_split] is [true], we try to separate the problem in
     several components and then solve them separately *)
 
@@ -644,7 +651,7 @@ let resolve_all_evars debug m env p oevd do_split fail =
   let in_comp comp ev = if do_split then Intset.mem ev comp else true
   in
   let rec docomp evd = function
-    | [] -> evd
+    | [] -> revert_resolvability oevd evd
     | comp :: comps ->
       let p = select_and_update_evars p oevd (in_comp comp) in
       try
@@ -659,24 +666,21 @@ let resolve_all_evars debug m env p oevd do_split fail =
 	  docomp evd comps
   in docomp oevd split
 
-let initial_select_evars onlyargs =
-  if onlyargs then
-    (fun evd ev evi ->
-      Typeclasses.is_implicit_arg (snd (Evd.evar_source ev evd))
-      && Typeclasses.is_class_evar evd evi)
-  else
-    (fun evd ev evi -> Typeclasses.is_class_evar evd evi)
+let initial_select_evars filter =
+  fun evd ev evi ->
+    filter (snd evi.Evd.evar_source) &&
+    Typeclasses.is_class_evar evd evi
 
-let resolve_typeclass_evars debug m env evd onlyargs split fail =
+let resolve_typeclass_evars debug m env evd filter split fail =
   let evd = 
     try Evarconv.consider_remaining_unif_problems
       ~ts:(Typeclasses.classes_transparent_state ()) env evd
     with _ -> evd
   in
-    resolve_all_evars debug m env (initial_select_evars onlyargs) evd split fail
+    resolve_all_evars debug m env (initial_select_evars filter) evd split fail
 
-let solve_inst debug depth env evd onlyargs split fail =
-  resolve_typeclass_evars debug depth env evd onlyargs split fail
+let solve_inst debug depth env evd filter split fail =
+  resolve_typeclass_evars debug depth env evd filter split fail
 
 let _ =
   Typeclasses.solve_instanciations_problem :=
@@ -733,7 +737,6 @@ VERNAC COMMAND EXTEND Typeclasses_Rigid_Settings
 END
 
 open Genarg
-open Extraargs
 
 let pr_debug _prc _prlc _prt b =
   if b then Pp.str "debug" else Pp.mt()
@@ -744,7 +747,7 @@ ARGUMENT EXTEND debug TYPED AS bool PRINTED BY pr_debug
 END
 
 let pr_depth _prc _prlc _prt = function
-    Some i -> Util.pr_int i
+    Some i -> Pp.int i
   | None -> Pp.mt()
 
 ARGUMENT EXTEND depth TYPED AS int option PRINTED BY pr_depth
@@ -762,7 +765,7 @@ END
 
 let typeclasses_eauto ?(only_classes=false) ?(st=full_transparent_state) dbs gl =
   try 
-    let dbs = list_map_filter (fun db -> try Some (Auto.searchtable_map db) with _ -> None) dbs in
+    let dbs = List.map_filter (fun db -> try Some (Auto.searchtable_map db) with _ -> None) dbs in
     let st = match dbs with x :: _ -> Hint_db.transparent_state x | _ -> st in
       eauto ?limit:!typeclasses_depth ~only_classes ~st dbs gl
    with Not_found -> tclFAIL 0 (str" typeclasses eauto failed on: " ++ Printer.pr_goal gl) gl
@@ -788,7 +791,7 @@ let rec head_of_constr t =
 TACTIC EXTEND head_of_constr
   [ "head_of_constr" ident(h) constr(c) ] -> [
     let c = head_of_constr c in
-      letin_tac None (Name h) c None allHyps
+      letin_tac None (Name h) c None Locusops.allHyps
   ]
 END
 

@@ -1,19 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
-open Util
-open Names
-open Libnames
-open Himsg
-open Proof_type
-open Tacinterp
-open Vernacexpr
+open Errors
 
 let disable_drop e =
   if e <> Drop then e
@@ -62,5 +56,5 @@ let call (opn,converted_args) =
     | Drop -> raise Drop
     | e ->
         if !Flags.debug then
-	  msgnl (str"Vernac Interpreter " ++ str !loc);
+	  msg_debug (str"Vernac Interpreter " ++ str !loc);
         raise e

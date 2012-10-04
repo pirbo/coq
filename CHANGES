@@ -1,31 +1,153 @@
 Changes from V8.4
 =================
 
+Vernacular commands
+
+- The command "Record foo ..." does not generate induction principles
+  (foo_rect, foo_rec, foo_ind) anymore by default (feature wish #2693).
+  A flag "Set/Unset Record Elimination Schemes" allows to change this.
+  The tactic "induction" on a record is now actually doing "destruct".
+- The "Open Scope" command can now be given also a delimiter (e.g. Z).
+
+Specification Language
+
+- The syntax "x -> y" is now declared at level 99. In particular, it has
+  now a lower priority than "<->": "A -> B <-> C" is now "A -> (B <-> C)"
+  (possible source of incompatibilities)
+
 Tactics
 
 - Tactics btauto, a reflexive boolean tautology solver.
+- Tactic "tauto" was exceptionally able to destruct other connectives
+  than the binary connectives "and", "or", "prod", "sum", "iff". This
+  non-uniform behavior has been fixed (bug #2680) and tauto is
+  slightly weaker (possible source of incompatibilities). On the
+  opposite side, new tactic "dtauto" is able to destruct any
+  record-like inductive types, superseding the old version of "tauto".
+- Similarly, "intuition" has been made more uniform and, where it now
+  fails, "dintuition" can be used. (possible source of incompatibilities)
+- Tactic notations can now be defined locally to a module (use "Local" prefix).
 
-Changes from V8.4beta to V8.4
-=============================
+Program
+
+- "Solve Obligations using" changed to "Solve Obligations with",
+  consistent with "Proof with".
+- Program Lemma, Definition now respect automatic introduction.
+
+Notations
+
+- "Bind Scope" can no longer bind "Funclass" and "Sortclass".
+- A notation can be given a (compat "8.x") annotation, making
+  it behave like a (only parsing), but flags may active warning
+  or error when this notation is used.
+
+Internal Infrastructure
+
+- Many reorganisations in the ocaml source files. For instance,
+  many internal a.s.t. of Coq are now placed in mli files in
+  a new directory intf/, for instance constrexpr.mli or glob_term.mli.
+  More details in dev/doc/changes.
+- The file states/initial.coq does not exist anymore. Instead, coqtop
+  initially does a "Require" of Prelude.vo (or nothing when given
+  the options -noinit or -nois).
+- The build system does not produce anymore programs named coqtop.opt
+  and a symbolic link to coqtop. Instead, coqtop is now directly
+  an executable compiled with the best OCaml compiler available.
+  The bytecode program coqtop.byte is still produced. Same for other
+  utilities.
+ 
+Changes from V8.4beta2 to V8.4
+==============================
 
 Vernacular commands
 
-- New command "Set Parsing Explicit" for deactivating parsing (and printing)
-  of implicit arguments (useful for teaching).
-- New command "Grab Existential Variables" to transform the unresolved evars at
-  the end of a proof into goals.
+- The "Reset" command is now supported again in files given to coqc or Load.
+- "Show Script" now indents again the displayed scripts. It can also work
+  correctly across Load'ed files if the option "Unset Atomic Load" is used.
+- "Open Scope" can now be given the delimiter (e.g. Z) instead of the full
+  scope name (e.g. Z_scope).
+
+Notations
+
+- Most compatibility notations of the standard library are now tagged as
+  (compat xyz), where xyz is a former Coq version, for instance "8.3".
+  These notations behave as (only parsing) notations, except that they may
+  triggers warnings (or errors) when used while Coq is not in a corresponding
+  -compat mode.
+- To activate these compatibility warnings, use "Set Verbose Compat Notations"
+  or the command-line flag -verbose-compat-notations.
+- For a strict mode without these compatibility notations, use
+  "Unset Compat Notations" or the command-line flag -no-compat-notations.
 
 Tactics
 
-- New command "r string" that interprets "idtac string" as a breakpoint
-  and jumps to its next use in Ltac debugger.
+- An annotation "eqn:H" or "eqn:?" can be added to a "destruct"
+  or "induction" to make it generate equations in the spirit of "case_eq".
+  The former syntax "_eqn" is discontinued.
+- The name of the hypothesis introduced by tactic "remember" can be
+  set via the new syntax "remember t as x eqn:H" (wish #2489).
+
+Libraries
+
+- Reals: changed definition of PI, no more axiom about sin(PI/2).
+- SetoidPermutation: a notion of permutation for lists modulo a setoid equality.
+- BigN: fixed the ocaml code doing the parsing/printing of big numbers.
+
+Changes from V8.4beta to V8.4beta2
+==================================
+
+Vernacular commands
+
+- Commands "Back" and "BackTo" are now handling the proof states. They may
+  perform some extra steps of backtrack to avoid states where the proof
+  state is unavailable (typically a closed proof).
+- The commands "Suspend" and "Resume" have been removed.
+- A basic Show Script has been reintroduced (no indentation).
+- New command "Set Parsing Explicit" for deactivating parsing (and printing)
+  of implicit arguments (useful for teaching).
+- New command "Grab Existential Variables" to transform the unresolved evars
+  at the end of a proof into goals.
+
+Tactics
+
+- Still no general "info" tactical, but new specific tactics info_auto,
+  info_eauto, info_trivial which provides information on the proofs found
+  by auto/eauto/trivial. Display of these details could also be activated by
+  "Set Info Auto"/"Set Info Eauto"/"Set Info Trivial".
+- Details on everything tried by auto/eauto/trivial during a proof search
+  could be obtained by "debug auto", "debug eauto", "debug trivial" or by a
+  global "Set Debug Auto"/"Set Debug Eauto"/"Set Debug Trivial".
+- New command "r string" in Ltac debugger that interprets "idtac
+  string" in Ltac code as a breakpoint and jumps to its next use.
+- Tactics from the Dp plugin (simplify, ergo, yices, cvc3, z3, cvcl,
+  harvey, zenon, gwhy) have been removed, since Why2 has not been
+  maintained for the last few years. The Why3 plugin should be a suitable
+  replacement in most cases.
+
+Libraries
+
+- MSetRBT: a new implementation of MSets via Red-Black trees (initial
+  contribution by Andrew Appel).
+- MSetAVL: for maximal sharing with the new MSetRBT, the argument order
+  of Node has changed (this should be transparent to regular MSets users).
+
+Module System
+
+- The names of modules (and module types) are now in a fully separated
+  namespace from ordinary definitions: "Definition E:=0. Module E. End E."
+  is now accepted.
+
+CoqIDE
+
+- Coqide now supports the "Restart" command, and "Undo" (with a warning).
+  Better support for "Abort".
 
 Changes from V8.3 to V8.4beta
 =============================
 
 Logic
 
-- Standard eta-conversion now supported (dependent product only) (DOC TO DO).
+- Standard eta-conversion now supported (dependent product only).
 - Guard condition improvement: subterm property is propagated through beta-redex
   blocked by pattern-matching, as in "(match v with C .. => fun x => u end) x";
   this allows for instance to use "rewrite ... in ..." without breaking
@@ -50,8 +172,8 @@ Tactics
 
 - New proof engine.
 - Scripts can now be structured thanks to bullets - * + and to subgoal
-  delimitation via { }. Note: for use with ProofGeneral, a cvs version of
-  Proof General no older than mid-July 2011 is currently required (DOC TODO).
+  delimitation via { }. Note: for use with Proof General, a cvs version of
+  Proof General no older than mid-July 2011 is currently required.
 - Support for tactical "info" is suspended.
 - Support for command "Show Script" is suspended.
 - New tactics constr_eq, is_evar and has_evar for use in Ltac (DOC TODO).
@@ -74,7 +196,7 @@ Tactics
 - Using "auto with nocore" disables the use of the "core" database (wish #2188).
   This pseudo-database "nocore" can also be used with trivial and eauto.
 - Tactics "set", "destruct" and "induction" accepts incomplete terms and
-  use the goal to complete the pattern assuming it is no ambiguous.
+  use the goal to complete the pattern assuming it is non ambiguous.
 - When used on arguments with a dependent type, tactics such as
   "destruct", "induction", "case", "elim", etc. now try to abstract
   automatically the dependencies over the arguments of the types
@@ -102,11 +224,10 @@ Vernacular commands
 - It is now mandatory to have a space (or tabulation or newline or end-of-file)
   after a "." ending a sentence.
 - In SearchAbout, the [ ] delimiters are now optional.
-- New command "Add/Remove Search Blacklist <substring> ..." :
+- New command "Add/Remove Search Blacklist <substring> ...":
   a Search or SearchAbout or similar query will never mention lemmas
   whose qualified names contain any of the declared substrings.
-  The default blacklisted substrings are "_admitted" "_subproof" "Private_"
-  (DOC TODO).
+  The default blacklisted substrings are "_admitted" "_subproof" "Private_".
 - When the output file of "Print Universes" ends in ".dot" or ".gv",
   the universe graph is printed in the DOT language, and can be
   processed by Graphviz tools.
@@ -147,9 +268,9 @@ Module System
 Libraries
 
 - Extension of the abstract part of Numbers, which now provide axiomatizations
-  and results about many more integer functions, such as pow, gcd, lcm, sqrt, log2
-  and bitwise functions. These functions are implemented for nat N BigN Z BigZ.
-  See in particular file NPeano for new functions about nat.
+  and results about many more integer functions, such as pow, gcd, lcm, sqrt,
+  log2 and bitwise functions. These functions are implemented for nat, N, BigN,
+  Z, BigZ. See in particular file NPeano for new functions about nat.
 - The definition of types positive, N, Z is now in file BinNums.v
 - Major reorganization of ZArith. The initial file ZArith/BinInt.v now contains
   an internal module Z implementing the Numbers interface for integers.
@@ -188,13 +309,13 @@ Libraries
   may introduce incompatibilities. In particular, the order of the arguments
   for BigN.shiftl and BigN.shiftr is now reversed: the number to shift now
   comes first. By default, the power function now takes two BigN.
-- Creation of Vector, an independant library for lists indiced by their length.
+- Creation of Vector, an independent library for lists indexed by their length.
   Vectors' names overwrite lists' one so you should not "Import" the library.
-  All old names change: functions' name follows the ocaml names and, for example,
+  All old names changed: function names follow the ocaml ones and, for example,
   Vcons becomes Vector.cons. You can get [..;..;..]-style notations by importing
   Vector.VectorNotations.
 - Removal of TheoryList. Requiring List instead should work most of the time.
-- New syntax "rew Heq in H" and "rew <- Heq in H" for eq_rect and 
+- New syntax "rew Heq in H" and "rew <- Heq in H" for eq_rect and
   eq_rect_r (available by importing module EqNotations).
 - Wf.iter_nat is now Peano.nat_iter (with an implicit type argument).
 

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -191,6 +191,10 @@ type structure_field_body =
   | SFBmind of mutual_inductive_body
   | SFBmodule of module_body
   | SFBmodtype of module_type_body
+
+(** NB: we may encounter now (at most) twice the same label in
+    a [structure_body], once for a module ([SFBmodule] or [SFBmodtype])
+    and once for an object ([SFBconst] or [SFBmind]) *)
 
 and structure_body = (label * structure_field_body) list
 

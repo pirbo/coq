@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,11 +15,11 @@
 (* Equal inductive types by Jacek Chrzaszcz as part of the module
    system, Aug 2002 *)
 
+open Errors
 open Util
 open Names
 open Term
 open Univ
-open Declarations
 open Environ
 open Closure
 open Esubst
@@ -153,7 +153,7 @@ let compare_stacks f fmind lft1 stk1 lft2 stk2 cuniv =
       | (z1::s1, z2::s2) ->
           let cu1 = cmp_rec s1 s2 cuniv in
           (match (z1,z2) with
-            | (Zlapp a1,Zlapp a2) -> array_fold_right2 f a1 a2 cu1
+            | (Zlapp a1,Zlapp a2) -> Array.fold_right2 f a1 a2 cu1
             | (Zlfix(fx1,a1),Zlfix(fx2,a2)) ->
                 let cu2 = f fx1 fx2 cu1 in
                 cmp_rec a1 a2 cu2
@@ -161,7 +161,7 @@ let compare_stacks f fmind lft1 stk1 lft2 stk2 cuniv =
                 if not (fmind ci1.ci_ind ci2.ci_ind) then
 		  raise NotConvertible;
 		let cu2 = f (l1,p1) (l2,p2) cu1 in
-                array_fold_right2 (fun c1 c2 -> f (l1,c1) (l2,c2)) br1 br2 cu2
+                Array.fold_right2 (fun c1 c2 -> f (l1,c1) (l2,c2)) br1 br2 cu2
             | _ -> assert false)
       | _ -> cuniv in
   if compare_stack_shape stk1 stk2 then
@@ -193,7 +193,7 @@ let sort_cmp pb s0 s1 cuniv =
 	assert (is_univ_variable u2);
 	(match pb with
            | CONV -> enforce_eq u1 u2 cuniv
-	   | CUMUL -> enforce_geq u2 u1 cuniv)
+	   | CUMUL -> enforce_leq u1 u2 cuniv)
     | (_, _) -> raise NotConvertible
 
 
@@ -443,7 +443,7 @@ let conv ?(l2r=false) ?(evars=fun _->None) = fconv CONV l2r evars
 let conv_leq ?(l2r=false) ?(evars=fun _->None) = fconv CUMUL l2r evars
 
 let conv_leq_vecti ?(l2r=false) ?(evars=fun _->None) env v1 v2 =
-  array_fold_left2_i
+  Array.fold_left2_i
     (fun i c t1 t2 ->
       let c' =
         try conv_leq ~l2r ~evars env t1 t2

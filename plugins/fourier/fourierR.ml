@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -14,9 +14,9 @@ des inéquations et équations sont entiers. En attendant la tactique Field.
 
 open Term
 open Tactics
-open Clenv
 open Names
 open Libnames
+open Globnames
 open Tacticals
 open Tacmach
 open Fourier
@@ -75,7 +75,6 @@ let flin_emult a f =
 ;;
 
 (*****************************************************************************)
-open Vernacexpr
 
 type ineq = Rlt | Rle | Rgt | Rge
 
@@ -348,7 +347,7 @@ let is_int x = (x.den)=1
 ;;
 
 (* fraction = couple (num,den) *)
-let rec rational_to_fraction x= (x.num,x.den)
+let rational_to_fraction x= (x.num,x.den)
 ;;
 
 (* traduction -3 -> (Ropp (Rplus R1 (Rplus R1 R1)))
@@ -359,7 +358,7 @@ let int_to_real n =
    then get coq_R0
    else
      (let s=ref (get coq_R1) in
-      for i=1 to (nn-1) do s:=mkApp (get coq_Rplus,[|get coq_R1;!s|]) done;
+      for _i = 1 to (nn-1) do s:=mkApp (get coq_Rplus,[|get coq_R1;!s|]) done;
       if n<0 then mkApp (get coq_Ropp, [|!s|]) else !s)
 ;;
 (* -1/2 -> (Rmult (Ropp R1) (Rinv (Rplus R1 R1)))
@@ -375,9 +374,9 @@ let rational_to_real x =
 let tac_zero_inf_pos gl (n,d) =
    let tacn=ref (apply (get coq_Rlt_zero_1)) in
    let tacd=ref (apply (get coq_Rlt_zero_1)) in
-   for i=1 to n-1 do
+   for _i = 1 to n - 1 do
        tacn:=(tclTHEN (apply (get coq_Rlt_zero_pos_plus1)) !tacn); done;
-   for i=1 to d-1 do
+   for _i = 1 to d - 1 do
        tacd:=(tclTHEN (apply (get coq_Rlt_zero_pos_plus1)) !tacd); done;
    (tclTHENS (apply (get coq_Rlt_mult_inv_pos)) [!tacn;!tacd])
 ;;
@@ -389,9 +388,9 @@ let tac_zero_infeq_pos gl (n,d)=
                  then (apply (get coq_Rle_zero_zero))
                  else (apply (get coq_Rle_zero_1))) in
    let tacd=ref (apply (get coq_Rlt_zero_1)) in
-   for i=1 to n-1 do
+   for  _i = 1 to n - 1 do
        tacn:=(tclTHEN (apply (get coq_Rle_zero_pos_plus1)) !tacn); done;
-   for i=1 to d-1 do
+   for _i = 1 to d - 1 do
        tacd:=(tclTHEN (apply (get coq_Rlt_zero_pos_plus1)) !tacd); done;
    (tclTHENS (apply (get coq_Rle_mult_inv_pos)) [!tacn;!tacd])
 ;;
@@ -503,11 +502,11 @@ let rec fourier gl=
 		        with _ -> ())
               hyps;
     (* lineq = les inéquations découlant des hypothèses *)
-    if !lineq=[] then Util.error "No inequalities";
+    if !lineq=[] then Errors.error "No inequalities";
     let res=fourier_lineq (!lineq) in
     let tac=ref tclIDTAC in
     if res=[]
-    then Util.error "fourier failed"
+    then Errors.error "fourier failed"
     (* l'algorithme de Fourier a réussi: on va en tirer une preuve Coq *)
     else (match res with
         [(cres,sres,lc)]->
@@ -604,7 +603,7 @@ let rec fourier gl=
 (* en attendant Field, ça peut aider Ring de remplacer 1/1 par 1 ... *)
 
       			        [tclORELSE
-                                   (Ring.polynom [])
+                                   (* TODO : Ring.polynom []*) tclIDTAC
                                    tclIDTAC;
 					  (tclTHEN (apply (get coq_sym_eqT))
 						(apply (get coq_Rinv_1)))]

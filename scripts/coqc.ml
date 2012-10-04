@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -22,8 +22,7 @@
 
 let environment = Unix.environment ()
 
-let best = if Coq_config.arch = "win32" then "" else ("."^Coq_config.best)
-let binary = ref ("coqtop" ^ best)
+let binary = ref "coqtop"
 let image = ref ""
 
 (* coqc options *)
@@ -110,8 +109,7 @@ let parse_args () =
 	usage ()
     | "-byte" :: rem ->
        binary := "coqtop.byte"; parse (cfiles,args) rem
-    | "-opt" :: rem ->
-       binary := "coqtop.opt"; parse (cfiles,args) rem
+    | "-opt" :: rem -> (* now a no-op *) parse (cfiles,args) rem
     | "-libdir" :: _ :: rem ->
         print_string "Warning: option -libdir deprecated and ignored\n"; flush stdout;
         parse (cfiles,args) rem
@@ -142,7 +140,7 @@ let parse_args () =
     | "-R" :: s :: t :: rem -> parse (cfiles,t::s::"-R"::args) rem
 
     | ("-notactics"|"-debug"|"-nolib"|"-boot"
-      |"-batch"|"-nois"|"-noglob"|"-no-glob"
+      |"-batch"|"-noinit"|"-nois"|"-noglob"|"-no-glob"
       |"-q"|"-full"|"-profile"|"-just-parsing"|"-echo" |"-unsafe"|"-quiet"
       |"-silent"|"-m"|"-xml"|"-v7"|"-v8"|"-beautify"|"-strict-implicit"
       |"-dont-load-proofs"|"-load-proofs"|"-force-load-proofs"
@@ -150,8 +148,7 @@ let parse_args () =
 	parse (cfiles,o::args) rem
 
     | ("-where") :: _ ->
-	(try print_endline (Envars.coqlib ())
-	 with Util.UserError(_,pps) -> Pp.msgerrnl (Pp.hov 0 pps));
+	print_endline (Envars.coqlib (fun x -> x));
 	exit 0
 
     | ("-config" | "--config") :: _ -> Usage.print_config (); exit 0

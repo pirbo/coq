@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -14,7 +14,6 @@
    for evaluation in the bytecode virtual machine *)
 
 open Term
-open Names
 
 (* Type declarations, these types shouldn't be exported they are accessed
    through specific functions. As being mutable and all it is wiser *)
@@ -65,6 +64,9 @@ type int31_field =
   | Int31Compare
   | Int31Head0
   | Int31Tail0
+  | Int31Lor
+  | Int31Land
+  | Int31Lxor
 
 type field =
  (* | KEq

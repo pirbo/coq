@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -615,12 +615,12 @@ Proof.
 Qed.
 Hint Resolve absurd_eq_true.
 
-(* A specific instance of trans_eq that preserves compatibility with
+(* A specific instance of eq_trans that preserves compatibility with
    old hint bool_2 *)
 
 Lemma trans_eq_bool : forall x y z:bool, x = y -> y = z -> x = z.
 Proof.
-  apply trans_eq.
+  apply eq_trans.
 Qed.
 Hint Resolve trans_eq_bool.
 
@@ -754,7 +754,7 @@ Notation "a &&& b" := (if a then b else false)
 Notation "a ||| b" := (if a then true else b)
  (at level 50, left associativity) : lazy_bool_scope.
 
-Open Local Scope lazy_bool_scope.
+Local Open Scope lazy_bool_scope.
 
 Lemma andb_lazy_alt : forall a b : bool, a && b = a &&& b.
 Proof.

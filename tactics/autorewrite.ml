@@ -1,26 +1,24 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Equality
-open Hipattern
 open Names
 open Pp
 open Proof_type
 open Tacticals
-open Tacinterp
 open Tactics
 open Term
 open Termops
+open Errors
 open Util
-open Glob_term
-open Vernacinterp
 open Tacexpr
 open Mod_subst
+open Locus
 
 (* Rewriting rules *)
 type rew_rule = { rew_lemma: constr;
@@ -89,7 +87,7 @@ let find_matches bas pat =
     List.map (fun ((_,rew), esubst, subst) -> rew) res
 
 let print_rewrite_hintdb bas =
-  ppnl (str "Database " ++ str bas ++ (Pp.cut ()) ++
+  (str "Database " ++ str bas ++ (Pp.cut ()) ++
 	   prlist_with_sep Pp.cut
 	   (fun h ->
 	     str (if h.rew_l2r then "rewrite -> " else "rewrite <- ") ++
@@ -98,7 +96,7 @@ let print_rewrite_hintdb bas =
 	       Pptactic.pr_glob_tactic (Global.env()) h.rew_tac)
 	   (find_rewrites bas))
 
-type raw_rew_rule = loc * constr * bool * raw_tactic_expr
+type raw_rew_rule = Loc.t * constr * bool * raw_tactic_expr
 
 (* Applies all the rules of one base *)
 let one_base general_rewrite_maybe_in tac_main bas =
@@ -117,7 +115,7 @@ let autorewrite ?(conds=Naive) tac_main lbas =
        tclTHEN tac
         (one_base (fun dir c tac ->
 	  let tac = tac, conds in
-	    general_rewrite dir all_occurrences true false ~tac c)
+	    general_rewrite dir AllOccurrences true false ~tac c)
 	  tac_main bas))
       tclIDTAC lbas))
 
@@ -135,7 +133,7 @@ let autorewrite_multi_in ?(conds=Naive) idl tac_main lbas : tactic =
       | _ -> (* even the hypothesis id is missing *)
              error ("No such hypothesis: " ^ (string_of_id !id) ^".")
     in
-    let gl' = general_rewrite_in dir all_occurrences true ~tac:(tac, conds) false !id cstr false gl in
+    let gl' = general_rewrite_in dir AllOccurrences true ~tac:(tac, conds) false !id cstr false gl in
     let gls = gl'.Evd.it in
     match gls with
        g::_ ->
@@ -171,8 +169,8 @@ let gen_auto_multi_rewrite conds tac_main lbas cl =
   let try_do_hyps treat_id l =
     autorewrite_multi_in ~conds (List.map treat_id l) tac_main lbas
   in
-  if cl.concl_occs <> all_occurrences_expr &
-     cl.concl_occs <> no_occurrences_expr
+  if cl.concl_occs <> AllOccurrences &
+     cl.concl_occs <> NoOccurrences
   then
     error "The \"at\" syntax isn't available yet for the autorewrite tactic."
   else
@@ -182,7 +180,7 @@ let gen_auto_multi_rewrite conds tac_main lbas cl =
 	| _ ->      tclTHENFIRST t1 t2
     in
     compose_tac
-	(if cl.concl_occs <> no_occurrences_expr then autorewrite ~conds tac_main lbas else tclIDTAC)
+	(if cl.concl_occs <> NoOccurrences then autorewrite ~conds tac_main lbas else tclIDTAC)
 	(match cl.onhyps with
 	   | Some l -> try_do_hyps (fun ((_,id),_) -> id) l
 	   | None ->
@@ -195,21 +193,21 @@ let gen_auto_multi_rewrite conds tac_main lbas cl =
 let auto_multi_rewrite ?(conds=Naive) = gen_auto_multi_rewrite conds Refiner.tclIDTAC
 
 let auto_multi_rewrite_with ?(conds=Naive) tac_main lbas cl gl =
-  let onconcl = cl.Tacexpr.concl_occs <> no_occurrences_expr in
-  match onconcl,cl.Tacexpr.onhyps with
+  let onconcl = cl.Locus.concl_occs <> NoOccurrences in
+  match onconcl,cl.Locus.onhyps with
     | false,Some [_] | true,Some [] | false,Some [] ->
 	(* autorewrite with .... in clause using tac n'est sur que
 	   si clause represente soit le but soit UNE hypothese
 	*)
 	gen_auto_multi_rewrite conds tac_main lbas cl gl
     | _ ->
-	    Util.errorlabstrm "autorewrite"
+	    Errors.errorlabstrm "autorewrite"
 	      (strbrk "autorewrite .. in .. using can only be used either with a unique hypothesis or on the conclusion.")
 
 (* Functions necessary to the library object declaration *)
 let cache_hintrewrite (_,(rbase,lrl)) =
   let base = try find_base rbase with _ -> HintDN.empty in
-  let max = try fst (Util.list_last (HintDN.find_all base)) with _ -> 0 in
+  let max = try fst (Util.List.last (HintDN.find_all base)) with _ -> 0 in
   let lrl = HintDN.map (fun (i,h) -> (i + max, h)) lrl in
     rewtab:=Stringmap.add rbase (HintDN.union lrl base) !rewtab
 
@@ -243,12 +241,6 @@ type hypinfo = {
   hyp_left : constr;
   hyp_right : constr;
 }
-
-let evd_convertible env evd x y =
-  try
-    ignore(Unification.w_unify ~flags:Unification.elim_flags env evd Reduction.CONV x y); true 
-  (* try ignore(Evarconv.the_conv_x env x y evd); true *)
-  with _ -> false
 
 let decompose_applied_relation metas env sigma c ctype left2right =
   let find_rel ty =

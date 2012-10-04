@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -75,13 +75,13 @@ Extract Constant Z.compare => "Big.compare_case Eq Lt Gt".
 Extract Constant Z.of_N => "fun p -> p".
 Extract Constant Z.abs_N => "Big.abs".
 
-(** Zdiv and Zmod are quite complex to define in terms of (/) and (mod).
+(** Z.div and Z.modulo are quite complex to define in terms of (/) and (mod).
     For the moment we don't even try *)
 
 (** Test:
 Require Import ZArith NArith.
 
 Extraction "/tmp/test.ml"
- Pplus Ppred Pminus Pmult Pcompare Npred Nminus Ndiv Nmod Ncompare
- Zplus Zmult BinInt.Zcompare Z_of_N Zabs_N Zdiv.Zdiv Zmod.
+ Pos.add Pos.pred Pos.sub Pos.mul Pos.compare N.pred N.sub N.div N.modulo N.compare
+ Z.add Z.mul Z.compare Z.of_N Z.abs_N Z.div Z.modulo.
 *)

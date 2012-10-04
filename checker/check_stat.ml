@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open System
 open Flags
@@ -19,7 +20,7 @@ let memory_stat = ref false
 
 let print_memory_stat () =
   if !memory_stat then begin
-    Format.printf "total heap size = %d kbytes\n" (heap_size_kb ());
+    Format.printf "total heap size = %d kbytes\n" (CObj.heap_size_kb ());
     Format.print_newline();
     flush_all()
   end
@@ -54,12 +55,12 @@ let print_context env =
          env_modules=mods; env_modtypes=mtys};
        env_stratification=
         {env_universes=univ; env_engagement=engt}} = env in
-    msgnl(hov 0
+    ppnl(hov 0
       (fnl() ++ str"CONTEXT SUMMARY" ++ fnl() ++
       str"===============" ++ fnl() ++ fnl() ++
       str "* " ++ hov 0 (pr_engt engt ++ fnl()) ++ fnl() ++
       str "* " ++ hov 0 (pr_ax csts) ++
-      fnl()))
+      fnl())); pp_flush()
   end
 
 let stats () =

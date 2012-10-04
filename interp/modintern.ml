@@ -1,17 +1,14 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pp
-open Util
-open Names
 open Entries
 open Libnames
-open Topconstr
+open Constrexpr
 open Constrintern
 
 type module_internalization_error =
@@ -28,8 +25,6 @@ val error_not_a_functor :  module_struct_entry -> 'a
 
 val error_not_equal : module_path -> module_path -> 'a
 
-val error_result_must_be_signature : unit -> 'a
-
 oval error_not_a_modtype_loc : loc -> string -> 'a
 
 val error_not_a_module_loc : loc -> string -> 'a
@@ -41,70 +36,20 @@ val error_with_in_module : unit -> 'a
 val error_application_to_module_type : unit -> 'a
 *)
 
-let error_result_must_be_signature () =
-  error "The result module type must be a signature."
-
 let error_not_a_modtype_loc loc s =
-  Compat.Loc.raise loc (Modops.ModuleTypingError (Modops.NotAModuleType s))
+  Loc.raise loc (Modops.ModuleTypingError (Modops.NotAModuleType s))
 
 let error_not_a_module_loc loc s =
-  Compat.Loc.raise loc (Modops.ModuleTypingError (Modops.NotAModule s))
+  Loc.raise loc (Modops.ModuleTypingError (Modops.NotAModule s))
 
 let error_not_a_module_nor_modtype_loc loc s =
-  Compat.Loc.raise loc (ModuleInternalizationError (NotAModuleNorModtype s))
+  Loc.raise loc (ModuleInternalizationError (NotAModuleNorModtype s))
 
 let error_incorrect_with_in_module loc =
-  Compat.Loc.raise loc (ModuleInternalizationError IncorrectWithInModule)
+  Loc.raise loc (ModuleInternalizationError IncorrectWithInModule)
 
 let error_application_to_module_type loc =
-  Compat.Loc.raise loc (ModuleInternalizationError IncorrectModuleApplication)
-
-
-
-
-let rec make_mp mp = function
-    [] -> mp
-  | h::tl -> make_mp (MPdot(mp, label_of_id h)) tl
-
-(*
-(* Since module components are not put in the nametab we try to locate
-the module prefix *)
-exception BadRef
-
-let lookup_qualid (modtype:bool) qid =
-  let rec make_mp mp = function
-      [] -> mp
-    | h::tl -> make_mp (MPdot(mp, label_of_id h)) tl
-  in
-  let rec find_module_prefix dir n =
-    if n<0 then raise Not_found;
-    let dir',dir'' = list_chop n dir in
-    let id',dir''' =
-      match dir'' with
-	| hd::tl -> hd,tl
-	| _ -> anomaly "This list should not be empty!"
-    in
-    let qid' = make_qualid dir' id' in
-      try
-	match Nametab.locate qid' with
-	  | ModRef mp -> mp,dir'''
-	  | _ -> raise BadRef
-      with
-	  Not_found -> find_module_prefix dir (pred n)
-  in
-    try Nametab.locate qid
-    with Not_found ->
-      let (dir,id) = repr_qualid qid in
-      let pref_mp,dir' = find_module_prefix dir (List.length dir - 1) in
-      let mp =
-	List.fold_left (fun mp id -> MPdot (mp, label_of_id id)) pref_mp dir'
-      in
-	if modtype then
-	  ModTypeRef (make_ln mp (label_of_id id))
-	else
-	  ModRef (MPdot (mp,label_of_id id))
-
-*)
+  Loc.raise loc (ModuleInternalizationError IncorrectModuleApplication)
 
 
 (* Search for the head of [qid] in [binders].
@@ -148,7 +93,7 @@ let loc_of_module = function
 let check_module_argument_is_path me' = function
   | CMident _ -> ()
   | (CMapply (loc,_,_) | CMwith (loc,_,_)) ->
-      Compat.Loc.raise loc
+      Loc.raise loc
         (Modops.ModuleTypingError (Modops.ApplicationToNotPath me'))
 
 let rec interp_modexpr env = function

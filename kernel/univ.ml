@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -14,6 +14,7 @@
 (* Revisions by Bruno Barras, Hugo Herbelin, Pierre Letouzey *)
 
 open Pp
+open Errors
 open Util
 
 (* Universes are stratified by a partial ordering $\le$.
@@ -32,25 +33,36 @@ module UniverseLevel = struct
 
   type t =
     | Set
-    | Level of Names.dir_path * int
+    | Level of int * Names.dir_path
 
-  (* A specialized comparison function: we compare the [int] part
-     first (this property is used by the [check_sorted] function
-     below). This way, most of the time, the [dir_path] part is not
-     considered. *)
+  (* A specialized comparison function: we compare the [int] part first.
+     This way, most of the time, the [dir_path] part is not considered.
 
-  let compare u v = match u,v with
+     Normally, placing the [int] first in the pair above in enough in Ocaml,
+     but to be sure, we write below our own comparison function.
+
+     Note: this property is used by the [check_sorted] function below. *)
+
+  let compare u v =
+    if u == v then 0
+    else
+    (match u,v with
     | Set, Set -> 0
     | Set, _ -> -1
     | _, Set -> 1
-    | Level (dp1, i1), Level (dp2, i2) ->
+    | Level (i1, dp1), Level (i2, dp2) ->
       if i1 < i2 then -1
       else if i1 > i2 then 1
-      else compare dp1 dp2
+      else compare dp1 dp2)
+
+  let equal u v = match u,v with
+    | Set, Set -> true
+    | Level (i1, dp1), Level (i2, dp2) -> i1 = i2 && dp1 = dp2
+    | _ -> false
 
   let to_string = function
     | Set -> "Set"
-    | Level (d,n) -> Names.string_of_dirpath d^"."^string_of_int n
+    | Level (n,d) -> Names.string_of_dirpath d^"."^string_of_int n
 end
 
 module UniverseLMap = Map.Make (UniverseLevel)
@@ -76,7 +88,7 @@ type universe =
   | Atom of UniverseLevel.t
   | Max of UniverseLevel.t list * UniverseLevel.t list
 
-let make_universe_level (m,n) = UniverseLevel.Level (m,n)
+let make_universe_level (m,n) = UniverseLevel.Level (n,m)
 let make_universe l = Atom l
 let make_univ c = Atom (make_universe_level c)
 
@@ -113,15 +125,15 @@ let super = function
 let sup u v =
   match u,v with
     | Atom u, Atom v ->
-	if UniverseLevel.compare u v = 0 then Atom u else Max ([u;v],[])
+	if UniverseLevel.equal u v then Atom u else Max ([u;v],[])
     | u, Max ([],[]) -> u
     | Max ([],[]), v -> v
-    | Atom u, Max (gel,gtl) -> Max (list_add_set u gel,gtl)
-    | Max (gel,gtl), Atom v -> Max (list_add_set v gel,gtl)
+    | Atom u, Max (gel,gtl) -> Max (List.add_set u gel,gtl)
+    | Max (gel,gtl), Atom v -> Max (List.add_set v gel,gtl)
     | Max (gel,gtl), Max (gel',gtl') ->
-	let gel'' = list_union gel gel' in
-	let gtl'' = list_union gtl gtl' in
-	Max (list_subtract gel'' gtl'',gtl'')
+	let gel'' = List.union gel gel' in
+	let gtl'' = List.union gtl gtl' in
+	Max (List.subtract gel'' gtl'',gtl'')
 
 (* Comparison on this type is pointer equality *)
 type canonical_arc =
@@ -158,7 +170,7 @@ let type0_univ = Atom UniverseLevel.Set
 
 let is_type0_univ = function
   | Atom UniverseLevel.Set -> true
-  | Max ([UniverseLevel.Set], []) -> warning "Non canonical Set"; true
+  | Max ([UniverseLevel.Set], []) -> msg_warning (str "Non canonical Set"); true
   | u -> false
 
 let is_univ_variable = function
@@ -260,46 +272,62 @@ type order = EQ | LT | LE | NLE
 
 (** [compare_neq] : is [arcv] in the transitive upward closure of [arcu] ?
 
-  We try to avoid visiting unneeded parts of this transitive closure,
-  by stopping as soon as [arcv] is encountered. During the recursive
-  traversal, [lt_done] and [le_done] are universes we have already
-  visited, they do not contain [arcv]. The 3rd arg is
-  [(lt_todo,le_todo)], two lists of universes not yet considered,
-  known to be above [arcu], strictly or not.
+  In [strict] mode, we fully distinguish between LE and LT, while in
+  non-strict mode, we simply answer LE for both situations.
+
+  If [arcv] is encountered in a LT part, we could directly answer
+  without visiting unneeded parts of this transitive closure.
+  In [strict] mode, if [arcv] is encountered in a LE part, we could only
+  change the default answer (1st arg [c]) from NLE to LE, since a strict
+  constraint may appear later. During the recursive traversal,
+  [lt_done] and [le_done] are universes we have already visited,
+  they do not contain [arcv]. The 4rd arg is [(lt_todo,le_todo)],
+  two lists of universes not yet considered, known to be above [arcu],
+  strictly or not.
 
   We use depth-first search, but the presence of [arcv] in [new_lt]
   is checked as soon as possible : this seems to be slightly faster
   on a test.
 *)
 
-let compare_neq g arcu arcv =
-  let rec cmp lt_done le_done = function
-  | [],[] -> NLE
+let compare_neq strict g arcu arcv =
+  let rec cmp c lt_done le_done = function
+  | [],[] -> c
   | arc::lt_todo, le_todo ->
     if List.memq arc lt_done then
-      cmp lt_done le_done (lt_todo,le_todo)
+      cmp c lt_done le_done (lt_todo,le_todo)
     else
       let lt_new = can g (arc.lt@arc.le) in
-      if List.memq arcv lt_new then LT
-      else cmp (arc::lt_done) le_done (lt_new@lt_todo,le_todo)
+      if List.memq arcv lt_new then
+	if strict then LT else LE
+      else cmp c (arc::lt_done) le_done (lt_new@lt_todo,le_todo)
   | [], arc::le_todo ->
-    if arc == arcv then LE
-    (* No need to continue inspecting universes above arc:
-       if arcv is strictly above arc, then we would have a cycle *)
+    if arc == arcv then
+      (* No need to continue inspecting universes above arc:
+	 if arcv is strictly above arc, then we would have a cycle.
+         But we cannot answer LE yet, a stronger constraint may
+	 come later from [le_todo]. *)
+      if strict then cmp LE lt_done le_done ([],le_todo) else LE
     else
       if (List.memq arc lt_done) || (List.memq arc le_done) then
-	cmp lt_done le_done ([],le_todo)
+	cmp c lt_done le_done ([],le_todo)
       else
 	let lt_new = can g arc.lt in
-	if List.memq arcv lt_new then LT
+	if List.memq arcv lt_new then
+	  if strict then LT else LE
 	else
 	  let le_new = can g arc.le in
-	  cmp lt_done (arc::le_done) (lt_new, le_new@le_todo)
+	  cmp c lt_done (arc::le_done) (lt_new, le_new@le_todo)
   in
-  cmp [] [] ([],[arcu])
+  cmp NLE [] [] ([],[arcu])
 
 let compare g arcu arcv =
-  if arcu == arcv then EQ else compare_neq g arcu arcv
+  if arcu == arcv then EQ else compare_neq true g arcu arcv
+
+let is_leq g arcu arcv =
+  arcu == arcv || (compare_neq false g arcu arcv = LE)
+
+let is_lt g arcu arcv = (compare g arcu arcv = LT)
 
 (* Invariants : compare(u,v) = EQ <=> compare(v,u) = EQ
                 compare(u,v) = LT or LE => compare(v,u) = NLE
@@ -310,12 +338,24 @@ let compare g arcu arcv =
    Adding u>v is consistent iff compare(v,u) = NLE
     and then it is redundant iff compare(u,v) = LT *)
 
-(** * Universe checks [check_eq] and [check_geq], used in coqchk *)
+(** * Universe checks [check_eq] and [check_leq], used in coqchk *)
 
-let compare_eq g u v =
+(** First, checks on universe levels *)
+
+let check_equal g u v =
   let g, arcu = safe_repr g u in
   let _, arcv = safe_repr g v in
   arcu == arcv
+
+let check_smaller g strict u v =
+  let g, arcu = safe_repr g u in
+  let g, arcv = safe_repr g v in
+  if strict then
+    is_lt g arcu arcv
+  else
+    arcu == snd (safe_repr g UniverseLevel.Set) || is_leq g arcu arcv
+
+(** Then, checks on universes *)
 
 type check_function = universes -> universe -> universe -> bool
 
@@ -323,38 +363,25 @@ let incl_list cmp l1 l2 =
   List.for_all (fun x1 -> List.exists (fun x2 -> cmp x1 x2) l2) l1
 
 let compare_list cmp l1 l2 =
-  incl_list cmp l1 l2 && incl_list cmp l2 l1
+  (l1 == l2)
+  || (incl_list cmp l1 l2 && incl_list cmp l2 l1)
 
-let rec check_eq g u v =
-  match (u,v) with
-    | Atom ul, Atom vl -> compare_eq g ul vl
+let check_eq g u v =
+  match u,v with
+    | Atom ul, Atom vl -> check_equal g ul vl
     | Max(ule,ult), Max(vle,vlt) ->
         (* TODO: remove elements of lt in le! *)
-        compare_list (compare_eq g) ule vle &&
-        compare_list (compare_eq g) ult vlt
+        compare_list (check_equal g) ule vle &&
+        compare_list (check_equal g) ult vlt
     | _ -> anomaly "check_eq" (* not complete! (Atom(u) = Max([u],[]) *)
 
-let compare_greater g strict u v =
-  let g, arcu = safe_repr g u in
-  let g, arcv = safe_repr g v in
-  if not strict && arcv == snd (safe_repr g UniverseLevel.Set) then true else
-  match compare g arcv arcu with
-    | (EQ|LE) -> not strict
-    | LT -> true
-    | NLE -> false
-(*
-let compare_greater g strict u v =
-  let b = compare_greater g strict u v in
-  ppnl(str (if b then if strict then ">" else ">=" else "NOT >="));
-  b
-*)
-let check_geq g u v =
-  match u, v with
-    | Atom ul, Atom vl -> compare_greater g false ul vl
-    | Atom ul, Max(le,lt) ->
-        List.for_all (fun vl -> compare_greater g false ul vl) le &&
-        List.for_all (fun vl -> compare_greater g true ul vl) lt
-    | _ -> anomaly "check_greater"
+let check_leq g u v =
+  match u,v with
+    | Atom ul, Atom vl -> check_smaller g false ul vl
+    | Max(le,lt), Atom vl ->
+        List.for_all (fun ul -> check_smaller g false ul vl) le &&
+        List.for_all (fun ul -> check_smaller g true ul vl) lt
+    | _ -> anomaly "check_leq"
 
 (** Enforcing new constraints : [setlt], [setleq], [merge], [merge_disc] *)
 
@@ -368,9 +395,8 @@ let setlt g arcu arcv =
 (* checks that non-redundant *)
 let setlt_if (g,arcu) v =
   let arcv = repr g v in
-  match compare g arcu arcv with
-  | LT -> g, arcu
-  | _ -> setlt g arcu arcv
+  if is_lt g arcu arcv then g, arcu
+  else setlt g arcu arcv
 
 (* setleq : UniverseLevel.t -> UniverseLevel.t -> unit *)
 (* forces u >= v *)
@@ -383,9 +409,8 @@ let setleq g arcu arcv =
 (* checks that non-redundant *)
 let setleq_if (g,arcu) v =
   let arcv = repr g v in
-  match compare g arcu arcv with
-  | NLE -> setleq g arcu arcv
-  | _ -> g, arcu
+  if is_leq g arcu arcv then g, arcu
+  else setleq g arcu arcv
 
 (* merge : UniverseLevel.t -> UniverseLevel.t -> unit *)
 (* we assume  compare(u,v) = LE *)
@@ -396,7 +421,7 @@ let merge g arcu arcv =
                  (* redirected to it *)
 	let redirect (g,w,w') arcv =
  	  let g' = enter_equiv_arc arcv.univ arcu.univ g in
- 	  (g',list_unionq arcv.lt w,arcv.le@w')
+ 	  (g',List.unionq arcv.lt w,arcv.le@w')
 	in
 	let (g',w,w') = List.fold_left redirect (g,[],[]) v in
 	let g_arcu = (g',arcu) in
@@ -429,14 +454,12 @@ let error_inconsistency o u v = raise (UniverseInconsistency (o,Atom u,Atom v))
 let enforce_univ_leq u v g =
   let g,arcu = safe_repr g u in
   let g,arcv = safe_repr g v in
-  match compare g arcu arcv with
-    | NLE ->
-	(match compare g arcv arcu with
-           | LT -> error_inconsistency Le u v
-           | LE -> merge g arcv arcu
-           | NLE -> fst (setleq g arcu arcv)
-           | EQ -> anomaly "Univ.compare")
-    | _ -> g
+  if is_leq g arcu arcv then g
+  else match compare g arcv arcu with
+    | LT -> error_inconsistency Le u v
+    | LE -> merge g arcv arcu
+    | NLE -> fst (setleq g arcu arcv)
+    | EQ -> anomaly "Univ.compare"
 
 (* enforc_univ_eq : UniverseLevel.t -> UniverseLevel.t -> unit *)
 (* enforc_univ_eq u v will force u=v if possible, will fail otherwise *)
@@ -463,9 +486,8 @@ let enforce_univ_lt u v g =
     | LE -> fst (setlt g arcu arcv)
     | EQ -> error_inconsistency Lt u v
     | NLE ->
-	(match compare g arcv arcu with
-           | NLE -> fst (setlt g arcu arcv)
-           | _ -> error_inconsistency Lt u v)
+      if is_leq g arcv arcu then error_inconsistency Lt u v
+      else fst (setlt g arcu arcv)
 
 (* Constraints and sets of consrtaints. *)
 
@@ -480,7 +502,13 @@ let enforce_constraint cst g =
 module Constraint = Set.Make(
   struct
     type t = univ_constraint
-    let compare = Pervasives.compare
+    let compare (u,c,v) (u',c',v') =
+      let i = Pervasives.compare c c' in
+      if i <> 0 then i
+      else
+	let i' = UniverseLevel.compare u u' in
+	if i' <> 0 then i'
+	else UniverseLevel.compare v v'
   end)
 
 type constraints = Constraint.t
@@ -494,19 +522,23 @@ type constraint_function =
     universe -> universe -> constraints -> constraints
 
 let constraint_add_leq v u c =
-  if v = UniverseLevel.Set then c else Constraint.add (v,Le,u) c
+  (* We just discard trivial constraints like Set<=u or u<=u *)
+  if v = UniverseLevel.Set || UniverseLevel.equal v u then c
+  else Constraint.add (v,Le,u) c
 
-let enforce_geq u v c =
+let enforce_leq u v c =
   match u, v with
-  | Atom u, Atom v -> constraint_add_leq v u c
-  | Atom u, Max (gel,gtl) ->
-      let d = List.fold_right (fun v -> constraint_add_leq v u) gel c in
-      List.fold_right (fun v -> Constraint.add (v,Lt,u)) gtl d
+  | Atom u, Atom v -> constraint_add_leq u v c
+  | Max (gel,gtl), Atom v ->
+      let d = List.fold_right (fun u -> constraint_add_leq u v) gel c in
+      List.fold_right (fun u -> Constraint.add (u,Lt,v)) gtl d
   | _ -> anomaly "A universe bound can only be a variable"
 
 let enforce_eq u v c =
   match (u,v) with
-    | Atom u, Atom v -> Constraint.add (u,Eq,v) c
+    | Atom u, Atom v ->
+      (* We discard trivial constraints like u=u *)
+      if UniverseLevel.equal u v then c else Constraint.add (u,Eq,v) c
     | _ -> anomaly "A universe comparison can only happen between variables"
 
 let merge_constraints c g =
@@ -654,7 +686,7 @@ let bellman_ford bottom g =
 let sort_universes orig =
   let mp = Names.make_dirpath [Names.id_of_string "Type"] in
   let rec make_level accu g i =
-    let type0 = UniverseLevel.Level (mp, i) in
+    let type0 = UniverseLevel.Level (i, mp) in
     let distances = bellman_ford type0 g in
     let accu, continue = UniverseLMap.fold (fun u x (accu, continue) ->
       let continue = continue || x < 0 in
@@ -691,7 +723,7 @@ let sort_universes orig =
   let max, levels = make_level UniverseLMap.empty orig 0 in
   (* defensively check that the result makes sense *)
   check_sorted orig levels;
-  let types = Array.init (max+1) (fun x -> UniverseLevel.Level (mp, x)) in
+  let types = Array.init (max+1) (fun x -> UniverseLevel.Level (x, mp)) in
   let g = UniverseLMap.map (fun x -> Equiv types.(x)) levels in
   let g =
     let rec aux i g =
@@ -712,7 +744,7 @@ let sort_universes orig =
 (* Temporary inductive type levels *)
 
 let fresh_level =
-  let n = ref 0 in fun () -> incr n; UniverseLevel.Level (Names.make_dirpath [],!n)
+  let n = ref 0 in fun () -> incr n; UniverseLevel.Level (!n, Names.make_dirpath [])
 
 let fresh_local_univ () = Atom (fresh_level ())
 
@@ -725,7 +757,7 @@ let make_max = function
 
 let remove_large_constraint u = function
   | Atom u' as x -> if u = u' then Max ([],[]) else x
-  | Max (le,lt) -> make_max (list_remove u le,lt)
+  | Max (le,lt) -> make_max (List.remove u le,lt)
 
 let is_direct_constraint u = function
   | Atom u' -> u = u'
@@ -784,6 +816,14 @@ let no_upper_constraints u cst =
   | Atom u -> Constraint.for_all (fun (u1,_,_) -> u1 <> u) cst
   | Max _ -> anomaly "no_upper_constraints"
 
+(* Is u mentionned in v (or equals to v) ? *)
+
+let univ_depends u v =
+  match u, v with
+    | Atom u, Atom v -> u = v
+    | Atom u, Max (gel,gtl) -> List.mem u gel || List.mem u gtl
+    | _ -> anomaly "univ_depends given a non-atomic 1st arg"
+
 (* Pretty-printing *)
 
 let pr_arc = function
@@ -792,9 +832,9 @@ let pr_arc = function
   | _, Canonical {univ=u; lt=lt; le=le} ->
       pr_uni_level u ++ str " " ++
       v 0
-        (prlist_with_sep pr_spc (fun v -> str "< " ++ pr_uni_level v) lt ++
+        (pr_sequence (fun v -> str "< " ++ pr_uni_level v) lt ++
 	 (if lt <> [] & le <> [] then spc () else mt()) ++
-         prlist_with_sep pr_spc (fun v -> str "<= " ++ pr_uni_level v) le) ++
+         pr_sequence (fun v -> str "<= " ++ pr_uni_level v) le) ++
       fnl ()
   | u, Equiv v ->
       pr_uni_level u  ++ str " = " ++ pr_uni_level v ++ fnl ()
@@ -832,12 +872,14 @@ module Hunivlevel =
     struct
       type t = universe_level
       type u = Names.dir_path -> Names.dir_path
-      let hash_sub hdir = function
+      let hashcons hdir = function
 	| UniverseLevel.Set -> UniverseLevel.Set
-	| UniverseLevel.Level (d,n) -> UniverseLevel.Level (hdir d,n)
-      let equal l1 l2 = match l1,l2 with
+	| UniverseLevel.Level (n,d) -> UniverseLevel.Level (n,hdir d)
+      let equal l1 l2 =
+        l1 == l2 ||
+        match l1,l2 with
 	| UniverseLevel.Set, UniverseLevel.Set -> true
-	| UniverseLevel.Level (d,n), UniverseLevel.Level (d',n') ->
+	| UniverseLevel.Level (n,d), UniverseLevel.Level (n',d') ->
 	  n == n' && d == d'
 	| _ -> false
       let hash = Hashtbl.hash
@@ -848,28 +890,29 @@ module Huniv =
     struct
       type t = universe
       type u = universe_level -> universe_level
-      let hash_sub hdir = function
+      let hashcons hdir = function
 	| Atom u -> Atom (hdir u)
 	| Max (gel,gtl) -> Max (List.map hdir gel, List.map hdir gtl)
       let equal u v =
+        u == v ||
 	match u, v with
 	  | Atom u, Atom v -> u == v
 	  | Max (gel,gtl), Max (gel',gtl') ->
-	      (list_for_all2eq (==) gel gel') &&
-              (list_for_all2eq (==) gtl gtl')
+	      (List.for_all2eq (==) gel gel') &&
+              (List.for_all2eq (==) gtl gtl')
 	  | _ -> false
       let hash = Hashtbl.hash
     end)
 
-let hcons_univlevel = Hashcons.simple_hcons Hunivlevel.f Names.hcons_dirpath
-let hcons_univ = Hashcons.simple_hcons Huniv.f hcons_univlevel
+let hcons_univlevel = Hashcons.simple_hcons Hunivlevel.generate Names.hcons_dirpath
+let hcons_univ = Hashcons.simple_hcons Huniv.generate hcons_univlevel
 
 module Hconstraint =
   Hashcons.Make(
     struct
       type t = univ_constraint
       type u = universe_level -> universe_level
-      let hash_sub hul (l1,k,l2) = (hul l1, k, hul l2)
+      let hashcons hul (l1,k,l2) = (hul l1, k, hul l2)
       let equal (l1,k,l2) (l1',k',l2') =
 	l1 == l1' && k = k' && l2 == l2'
       let hash = Hashtbl.hash
@@ -880,14 +923,14 @@ module Hconstraints =
     struct
       type t = constraints
       type u = univ_constraint -> univ_constraint
-      let hash_sub huc s =
+      let hashcons huc s =
 	Constraint.fold (fun x -> Constraint.add (huc x)) s Constraint.empty
       let equal s s' =
-	list_for_all2eq (==)
+	List.for_all2eq (==)
 	  (Constraint.elements s)
 	  (Constraint.elements s')
       let hash = Hashtbl.hash
     end)
 
-let hcons_constraint = Hashcons.simple_hcons Hconstraint.f hcons_univlevel
-let hcons_constraints = Hashcons.simple_hcons Hconstraints.f hcons_constraint
+let hcons_constraint = Hashcons.simple_hcons Hconstraint.generate hcons_univlevel
+let hcons_constraints = Hashcons.simple_hcons Hconstraints.generate hcons_constraint

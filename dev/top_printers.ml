@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,10 +9,12 @@
 (* Printers for the ocaml toplevel. *)
 
 open System
+open Errors
 open Util
 open Pp
 open Names
 open Libnames
+open Globnames
 open Nameops
 open Sign
 open Univ
@@ -62,7 +64,7 @@ let pptype = (fun x -> try pp(pr_ltype x) with e -> pp (str (Printexc.to_string 
 
 let ppfconstr c = ppconstr (Closure.term_of_fconstr c)
 
-let ppbigint n = pp (Bigint.pr_bigint n);;
+let ppbigint n = pp (str (Bigint.to_string n));;
 
 let prset pr l = str "[" ++ hov 0 (prlist_with_sep spc pr l) ++ str "]"
 let ppintset l = pp (prset int (Intset.elements l))
@@ -131,7 +133,7 @@ let pppftreestate p = pp(print_pftreestate p)
 
 (* let pr_glls glls = *)
 (*   hov 0 (pr_evar_defs (sig_sig glls) ++ fnl () ++ *)
-(*          prlist_with_sep pr_fnl db_pr_goal (sig_it glls)) *)
+(*          prlist_with_sep fnl db_pr_goal (sig_it glls)) *)
 
 (* let ppsigmagoal g = pp(pr_goal (sig_it g)) *)
 (* let prgls gls = pp(pr_gls gls) *)
@@ -220,7 +222,7 @@ let constr_display csr =
     | Anonymous -> "Anonymous"
 
   in
-    msg (str (term_display csr) ++fnl ())
+  Pp.pp (str (term_display csr) ++fnl ()); Pp.pp_flush ()
 
 open Format;;
 
@@ -287,7 +289,7 @@ let print_pure_constr csr =
       print_string "Fix("; print_int i; print_string ")";
       print_cut();
       open_vbox 0;
-      let rec print_fix () =
+      let print_fix () =
         for k = 0 to (Array.length tl) - 1 do
 	  open_vbox 0;
 	  name_display lna.(k); print_string "/";
@@ -301,7 +303,7 @@ let print_pure_constr csr =
       print_string "CoFix("; print_int i; print_string ")";
       print_cut();
       open_vbox 0;
-      let rec print_fix () =
+      let print_fix () =
         for k = 0 to (Array.length tl) - 1 do
           open_vbox 1;
 	  name_display lna.(k);  print_cut(); print_string ":";
@@ -351,7 +353,7 @@ let print_pure_constr csr =
 
 let ppfconstr c = ppconstr (Closure.term_of_fconstr c)
 
-let pploc x = let (l,r) = unloc x in
+let pploc x = let (l,r) = Loc.unloc x in
   print_string"(";print_int l;print_string",";print_int r;print_string")"
 
 (* extendable tactic arguments *)
@@ -409,7 +411,8 @@ END
 
 open Pcoq
 open Genarg
-open Egrammar
+open Egramml
+open Egramcoq
 
 let _ =
   try
@@ -425,7 +428,7 @@ let _ =
   extend_vernac_command_grammar "PrintConstr" None
     [[GramTerminal "PrintConstr";
       GramNonTerminal
-        (dummy_loc,ConstrArgType,Aentry ("constr","constr"),
+        (Loc.ghost,ConstrArgType,Aentry ("constr","constr"),
 	 Some (Names.id_of_string "c"))]]
 
 let _ =
@@ -442,7 +445,7 @@ let _ =
   extend_vernac_command_grammar "PrintPureConstr" None
     [[GramTerminal "PrintPureConstr";
       GramNonTerminal
-        (dummy_loc,ConstrArgType,Aentry ("constr","constr"),
+        (Loc.ghost,ConstrArgType,Aentry ("constr","constr"),
 	 Some (Names.id_of_string "c"))]]
 
 (* Setting printer of unbound global reference *)

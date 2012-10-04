@@ -1,13 +1,14 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Loc
 open Names
-open Util
+open Pp
 open Term
 open Proof_type
 open Tacmach
@@ -17,6 +18,7 @@ open Glob_term
 open Evd
 open Clenv
 open Termops
+open Misctypes
 
 (** Tactics for the interpreter. They left a trace in the proof tree
    when they are called. *)
@@ -53,12 +55,13 @@ val h_cofix           : identifier option -> tactic
 
 val h_cut             : constr -> tactic
 val h_generalize      : constr list -> tactic
-val h_generalize_gen  : (constr with_occurrences * name) list -> tactic
+val h_generalize_gen  : (constr Locus.with_occurrences * name) list -> tactic
 val h_generalize_dep  : constr -> tactic
-val h_let_tac         : letin_flag -> name -> constr ->
-                        Tacticals.clause -> tactic
+val h_let_tac         : letin_flag -> name -> constr -> Locus.clause ->
+                        intro_pattern_expr located option -> tactic
 val h_let_pat_tac     : letin_flag -> name -> evar_map * constr ->
-                        Tacticals.clause -> tactic
+                        Locus.clause -> intro_pattern_expr located option ->
+                        tactic
 
 (** Derived basic tactics *)
 
@@ -66,20 +69,20 @@ val h_simple_induction   : quantified_hypothesis -> tactic
 val h_simple_destruct    : quantified_hypothesis -> tactic
 val h_simple_induction_destruct : rec_flag -> quantified_hypothesis -> tactic
 val h_new_induction   : evars_flag ->
-  (evar_map * constr with_bindings) induction_arg list ->
-  constr with_bindings option ->
+  (evar_map * constr with_bindings) induction_arg ->
   intro_pattern_expr located option * intro_pattern_expr located option ->
-  Tacticals.clause option -> tactic
+  constr with_bindings option ->
+  Locus.clause option -> tactic
 val h_new_destruct    : evars_flag ->
-  (evar_map * constr with_bindings) induction_arg list ->
-  constr with_bindings option ->
+  (evar_map * constr with_bindings) induction_arg ->
   intro_pattern_expr located option * intro_pattern_expr located option ->
-  Tacticals.clause option -> tactic
+  constr with_bindings option ->
+  Locus.clause option -> tactic
 val h_induction_destruct : rec_flag -> evars_flag ->
-  ((evar_map * constr with_bindings) induction_arg list *
-   constr with_bindings option *
+  ((evar_map * constr with_bindings) induction_arg *
    (intro_pattern_expr located option * intro_pattern_expr located option)) list
-    * Tacticals.clause option -> tactic
+    * constr with_bindings option
+    * Locus.clause option -> tactic
 
 val h_specialize      : int option -> constr with_bindings -> tactic
 val h_lapply          : constr -> tactic
@@ -106,13 +109,13 @@ val h_simplest_right  : tactic
 
 
 (** Conversion *)
-val h_reduce          : Redexpr.red_expr -> Tacticals.clause -> tactic
+val h_reduce          : Redexpr.red_expr -> Locus.clause -> tactic
 val h_change          :
-  Pattern.constr_pattern option -> constr -> Tacticals.clause -> tactic
+  Pattern.constr_pattern option -> constr -> Locus.clause -> tactic
 
 (** Equivalence relations *)
 val h_reflexivity     : tactic
-val h_symmetry        : Tacticals.clause -> tactic
+val h_symmetry        : Locus.clause -> tactic
 val h_transitivity    : constr option -> tactic
 
 val h_simplest_apply  : constr -> tactic

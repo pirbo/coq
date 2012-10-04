@@ -1,16 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Util
-open Formula
-open Tacmach
 open Term
-open Names
 open Termops
 open Reductionops
 
@@ -127,7 +124,7 @@ let unif_atoms i dom t1 t2=
     | Not_found ->Some (Phantom dom)
 
 let renum_metas_from k n t= (* requires n = max (free_rels t) *)
-  let l=list_tabulate (fun i->mkMeta (k+i)) n in
+  let l=List.tabulate (fun i->mkMeta (k+i)) n in
     substl l t
 
 let more_general (m1,t1) (m2,t2)=

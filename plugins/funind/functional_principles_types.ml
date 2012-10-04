@@ -1,4 +1,5 @@
 open Printer
+open Errors
 open Util
 open Term
 open Namegen
@@ -6,14 +7,10 @@ open Names
 open Declarations
 open Pp
 open Entries
-open Hiddentac
-open Evd
-open Tacmach
-open Proof_type
-open Tacticals
 open Tactics
 open Indfun_common
 open Functional_principles_proofs
+open Misctypes
 
 exception Toberemoved_with_rel of int*constr
 exception Toberemoved
@@ -34,7 +31,7 @@ let pr_elim_scheme el =
 
 let observe s =
   if do_observe ()
-  then Pp.msgnl s
+  then Pp.msg_debug s
 
 
 let pr_elim_scheme el =
@@ -52,7 +49,7 @@ let pr_elim_scheme el =
 
 let observe s =
   if do_observe ()
-  then Pp.msgnl s
+  then Pp.msg_debug s
 
 (*
    Transform an inductive induction principle into
@@ -91,7 +88,7 @@ let compute_new_princ_type_from_rel rel_to_fun sorts princ_type =
     Nameops.out_name x,None,compose_prod real_args (mkSort new_sort)
   in
   let new_predicates =
-    list_map_i
+    List.map_i
       change_predicate_sort
       0
       princ_type_info.predicates
@@ -99,7 +96,7 @@ let compute_new_princ_type_from_rel rel_to_fun sorts princ_type =
   let env_with_params_and_predicates = List.fold_right Environ.push_named new_predicates env_with_params in
   let rel_as_kn =
     fst (match princ_type_info.indref with
-	   | Some (Libnames.IndRef ind) -> ind
+	   | Some (Globnames.IndRef ind) -> ind
 	   | _ -> error "Not a valid predicate"
 	)
   in
@@ -142,12 +139,6 @@ let compute_new_princ_type_from_rel rel_to_fun sorts princ_type =
 (*     observe (str "replacing " ++ pr_lconstr c ++ str " by "  ++ pr_lconstr res); *)
     res
   in
-  let rec has_dummy_var t  =
-    fold_constr
-      (fun b t -> b || (eq_constr t dummy_var) || (has_dummy_var t))
-      false
-      t
-  in
   let rec compute_new_princ_type remove env pre_princ : types*(constr list) =
     let (new_princ_type,_) as res =
       match kind_of_term pre_princ with
@@ -163,7 +154,7 @@ let compute_new_princ_type_from_rel rel_to_fun sorts princ_type =
 	    compute_new_princ_type_for_binder  remove mkLambda env x t b
 	| Ind _ | Construct _ when is_dom pre_princ -> raise Toberemoved
 	| App(f,args) when is_dom f ->
-	    let var_to_be_removed = destRel (array_last args) in
+	    let var_to_be_removed = destRel (Array.last args) in
 	    let num = get_fun_num f in
 	    raise (Toberemoved_with_rel (var_to_be_removed,mk_replacement pre_princ num args))
 	| App(f,args) ->
@@ -261,7 +252,7 @@ let compute_new_princ_type_from_rel rel_to_fun sorts princ_type =
   in
   let pre_res =
     replace_vars
-      (list_map_i (fun i id -> (id, mkRel i)) 1 ptes_vars)
+      (List.map_i (fun i id -> (id, mkRel i)) 1 ptes_vars)
       (lift (List.length ptes_vars) pre_res)
   in
   it_mkProd_or_LetIn
@@ -297,22 +288,6 @@ let change_property_sort toSort princ princName =
 
 let pp_dur time time' =
   str (string_of_float (System.time_difference time time'))
-
-(* let qed () = save_named true  *)
-let defined () =
-  try
-    Lemmas.save_named false
-  with
-    | UserError("extract_proof",msg) ->
-	Util.errorlabstrm
-	  "defined"
-	  ((try
-	      str "On goal : " ++ fnl () ++  pr_open_subgoals () ++ fnl ()
-	    with _ -> mt ()
-	   ) ++msg)
-    | e -> raise e
-
-
 
 let build_functional_principle interactive_proof old_princ_type sorts funs i proof_tac hook =
   (* First we get the type of the old graph principle *)
@@ -392,9 +367,7 @@ let generate_functional_principle
 	     Decl_kinds.IsDefinition (Decl_kinds.Scheme)
 	    )
 	);
-	Flags.if_verbose
-	  (fun id -> Pp.msgnl (Ppconstr.pr_id id ++ str " is defined"))
-	  name;
+	Declare.definition_message name;
 	names := name :: !names
       in
       register_with_sort InProp;
@@ -429,7 +402,7 @@ let generate_functional_principle
 exception Not_Rec
 
 let get_funs_constant mp dp =
-  let rec get_funs_constant const e : (Names.constant*int) array =
+  let get_funs_constant const e : (Names.constant*int) array =
     match kind_of_term ((strip_lam e)) with
       | Fix((_,(na,_,_))) ->
 	  Array.mapi
@@ -471,7 +444,7 @@ let get_funs_constant mp dp =
       let first_params = List.hd l_params  in
       List.iter
 	(fun params ->
-	   if not (list_equal (fun (n1, c1) (n2, c2) -> n1 = n2 && eq_constr c1 c2) first_params params)
+	   if not (List.equal (fun (n1, c1) (n2, c2) -> n1 = n2 && eq_constr c1 c2) first_params params)
 	   then error "Not a mutal recursive block"
 	)
 	l_params
@@ -490,7 +463,7 @@ let get_funs_constant mp dp =
 	let first_infos = extract_info true (List.hd l_bodies) in
 	let check body  = (* Hope this is correct *)
 	  let eq_infos (ia1, na1, ta1, ca1) (ia2, na2, ta2, ca2) =
-	    ia1 = ia2 && na1 = na2 && array_equal eq_constr ta1 ta2 && array_equal eq_constr ca1 ca2
+	    ia1 = ia2 && na1 = na2 && Array.equal eq_constr ta1 ta2 && Array.equal eq_constr ca1 ca2
 	  in
 	  if not (eq_infos first_infos (extract_info false body))
 	  then  error "Not a mutal recursive block"
@@ -503,7 +476,7 @@ let get_funs_constant mp dp =
 exception No_graph_found
 exception Found_type of int
 
-let make_scheme (fas : (constant*Glob_term.glob_sort) list) : Entries.definition_entry list =
+let make_scheme (fas : (constant*glob_sort) list) : Entries.definition_entry list =
   let env = Global.env ()
   and sigma = Evd.empty in
   let funs = List.map fst fas in
@@ -658,10 +631,10 @@ let build_scheme fas =
 	    let f_as_constant =
 	      try
 		match Nametab.global f with
-		  | Libnames.ConstRef c -> c
-		  | _ -> Util.error "Functional Scheme can only be used with functions"
+		  | Globnames.ConstRef c -> c
+		  | _ -> Errors.error "Functional Scheme can only be used with functions"
 	      with Not_found ->
-	      	Util.error ("Cannot find "^ Libnames.string_of_reference f)
+	      	Errors.error ("Cannot find "^ Libnames.string_of_reference f)
 	    in
 	    (f_as_constant,sort)
 	 )
@@ -674,8 +647,7 @@ let build_scheme fas =
 	 (Declare.declare_constant
 	    princ_id
 	    (Entries.DefinitionEntry def_entry,Decl_kinds.IsProof Decl_kinds.Theorem));
-       Flags.if_verbose
-	 (fun id -> Pp.msgnl (Ppconstr.pr_id id ++ str " is defined")) princ_id
+       Declare.definition_message princ_id
     )
     fas
     bodies_types;
@@ -690,9 +662,9 @@ let build_case_scheme fa =
 (*     Constrintern.global_reference  id *)
 (*   in  *)
   let funs =  (fun (_,f,_) ->
-		 try Libnames.constr_of_global (Nametab.global f)
+		 try Globnames.constr_of_global (Nametab.global f)
 		 with Not_found ->
-		   Util.error ("Cannot find "^ Libnames.string_of_reference f)) fa in
+		   Errors.error ("Cannot find "^ Libnames.string_of_reference f)) fa in
   let first_fun = destConst  funs in
 
   let funs_mp,funs_dp,_ = Names.repr_con first_fun in

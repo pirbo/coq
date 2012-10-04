@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -14,10 +14,9 @@
 (* Initial author: Arnaud Spiwack
    Module-traversing code: Pierre Letouzey *)
 
+open Errors
 open Util
 open Names
-open Sign
-open Univ
 open Term
 open Declarations
 open Mod_subst
@@ -54,6 +53,16 @@ module ContextObjectMap = Map.Make (OrderedContextObject)
 
 let modcache = ref (MPmap.empty : structure_body MPmap.t)
 
+let rec search_mod_label lab = function
+  | [] -> raise Not_found
+  | (l,SFBmodule mb) :: _ when l = lab -> mb
+  | _ :: fields -> search_mod_label lab fields
+
+let rec search_cst_label lab = function
+  | [] -> raise Not_found
+  | (l,SFBconst cb) :: _ when l = lab -> cb
+  | _ :: fields -> search_cst_label lab fields
+
 let rec lookup_module_in_impl mp =
   try Global.lookup_module mp
   with Not_found ->
@@ -64,9 +73,7 @@ let rec lookup_module_in_impl mp =
 	raise Not_found (* should have been found by [lookup_module] *)
       | MPdot (mp',lab') ->
 	let fields = memoize_fields_of_mp mp' in
-	match List.assoc lab' fields with
-	  | SFBmodule mb -> mb
-	  | _ -> assert false (* same label for a non-module ?! *)
+	search_mod_label lab' fields
 
 and memoize_fields_of_mp mp =
   try MPmap.find mp !modcache
@@ -126,9 +133,7 @@ let lookup_constant_in_impl cst fallback =
     let fields = memoize_fields_of_mp mp in
     (* A module found this way is necessarily closed, in particular
        our constant cannot be in an opened section : *)
-    match List.assoc lab fields with
-      | SFBconst cb -> cb
-      | _ -> assert false (* label not pointing to a constant ?! *)
+    search_cst_label lab fields
   with Not_found ->
     (* Either:
        - The module part of the constant isn't registered yet :

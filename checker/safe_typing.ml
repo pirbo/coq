@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Declarations
@@ -181,7 +182,7 @@ let stamp_library file digest = ()
    warning is issued in case of mismatch *)
 let import file (dp,mb,depends,engmt as vo) digest =
   Validate.apply !Flags.debug val_vo vo;
-  Flags.if_verbose msgnl (str "*** vo structure validated ***");
+  Flags.if_verbose ppnl (str "*** vo structure validated ***"); pp_flush ();
   let env = !genv in
   check_imports msg_warning dp env depends;
   check_engagement env engmt;

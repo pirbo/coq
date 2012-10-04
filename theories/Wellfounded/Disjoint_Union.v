@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -41,7 +41,7 @@ Section Wf_Disjoint_Union.
     well_founded leA -> well_founded leB -> well_founded Le_AsB.
   Proof.
     intros.
-    unfold well_founded in |- *.
+    unfold well_founded.
     destruct a as [a| b].
     apply (acc_A_sum a).
     apply (H a).

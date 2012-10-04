@@ -1,14 +1,14 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 (* Recursive polynomials: R[x1]...[xn]. *)
-open Utile
 open Util
+open Utile
 
 (* 1. Coefficients: R *)
 
@@ -159,7 +159,7 @@ let rec max_var_pol2 p =
       Pint _ -> 0
     |Prec(v,c)-> Array.fold_right (fun q m -> max (max_var_pol2 q) m) c v
 
-let rec max_var l = Array.fold_right (fun p m -> max (max_var_pol2 p) m) l 0
+let max_var l = Array.fold_right (fun p m -> max (max_var_pol2 p) m) l 0
 
 (* equality between polynomials *)
 
@@ -180,7 +180,7 @@ let rec equal p q =
    if constant, returns the coefficient
 *)
 
-let rec norm p = match p with
+let norm p = match p with
     Pint _ -> p
   |Prec (x,a)->
      let d = (Array.length a -1) in
@@ -197,7 +197,7 @@ let rec norm p = match p with
 
 
 (* degree in v, v >= max var of p *)
-let rec deg v p =
+let deg v p =
   match p with
       Prec(x,p1) when x=v -> Array.length p1 -1
     |_ -> 0
@@ -275,7 +275,7 @@ let rec vars=function
 
 
 (* multiply p by v^n, v >= max_var p *)
-let rec multx n v p =
+let multx n v p =
   match p with
       Prec (x,p1) when x=v -> let p2= Array.create ((Array.length p1)+n) (Pint coef0) in
         for i=0 to (Array.length p1)-1 do
@@ -313,7 +313,7 @@ let rec multP p q =
 
 
 (* derive p with variable v, v >= max_var p *)
-let rec deriv v p =
+let deriv v p =
   match p with
       Pint a -> Pint coef0
     | Prec(x,p1) when x=v ->
@@ -655,7 +655,7 @@ and gcd_sub_res_rec p q s c d x =
 
 and lazard_power c s d x =
   let res = ref c in
-    for i=1 to d-1 do
+    for _i = 1 to d - 1 do
       res:= div_pol ((!res)@@c) s x;
     done;
     !res

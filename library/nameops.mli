@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -26,6 +26,8 @@ val lift_subscript   : identifier -> identifier
 val forget_subscript : identifier -> identifier
 
 val out_name : name -> identifier
+(** [out_name] associates [id] to [Name id]. Raises [Failure "Nameops.out_name"]
+    otherwise. *)
 
 val name_fold : (identifier -> 'a -> 'a) -> name -> 'a -> 'a
 val name_iter : (identifier -> unit) -> name -> unit

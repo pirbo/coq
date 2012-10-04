@@ -11,7 +11,7 @@
 Require Import Bool ZArith OrderedType OrderedTypeEx FMapInterface.
 
 Set Implicit Arguments.
-Open Local Scope positive_scope.
+Local Open Scope positive_scope.
 
 Local Unset Elimination Schemes.
 Local Unset Case Analysis Schemes.
@@ -494,9 +494,9 @@ Module PositiveMap <: S with Module E:=PositiveOrderedTypeBits.
 
   Definition lt_key (p p':positive*A) := E.lt (fst p) (fst p').
 
-  Global Program Instance eqk_equiv : Equivalence eq_key.
-  Global Program Instance eqke_equiv : Equivalence eq_key_elt.
-  Global Program Instance ltk_strorder : StrictOrder lt_key.
+  Global Instance eqk_equiv : Equivalence eq_key := _.
+  Global Instance eqke_equiv : Equivalence eq_key_elt := _.
+  Global Instance ltk_strorder : StrictOrder lt_key := _.
 
   Lemma mem_find :
     forall m x, mem x m = match find x m with None => false | _ => true end.

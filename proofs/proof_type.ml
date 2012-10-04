@@ -1,24 +1,21 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 (*i*)
-open Environ
 open Evd
 open Names
-open Libnames
 open Term
-open Util
 open Tacexpr
-(* open Decl_expr *)
 open Glob_term
 open Genarg
 open Nametab
 open Pattern
+open Misctypes
 (*i*)
 
 (* This module defines the structure of proof tree and the tactic type. So, it
@@ -97,8 +94,8 @@ type ltac_call_kind =
   | LtacConstrInterp of glob_constr *
       (extended_patvar_map * (identifier * identifier option) list)
 
-type ltac_trace = (int * loc * ltac_call_kind) list
+type ltac_trace = (int * Loc.t * ltac_call_kind) list
 
-exception LtacLocated of (int * ltac_call_kind * ltac_trace * loc) * exn
+exception LtacLocated of (int * ltac_call_kind * ltac_trace * Loc.t) * exn
 
 let abstract_tactic_box = ref (ref None)

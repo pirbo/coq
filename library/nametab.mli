@@ -1,15 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
 open Pp
 open Names
 open Libnames
+open Globnames
 
 (** This module contains the tables for globalization. *)
 
@@ -61,9 +61,9 @@ exception GlobalizationError of qualid
 exception GlobalizationConstantError of qualid
 
 (** Raises a globalization error *)
-val error_global_not_found_loc : loc -> qualid -> 'a
+val error_global_not_found_loc : Loc.t -> qualid -> 'a
 val error_global_not_found     : qualid -> 'a
-val error_global_constant_not_found_loc : loc -> qualid -> 'a
+val error_global_constant_not_found_loc : Loc.t -> qualid -> 'a
 
 (** {6 Register visibility of things } *)
 

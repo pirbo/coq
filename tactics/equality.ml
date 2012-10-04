@@ -1,16 +1,16 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
-open Univ
 open Term
 open Termops
 open Namegen
@@ -18,32 +18,29 @@ open Inductive
 open Inductiveops
 open Environ
 open Libnames
+open Globnames
 open Reductionops
-open Typeops
 open Typing
 open Retyping
 open Tacmach
-open Proof_type
 open Logic
-open Evar_refiner
-open Pattern
 open Matching
 open Hipattern
 open Tacexpr
 open Tacticals
 open Tactics
 open Tacred
-open Glob_term
 open Coqlib
-open Vernacexpr
 open Declarations
 open Indrec
-open Printer
 open Clenv
 open Clenvtac
 open Evd
 open Ind_tables
 open Eqschemes
+open Locus
+open Locusops
+open Misctypes
 
 (* Options *)
 
@@ -316,7 +313,7 @@ let rewrite_side_tac tac sidetac = side_tac tac (Option.map fst sidetac)
 
 let general_rewrite_ebindings_clause cls lft2rgt occs frzevars dep_proof_ok ?tac
     ((c,l) : constr with_bindings) with_evars gl =
-  if occs <> all_occurrences then (
+  if occs <> AllOccurrences then (
     rewrite_side_tac (!general_rewrite_clause cls lft2rgt occs (c,l) ~new_goals:[]) tac gl)
   else
     let env = pf_env gl in
@@ -366,7 +363,7 @@ let general_rewrite_in l2r occs frzevars dep_proof_ok ?tac id c =
     frzevars dep_proof_ok ?tac (c,NoBindings)
 
 let general_multi_rewrite l2r with_evars ?tac c cl =
-  let occs_of = on_snd (List.fold_left
+  let occs_of = occurrences_map (List.fold_left
     (fun acc ->
       function ArgArg x -> x :: acc | ArgVar _ -> acc)
     [])
@@ -382,7 +379,7 @@ let general_multi_rewrite l2r with_evars ?tac c cl =
 	      (general_rewrite_ebindings_in l2r (occs_of occs) false true ?tac id c with_evars)
 	      (do_hyps l)
 	in
-	if cl.concl_occs = no_occurrences_expr then do_hyps l else
+	if cl.concl_occs = NoOccurrences then do_hyps l else
 	  tclTHENFIRST
 	   (general_rewrite_ebindings l2r (occs_of cl.concl_occs) false true ?tac c with_evars)
 	   (do_hyps l)
@@ -393,17 +390,17 @@ let general_multi_rewrite l2r with_evars ?tac c cl =
 	  | [] -> (fun gl -> error "Nothing to rewrite.")
 	  | id :: l ->
 	    tclIFTHENTRYELSEMUST
-	     (general_rewrite_ebindings_in l2r all_occurrences false true ?tac id c with_evars)
+	     (general_rewrite_ebindings_in l2r AllOccurrences false true ?tac id c with_evars)
 	     (do_hyps_atleastonce l)
 	in
 	let do_hyps gl =
 	  (* If the term to rewrite uses an hypothesis H, don't rewrite in H *)
 	  let ids =
 	    let ids_in_c = Environ.global_vars_set (Global.env()) (fst c) in
-	      Idset.fold (fun id l -> list_remove id l) ids_in_c (pf_ids_of_hyps gl)
+	      Idset.fold (fun id l -> List.remove id l) ids_in_c (pf_ids_of_hyps gl)
 	  in do_hyps_atleastonce ids gl
 	in
-	if cl.concl_occs = no_occurrences_expr then do_hyps else
+	if cl.concl_occs = NoOccurrences then do_hyps else
 	  tclIFTHENTRYELSEMUST
 	   (general_rewrite_ebindings l2r (occs_of cl.concl_occs) false true ?tac c with_evars)
 	   do_hyps
@@ -430,8 +427,8 @@ let general_multi_multi_rewrite with_evars l cl tac =
     | (l2r,m,c)::l -> tclTHENFIRST (doN l2r c m) (loop l)
   in loop l
 
-let rewriteLR = general_rewrite true all_occurrences true true
-let rewriteRL = general_rewrite false all_occurrences true true
+let rewriteLR = general_rewrite true AllOccurrences true true
+let rewriteRL = general_rewrite false AllOccurrences true true
 
 (* Replacing tactics *)
 
@@ -535,15 +532,15 @@ let find_positions env sigma t1 t2 =
       | Construct sp1, Construct sp2
           when List.length args1 = mis_constructor_nargs_env env sp1
             ->
-	  let sorts = list_intersect sorts (allowed_sorts env (fst sp1)) in
+	  let sorts = List.intersect sorts (allowed_sorts env (fst sp1)) in
           (* both sides are fully applied constructors, so either we descend,
              or we can discriminate here. *)
 	  if is_conv env sigma hd1 hd2 then
 	    let nrealargs = constructor_nrealargs env sp1 in
-	    let rargs1 = list_lastn nrealargs args1 in
-	    let rargs2 = list_lastn nrealargs args2 in
+	    let rargs1 = List.lastn nrealargs args1 in
+	    let rargs2 = List.lastn nrealargs args2 in
             List.flatten
-	      (list_map2_i (fun i -> findrec sorts ((sp1,i)::posn))
+	      (List.map2_i (fun i -> findrec sorts ((sp1,i)::posn))
 		0 rargs1 rargs2)
 	  else if List.mem InType sorts then (* see build_discriminator *)
 	    raise (DiscrFound (List.rev posn,sp1,sp2))
@@ -659,7 +656,7 @@ let descend_then sigma env head dirn =
 	it_mkLambda_or_LetIn_name env result cstr.(i-1).cs_args in
       let brl =
         List.map build_branch
-          (interval 1 (Array.length mip.mind_consnames)) in
+          (List.interval 1 (Array.length mip.mind_consnames)) in
       let ci = make_case_info env ind RegularStyle in
       mkCase (ci, p, head, Array.of_list brl)))
 
@@ -702,7 +699,7 @@ let construct_discriminator sigma env dirn c sort =
     let endpt = if i = dirn then true_0 else false_0 in
     it_mkLambda_or_LetIn endpt cstrs.(i-1).cs_args in
   let brl =
-    List.map build_branch(interval 1 (Array.length mip.mind_consnames)) in
+    List.map build_branch(List.interval 1 (Array.length mip.mind_consnames)) in
   let ci = make_case_info env ind RegularStyle in
   mkCase (ci, p, c, Array.of_list brl)
 
@@ -755,8 +752,6 @@ let discrimination_pf e (t,t1,t2) discriminator lbeq =
   let absurd_term = build_coq_False () in
   let eq_elim     = ind_scheme_of_eq lbeq in
   (applist (eq_elim, [t;t1;mkNamedLambda e t discriminator;i;t2]), absurd_term)
-
-exception NotDiscriminable
 
 let eq_baseid = id_of_string "e"
 
@@ -1078,20 +1073,21 @@ let simplify_args env sigma t =
 
 let inject_at_positions env sigma (eq,_,(t,t1,t2)) eq_clause posns tac =
   let e = next_ident_away eq_baseid (ids_of_context env) in
-  let e_env = push_named (e,None,t) env in
-  let injectors =
-    map_succeed
-      (fun (cpath,t1',t2') ->
-        (* arbitrarily take t1' as the injector default value *)
-	let (injbody,resty) = build_injector sigma e_env t1' (mkVar e) cpath in
-	let injfun = mkNamedLambda e t injbody in
-	let pf = applist(eq.congr,[t;resty;injfun;t1;t2]) in
-	let pf_typ = get_type_of env sigma pf in
-	let inj_clause = apply_on_clause (pf,pf_typ) eq_clause in
-        let pf = clenv_value_cast_meta inj_clause in
-	let ty = simplify_args env sigma (clenv_type inj_clause) in
-	(pf,ty))
-      posns in
+  let e_env = push_named (e, None,t) env in
+  let filter (cpath, t1', t2') =
+    try
+      (* arbitrarily take t1' as the injector default value *)
+      let (injbody,resty) = build_injector sigma e_env t1' (mkVar e) cpath in
+      let injfun = mkNamedLambda e t injbody in
+      let pf = applist(eq.congr,[t;resty;injfun;t1;t2]) in
+      let pf_typ = get_type_of env sigma pf in
+      let inj_clause = apply_on_clause (pf,pf_typ) eq_clause in
+      let pf = clenv_value_cast_meta inj_clause in
+      let ty = simplify_args env sigma (clenv_type inj_clause) in
+      Some (pf, ty)
+    with Failure _ -> None
+  in
+  let injectors = List.map_filter filter posns in
   if injectors = [] then
     errorlabstrm "Equality.inj" (str "Failed to decompose the equality.");
   tclTHEN
@@ -1142,7 +1138,7 @@ let injEq ipats (eq,_,(t,t1,t2) as u) eq_clause =
               then (
 (* Require Import Eqdec_dec copied from vernac_require in vernacentries.ml*)
               let qidl = qualid_of_reference
-                (Ident (dummy_loc,id_of_string "Eqdep_dec")) in
+                (Ident (Loc.ghost,id_of_string "Eqdep_dec")) in
               Library.require_library [qidl] (Some false);
 (* cut with the good equality and prove the requested goal *)
               tclTHENS (cut (mkApp (ceq,new_eq_args)) )
@@ -1156,7 +1152,7 @@ let injEq ipats (eq,_,(t,t1,t2) as u) eq_clause =
             ) else (raise Not_dep_pair)
         ) with _ ->
 	  inject_at_positions env sigma u eq_clause posns
-	    (fun _ -> intros_pattern no_move ipats)
+	    (fun _ -> intros_pattern MoveLast ipats)
 
 let inj ipats with_evars = onEquality with_evars (injEq ipats)
 
@@ -1165,7 +1161,7 @@ let injClause ipats with_evars = function
   | Some c -> onInductionArg (inj ipats with_evars) c
 
 let injConcl gls  = injClause [] false None gls
-let injHyp id gls = injClause [] false (Some (ElimOnIdent (dummy_loc,id))) gls
+let injHyp id gls = injClause [] false (Some (ElimOnIdent (Loc.ghost,id))) gls
 
 let decompEqThen ntac (lbeq,_,(t,t1,t2) as u) clause gls =
   let sort = pf_apply get_type_of gls (pf_concl gls) in
@@ -1413,17 +1409,16 @@ let subst_one dep_proof_ok x (hyp,rhs,dir) gl =
   (* The set of hypotheses using x *)
   let depdecls =
     let test (id,_,c as dcl) =
-      if id <> hyp && occur_var_in_decl (pf_env gl) x dcl then dcl
-      else failwith "caught" in
-    List.rev (map_succeed test (pf_hyps gl)) in
+      if id <> hyp && occur_var_in_decl (pf_env gl) x dcl then Some dcl
+      else None in
+    List.rev (List.map_filter test (pf_hyps gl)) in
   let dephyps = List.map (fun (id,_,_) -> id) depdecls in
   (* Decides if x appears in conclusion *)
   let depconcl = occur_var (pf_env gl) x (pf_concl gl) in
   (* The set of non-defined hypothesis: they must be abstracted,
      rewritten and reintroduced *)
   let abshyps =
-    map_succeed
-      (fun (id,v,_) -> if v=None then mkVar id else failwith "caught")
+    List.map_filter (function (id, None, _) -> Some (mkVar id) | _ -> None)
       depdecls in
   (* a tactic that either introduce an abstracted and rewritten hyp,
      or introduce a definition where x was replaced *)
@@ -1438,7 +1433,7 @@ let subst_one dep_proof_ok x (hyp,rhs,dir) gl =
   tclTHENLIST
     ((if need_rewrite then
       [generalize abshyps;
-       general_rewrite dir all_occurrences true dep_proof_ok (mkVar hyp);
+       general_rewrite dir AllOccurrences true dep_proof_ok (mkVar hyp);
        thin dephyps;
        tclMAP introtac depdecls]
       else
@@ -1497,8 +1492,9 @@ let subst_all ?(flags=default_subst_tactic_flags ()) gl =
       match kind_of_term y with Var y -> y | _ -> failwith "caught"
     with PatternMatchingFailure -> failwith "caught"
   in
-  let ids = map_succeed test (pf_hyps_types gl) in
-  let ids = list_uniquize ids in
+  let test p = try Some (test p) with Failure _ -> None in
+  let ids = List.map_filter test (pf_hyps_types gl) in
+  let ids = List.uniquize ids in
   subst_gen flags.rewrite_dependent_proof ids gl
 
 (* Rewrite the first assumption for which the condition faildir does not fail

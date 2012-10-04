@@ -1,3 +1,4 @@
+Locusops
 Termops
 Evd
 Reductionops
@@ -13,17 +14,19 @@ Recordops
 Evarconv
 Arguments_renaming
 Typing
-Glob_term
-Pattern
+Miscops
+Glob_ops
+Redops
+Patternops
 Matching
 Tacred
 Typeclasses_errors
 Typeclasses
 Classops
+Program
 Coercion
 Unification
 Detyping
 Indrec
 Cases
 Pretyping
-

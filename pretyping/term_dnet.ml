@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,9 +9,8 @@
 (*i*)
 open Util
 open Term
-open Sign
 open Names
-open Libnames
+open Globnames
 open Mod_subst
 open Pp (* debug *)
 (*i*)
@@ -49,10 +48,8 @@ struct
     | DCons   of ('t * 't option) * 't
     | DNil
 
-  type dconstr = dconstr t
-
   (* debug *)
-  let rec pr_dconstr f : 'a t -> std_ppcmds = function
+  let pr_dconstr f : 'a t -> std_ppcmds = function
     | DRel -> str "*"
     | DSort -> str "Sort"
     | DRef _ -> str "Ref"
@@ -128,11 +125,11 @@ struct
 	  | DApp (c1,t1), DApp (c2,t2)
 	  | DLambda (c1,t1), DLambda (c2,t2)) -> f (f acc c1 c2) t1 t2
 	| DCase (ci,p1,c1,bl1),DCase (_,p2,c2,bl2) ->
-	    array_fold_left2 f (f (f acc p1 p2) c1 c2) bl1 bl2
+	    Array.fold_left2 f (f (f acc p1 p2) c1 c2) bl1 bl2
 	| DFix (ia,i,ta1,ca1), DFix (_,_,ta2,ca2) ->
-	    array_fold_left2 f (array_fold_left2 f acc ta1 ta2) ca1 ca2
+	    Array.fold_left2 f (Array.fold_left2 f acc ta1 ta2) ca1 ca2
 	| DCoFix(i,ta1,ca1), DCoFix(_,ta2,ca2) ->
-	    array_fold_left2 f (array_fold_left2 f acc ta1 ta2) ca1 ca2
+	    Array.fold_left2 f (Array.fold_left2 f acc ta1 ta2) ca1 ca2
 	| DCons ((t1,topt1),u1), DCons ((t2,topt2),u2) ->
 	    f (Option.fold_left2 f (f acc t1 t2) topt1 topt2) u1 u2
 	| _ -> assert false
@@ -148,11 +145,11 @@ struct
 	| DLambda (t1,c1), DLambda (t2,c2) -> DLambda (f t1 t2, f c1 c2)
 	| DApp (t1,u1), DApp (t2,u2) -> DApp (f t1 t2,f u1 u2)
 	| DCase (ci,p1,c1,bl1), DCase (_,p2,c2,bl2) ->
-	    DCase (ci, f p1 p2, f c1 c2, array_map2 f bl1 bl2)
+	    DCase (ci, f p1 p2, f c1 c2, Array.map2 f bl1 bl2)
 	| DFix (ia,i,ta1,ca1), DFix (_,_,ta2,ca2) ->
-	    DFix (ia,i,array_map2 f ta1 ta2,array_map2 f ca1 ca2)
+	    DFix (ia,i,Array.map2 f ta1 ta2,Array.map2 f ca1 ca2)
 	| DCoFix (i,ta1,ca1), DCoFix (_,ta2,ca2) ->
-	    DCoFix (i,array_map2 f ta1 ta2,array_map2 f ca1 ca2)
+	    DCoFix (i,Array.map2 f ta1 ta2,Array.map2 f ca1 ca2)
 	| DCons ((t1,topt1),u1), DCons ((t2,topt2),u2) ->
 	    DCons ((f t1 t2,Option.lift2 f topt1 topt2), f u1 u2)
 	| _ -> assert false
@@ -203,11 +200,6 @@ struct
   type t = TDnet.t
 
   type ident = TDnet.ident
-
-  type 'a pattern = 'a TDnet.pattern
-  type term_pattern = term_pattern DTerm.t pattern
-
-  type idset = TDnet.Idset.t
 
   type result = ident * (constr*existential_key) * Termops.subst
 
@@ -269,10 +261,6 @@ struct
     let c = empty_ctx (pat_of_constr c) in
     TDnet.add dn c id
 
-  let new_meta_no =
-    let ctr = ref 0 in
-    fun () -> decr ctr; !ctr
-
   let new_meta_no = Evarutil.new_untyped_evar
 
   let neutral_meta = new_meta_no()
@@ -304,7 +292,7 @@ struct
   let rec pr_term_pattern p =
     (fun pr_t -> function
        | Term t -> pr_t t
-       | Meta m -> str"["++Util.pr_int (Obj.magic m)++str"]"
+       | Meta m -> str"["++Pp.int (Obj.magic m)++str"]"
     ) (pr_dconstr pr_term_pattern) p
 
   let search_pat cpat dpat dn (up,plug) =

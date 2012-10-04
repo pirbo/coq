@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -49,11 +49,12 @@ Definition swap_sumbool {A B} (x : { A } + { B }) : { B } + { A } :=
     | right H => @left _ _ H
   end.
 
-Open Local Scope program_scope.
+Local Open Scope program_scope.
 
 (** Invert the branches. *)
 
-Program Definition nequiv_dec `{EqDec A} (x y : A) : { x =/= y } + { x === y } := swap_sumbool (x == y).
+Program Definition nequiv_dec `{EqDec A} (x y : A) : { x =/= y } + { x === y } := 
+          swap_sumbool (x == y).
 
 (** Overloaded notation for inequality. *)
 
@@ -138,8 +139,7 @@ Program Instance list_eqdec `(eqa : EqDec A eq) : ! EqDec (list A) eq :=
       | _, _ => in_right
     end }.
 
-  Solve Obligations using unfold equiv, complement in * ; program_simpl ; intuition (discriminate || eauto).
+  Next Obligation. destruct y ; unfold not in *; eauto. Defined.
 
-  Next Obligation. destruct y ; intuition eauto. Defined.
-
-  Solve Obligations using unfold equiv, complement in * ; program_simpl ; intuition (discriminate || eauto).
+  Solve Obligations with unfold equiv, complement in * ; 
+    program_simpl ; intuition (discriminate || eauto).

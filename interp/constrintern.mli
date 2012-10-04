@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,11 +12,15 @@ open Sign
 open Evd
 open Environ
 open Libnames
+open Globnames
 open Glob_term
 open Pattern
-open Topconstr
+open Constrexpr
+open Notation_term
 open Termops
 open Pretyping
+open Misctypes
+open Decl_kinds
 
 (** Translation from front abstract syntax of term to untyped terms (glob_constr) *)
 
@@ -50,7 +54,7 @@ type var_internalization_data =
       (** impargs to automatically add to the variable, e.g. for "JMeq A a B b"
           in implicit mode, this is [A;B] and this adds (A:=A) and (B:=B) *)
     Impargs.implicit_status list * (** signature of impargs of the variable *)
-    scope_name option list (** subscopes of the args of the variable *)
+    Notation_term.scope_name option list (** subscopes of the args of the variable *)
 
 (** A map of free variables to their implicit arguments and scopes *)
 type internalization_env = var_internalization_data Idmap.t
@@ -80,7 +84,7 @@ val intern_gen : bool -> evar_map -> env ->
 
 val intern_pattern : env -> cases_pattern_expr ->
   Names.identifier list *
-    ((Names.identifier * Names.identifier) list * Glob_term.cases_pattern) list
+    ((Names.identifier * Names.identifier) list * cases_pattern) list
 
 val intern_context : bool -> evar_map -> env -> internalization_env -> local_binder list -> internalization_env * glob_binder list
 
@@ -173,10 +177,11 @@ val global_reference_in_absolute_module : dir_path -> identifier -> constr
     list is a set and this set is [true] for a variable occurring in
     term position, [false] for a variable occurring in binding
     position; [true;false] if in both kinds of position *)
-val interp_aconstr : ?impls:internalization_env ->
+val interp_notation_constr : ?impls:internalization_env ->
   (identifier * notation_var_internalization_type) list ->
   (identifier * identifier) list -> constr_expr ->
-  (identifier * (subscopes * notation_var_internalization_type)) list * aconstr
+  (identifier * (subscopes * notation_var_internalization_type)) list *
+  notation_constr
 
 (** Globalization options *)
 val parsing_explicit : bool ref

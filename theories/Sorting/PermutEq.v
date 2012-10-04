@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,8 +12,8 @@ Set Implicit Arguments.
 
 (** This file is similar to [PermutSetoid], except that the equality used here
     is Coq usual one instead of a setoid equality. In particular, we can then
-    prove the equivalence between [List.Permutation] and
-    [Permutation.permutation].
+    prove the equivalence between [Permutation.Permutation] and
+    [PermutSetoid.permutation].
 *)
 
 Section Perm.

@@ -1,11 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Names
 open Univ
@@ -126,7 +127,7 @@ let is_unit constrsinfos =
    | _ -> false
 
 let small_unit constrsinfos =
-  let issmall = array_for_all is_small_constr constrsinfos
+  let issmall = Array.for_all is_small_constr constrsinfos
   and isunit = is_unit constrsinfos in
   issmall, isunit
 
@@ -176,9 +177,9 @@ let check_predicativity env s small level =
       Type u, _ ->
         let u' = fresh_local_univ () in
         let cst =
-          merge_constraints (enforce_geq u' u empty_constraint)
+          merge_constraints (enforce_leq u u' empty_constraint)
             (universes env) in
-        if not (check_geq cst u' level) then
+        if not (check_leq cst level u') then
           failwith "impredicative Type inductive type"
     | Prop Pos, Some ImpredicativeSet -> ()
     | Prop Pos, _ ->
@@ -242,13 +243,13 @@ let typecheck_one_inductive env params mib mip =
   let _ = Array.map (infer_type env) mip.mind_user_lc in
   (* mind_nf_lc *)
   let _ = Array.map (infer_type env) mip.mind_nf_lc in
-  array_iter2 (conv env) mip.mind_nf_lc mip.mind_user_lc;
+  Array.iter2 (conv env) mip.mind_nf_lc mip.mind_user_lc;
   (* mind_consnrealdecls *)
   let check_cons_args c n =
     let ctx,_ = decompose_prod_assum c in
     if n <> rel_context_length ctx - rel_context_length params then
       failwith "bad number of real constructor arguments" in
-  array_iter2 check_cons_args mip.mind_nf_lc mip.mind_consnrealdecls;
+  Array.iter2 check_cons_args mip.mind_nf_lc mip.mind_consnrealdecls;
   (* mind_kelim: checked by positivity criterion ? *)
   let sorts =
     compute_elim_sorts env params mib mip.mind_arity mip.mind_nf_lc in
@@ -311,7 +312,7 @@ let check_correct_par (env,n,ntypes,_) hyps l largs =
   let largs = Array.of_list largs in
   if Array.length largs < nparams then
     raise (IllFormedInd (LocalNotEnoughArgs l));
-  let (lpar,largs') = array_chop nparams largs in
+  let (lpar,largs') = Array.chop nparams largs in
   let nhyps = List.length hyps in
   let rec check k index = function
     | [] -> ()
@@ -321,7 +322,7 @@ let check_correct_par (env,n,ntypes,_) hyps l largs =
 	  | Rel w when w = index -> check (k-1) (index+1) hyps
 	  | _ -> raise (IllFormedInd (LocalNonPar (k+1,l)))
   in check (nparams-1) (n-nhyps) hyps;
-  if not (array_for_all (noccur_between n ntypes) largs') then
+  if not (Array.for_all (noccur_between n ntypes) largs') then
     failwith_non_pos_vect n ntypes largs'
 
 (* Arguments of constructor: check the number of recursive parameters nrecp.
@@ -330,7 +331,7 @@ let check_correct_par (env,n,ntypes,_) hyps l largs =
     recursive parameters *)
 
 let check_rec_par (env,n,_,_) hyps nrecp largs =
-  let (lpar,_) = list_chop nrecp largs in
+  let (lpar,_) = List.chop nrecp largs in
   let rec find index =
     function
       | ([],_) -> ()
@@ -354,7 +355,7 @@ let abstract_mind_lc env ntyps npars lc =
     lc
   else
     let make_abs =
-      list_tabulate
+      List.tabulate
 	(function i -> lambda_implicit_lift npars (Rel (i+1))) ntyps
     in
     Array.map (substl make_abs) lc
@@ -431,7 +432,7 @@ let check_positivity_one (env, _,ntypes,_ as ienv) hyps nrecp (_,i as ind) indlc
     let auxnpar = mib.mind_nparams_rec in
     let nonrecpar = mib.mind_nparams - auxnpar in
     let (lpar,auxlargs) =
-      try list_chop auxnpar largs
+      try List.chop auxnpar largs
       with Failure _ -> raise (IllFormedInd (LocalNonPos n)) in
       (* If the inductive appears in the args (non params) then the
 	 definition is not positive. *)
@@ -513,19 +514,19 @@ let check_positivity env_ar mind params nrecp inds =
   let lparams = rel_context_length params in
   let check_one i mip =
     let ra_env =
-      list_tabulate (fun _ -> (Norec,mk_norec)) lparams @ lra_ind in
+      List.tabulate (fun _ -> (Norec,mk_norec)) lparams @ lra_ind in
     let ienv = (env_ar, 1+lparams, ntypes, ra_env) in
       check_positivity_one ienv params nrecp (mind,i) mip.mind_nf_lc
   in
   let irecargs = Array.mapi check_one inds in
   let wfp = Rtree.mk_rec irecargs in
-  array_iter2 (fun ind wfpi -> check_subtree ind.mind_recargs wfpi) inds wfp
+  Array.iter2 (fun ind wfpi -> check_subtree ind.mind_recargs wfpi) inds wfp
 
 (************************************************************************)
 (************************************************************************)
 
 let check_inductive env kn mib =
-  Flags.if_verbose msgnl (str "  checking ind: " ++ pr_mind kn);
+  Flags.if_verbose ppnl (str "  checking ind: " ++ pr_mind kn); pp_flush ();
   (* check mind_constraints: should be consistent with env *)
   let env = add_constraints mib.mind_constraints env in
   (* check mind_record : TODO ? check #constructor = 1 ? *)

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -20,7 +20,7 @@ let option_D = ref false
 let option_w = ref false
 let option_sort = ref false
 
-let rec warning_mult suf iter =
+let warning_mult suf iter =
   let tab = Hashtbl.create 151 in
   let check f d =
     begin try
@@ -195,12 +195,13 @@ let coqdep () =
     add_rec_dir add_known "theories" ["Coq"];
     add_rec_dir add_known "plugins" ["Coq"]
   end else begin
-    let coqlib = Envars.coqlib () in
+    let coqlib = Envars.coqlib Errors.error in
     add_rec_dir add_coqlib_known (coqlib//"theories") ["Coq"];
     add_rec_dir add_coqlib_known (coqlib//"plugins") ["Coq"];
     let user = coqlib//"user-contrib" in
     if Sys.file_exists user then add_rec_dir add_coqlib_known user [];
-    List.iter (fun s -> add_rec_dir add_coqlib_known s []) Envars.xdg_dirs;
+    List.iter (fun s -> add_rec_dir add_coqlib_known s [])
+      (Envars.xdg_dirs (fun x -> Pp.msg_warning (Pp.str x)));
     List.iter (fun s -> add_rec_dir add_coqlib_known s []) Envars.coqpath;
   end;
   List.iter (fun (f,d) -> add_mli_known f d) !mliAccu;

@@ -1,30 +1,26 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Compat
 open Util
 open Names
-open Sign
 open Term
 open Termops
 open Namegen
 open Environ
 open Type_errors
-open Glob_term
-open Inductiveops
 
 type pretype_error =
   (* Old Case *)
   | CantFindCaseType of constr
   (* Unification *)
   | OccurCheck of existential_key * constr
-  | NotClean of existential_key * constr * Evd.hole_kind
-  | UnsolvableImplicit of Evd.evar_info * Evd.hole_kind *
+  | NotClean of existential_key * constr * Evar_kinds.t
+  | UnsolvableImplicit of Evd.evar_info * Evar_kinds.t *
       Evd.unsolvability_explanation option
   | CannotUnify of constr * constr
   | CannotUnifyLocal of constr * constr * constr
@@ -43,8 +39,8 @@ type pretype_error =
 exception PretypeError of env * Evd.evar_map * pretype_error
 
 let precatchable_exception = function
-  | Util.UserError _ | TypeError _ | PretypeError _
-  | Loc.Exc_located(_,(Util.UserError _ | TypeError _ |
+  | Errors.UserError _ | TypeError _ | PretypeError _
+  | Loc.Exc_located(_,(Errors.UserError _ | TypeError _ |
     Nametab.GlobalizationError _ | PretypeError _)) -> true
   | _ -> false
 

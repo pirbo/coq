@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -258,6 +258,9 @@ let emit_instr = function
   | Kareconst(n,lbl) -> out opARECONST; out_int n; out_label lbl
   | Kcompint31 -> out opCOMPINT31
   | Kdecompint31 -> out opDECOMPINT31
+  | Klorint31 -> out opORINT31
+  | Klandint31 -> out opANDINT31
+  | Klxorint31 -> out opXORINT31
   (*/spiwack *)
   | Kstop ->
       out opSTOP

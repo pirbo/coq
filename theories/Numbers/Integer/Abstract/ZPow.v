@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -17,6 +17,17 @@ Module Type ZPowProp
  (Import D : ZSgnAbsProp A B).
 
  Include NZPowProp A A B.
+
+(** A particular case of [pow_add_r], with no precondition *)
+
+Lemma pow_twice_r a b : a^(2*b) == a^b * a^b.
+Proof.
+ rewrite two_succ. nzsimpl.
+ destruct (le_gt_cases 0 b).
+ - now rewrite pow_add_r.
+ - rewrite !pow_neg_r. now nzsimpl. trivial.
+   now apply add_neg_neg.
+Qed.
 
 (** Parity of power *)
 

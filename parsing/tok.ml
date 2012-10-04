@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -45,7 +45,9 @@ let match_keyword kwd = function
   | KEYWORD kwd' when kwd = kwd' -> true
   | _ -> false
 
-let print ppf tok = Format.fprintf ppf "%s" (to_string tok)
+(* Needed to fix Camlp4 signature.
+ Cannot use Pp because of silly Tox -> Compat -> Pp dependency *)
+let print ppf tok = Format.pp_print_string ppf (to_string tok)
 
 (** For camlp5, conversion from/to [Plexing.pattern],
     and a match function analoguous to [Plexing.default_match] *)

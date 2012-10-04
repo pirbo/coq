@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,15 +13,14 @@
 (* This file registers properties of records: projections and
    canonical structures *)
 
+open Errors
 open Util
 open Pp
 open Names
-open Libnames
+open Globnames
 open Nametab
 open Term
-open Typeops
 open Libobject
-open Library
 open Mod_subst
 open Reductionops
 
@@ -66,7 +65,7 @@ let subst_structure (subst,((kn,i),id,kl,projs as obj)) =
   let projs' =
    (* invariant: struc.s_PROJ is an evaluable reference. Thus we can take *)
    (* the first component of subst_con.                                   *)
-   list_smartmap
+   List.smartmap
      (Option.smartmap (fun kn -> fst (subst_con subst kn)))
     projs
   in
@@ -200,8 +199,8 @@ let canonical_projections () =
     !object_table []
 
 let keep_true_projections projs kinds =
-  map_succeed (function (p,(_,true)) -> p | _ -> failwith "")
-    (List.combine projs kinds)
+  let filter (p, (_, b)) = if b then Some p else None in
+  List.map_filter filter (List.combine projs kinds)
 
 let cs_pattern_of_constr t =
   match kind_of_term t with
@@ -228,7 +227,7 @@ let compute_canonical_projections (con,ind) =
   let args = snd (decompose_app t) in
   let { s_EXPECTEDPARAM = p; s_PROJ = lpj; s_PROJKIND = kl } =
     lookup_structure ind in
-  let params, projs = list_chop p args in
+  let params, projs = List.chop p args in
   let lpj = keep_true_projections lpj kl in
   let lps = List.combine lpj projs in
   let comp =
@@ -244,9 +243,9 @@ let compute_canonical_projections (con,ind) =
                    if Flags.is_verbose () then
                      (let con_pp = Nametab.pr_global_env Idset.empty (ConstRef con)
                       and proji_sp_pp = Nametab.pr_global_env Idset.empty (ConstRef proji_sp) in
-		      msg_warning (str "No global reference exists for projection value"
-                                   ++ Termops.print_constr t ++ str " in instance "  
-                                   ++ con_pp ++ str " of " ++ proji_sp_pp ++ str ", ignoring it."));
+		      msg_warning (strbrk "No global reference exists for projection value"
+                                   ++ Termops.print_constr t ++ strbrk " in instance "  
+                                   ++ con_pp ++ str " of " ++ proji_sp_pp ++ strbrk ", ignoring it."));
 		   l
 	       end
 	   | _ -> l)
@@ -278,9 +277,9 @@ let open_canonical_structure i (_,o) =
               and new_can_s = (Termops.print_constr s.o_DEF) in
               let prj = (Nametab.pr_global_env Idset.empty proj)
               and hd_val = (pr_cs_pattern cs_pat) in
-              msg_warning (str "Ignoring canonical projection to " ++ hd_val
-                             ++ str " by " ++ prj ++ str " in "
-                             ++ new_can_s ++ str ": redundant with " ++ old_can_s)) lo
+              msg_warning (strbrk "Ignoring canonical projection to " ++ hd_val
+                             ++ strbrk " by " ++ prj ++ strbrk " in "
+                             ++ new_can_s ++ strbrk ": redundant with " ++ old_can_s)) lo
 
 let cache_canonical_structure o =
   open_canonical_structure 1 o
@@ -340,7 +339,7 @@ let is_open_canonical_projection env sigma (c,args) =
   try
     let n = find_projection_nparams (global_of_constr c) in
     try
-      let arg = whd_betadeltaiota env sigma (List.nth args n) in
+      let arg = whd_betadeltaiota env sigma (stack_nth args n) in
       let hd = match kind_of_term arg with App (hd, _) -> hd | _ -> arg in
       not (isConstruct hd) 
     with Failure _ -> false

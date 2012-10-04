@@ -1,40 +1,27 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
 open Term
 open Termops
-open Sign
 open Environ
-open Libnames
+open Globnames
 open Mod_subst
 
-(* The kinds of existential variable *)
-
-type obligation_definition_status = Define of bool | Expand
-
-type hole_kind =
-  | ImplicitArg of global_reference * (int * identifier option) * bool
-  | BinderType of name
-  | QuestionMark of obligation_definition_status
-  | CasesType
-  | InternalHole
-  | TomatchTypeParameter of inductive * int
-  | GoalEvar
-  | ImpossibleCase
-  | MatchingVar of bool * identifier
+(* The kinds of existential variables are now defined in [Evar_kinds] *)
 
 (* The type of mappings for existential variables *)
 
-type evar = existential_key
+type evar = Term.existential_key
 
 let string_of_existential evk = "?" ^ string_of_int evk
 let existential_of_int evk = evk
@@ -48,7 +35,7 @@ type evar_info = {
   evar_hyps : named_context_val;
   evar_body : evar_body;
   evar_filter : bool list;
-  evar_source : hole_kind located;
+  evar_source : Evar_kinds.t Loc.located;
   evar_candidates : constr list option; (* if not None, list of allowed instances *)
   evar_extra : Store.t }
 
@@ -57,7 +44,7 @@ let make_evar hyps ccl = {
   evar_hyps = hyps;
   evar_body = Evar_empty;
   evar_filter = List.map (fun _ -> true) (named_context_of_val hyps);
-  evar_source = (dummy_loc,InternalHole);
+  evar_source = (Loc.ghost,Evar_kinds.InternalHole);
   evar_candidates = None;
   evar_extra = Store.empty
 }
@@ -69,7 +56,7 @@ let evar_body evi = evi.evar_body
 let evar_filter evi = evi.evar_filter
 let evar_unfiltered_env evi = Global.env_of_context evi.evar_hyps
 let evar_filtered_context evi =
-  snd (list_filter2 (fun b c -> b) (evar_filter evi,evar_context evi))
+  snd (List.filter2 (fun b c -> b) (evar_filter evi,evar_context evi))
 let evar_env evi =
   List.fold_right push_named (evar_filtered_context evi)
     (reset_context (Global.env()))
@@ -431,7 +418,7 @@ let define evk body evd =
 	| [] ->  evd.last_mods
         | _ -> ExistentialSet.add evk evd.last_mods }
 
-let evar_declare hyps evk ty ?(src=(dummy_loc,InternalHole)) ?filter ?candidates evd =
+let evar_declare hyps evk ty ?(src=(Loc.ghost,Evar_kinds.InternalHole)) ?filter ?candidates evd =
   let filter =
     if filter = None then
       List.map (fun _ -> true) (named_context_of_val hyps)
@@ -538,11 +525,11 @@ let set_leq_sort ({evars = (sigma, (us, sm))} as d) s1 s2 =
 	  else (raise (Univ.UniverseInconsistency (Univ.Le, u1, u2)))
      | Type u, Prop c -> 
 	  if c = Pos then 
-	    add_constraints d (Univ.enforce_geq Univ.type0_univ u Univ.empty_constraint)
+	    add_constraints d (Univ.enforce_leq u Univ.type0_univ Univ.empty_constraint)
 	  else raise (Univ.UniverseInconsistency (Univ.Le, u1, u2))
       | _, Type u ->
 	  if is_univ_var_or_set u then
-	    add_constraints d (Univ.enforce_geq u2 u1 Univ.empty_constraint)
+	    add_constraints d (Univ.enforce_leq u1 u2 Univ.empty_constraint)
 	  else raise (Univ.UniverseInconsistency (Univ.Le, u1, u2))
 
 let is_univ_level_var us u =
@@ -576,10 +563,12 @@ let meta_list evd = metamap_to_list evd.metas
 let find_meta evd mv = Metamap.find mv evd.metas
 
 let undefined_metas evd =
-  List.sort Pervasives.compare (map_succeed (function
-    | (n,Clval(_,_,typ)) -> failwith ""
-    | (n,Cltyp (_,typ))  -> n)
-    (meta_list evd))
+  let filter = function
+    | (n,Clval(_,_,typ)) -> None
+    | (n,Cltyp (_,typ))  -> Some n
+  in
+  let m = List.map_filter filter (meta_list evd) in
+  List.sort Pervasives.compare m
 
 let metas_of evd =
   List.map (function
@@ -683,13 +672,9 @@ let retract_coercible_metas evd =
       evd.metas ([],Metamap.empty) in
   mc, { evd with metas = ml }
 
-let rec list_assoc_in_triple x = function
-    [] -> raise Not_found
-  | (a,b,_)::l -> if compare a x = 0 then b else list_assoc_in_triple x l
-
 let subst_defined_metas bl c =
   let rec substrec c = match kind_of_term c with
-    | Meta i -> substrec (list_assoc_snd_in_triple i bl)
+    | Meta i -> substrec (List.assoc_snd_in_triple i bl)
     | _ -> map_constr substrec c
   in try Some (substrec c) with Not_found -> None
 
@@ -751,26 +736,26 @@ let pr_decl ((id,b,_),ok) =
       print_constr c ++ str (if ok then ")" else "}")
 
 let pr_evar_source = function
-  | QuestionMark _ -> str "underscore"
-  | CasesType -> str "pattern-matching return predicate"
-  | BinderType (Name id) -> str "type of " ++ Nameops.pr_id id
-  | BinderType Anonymous -> str "type of anonymous binder"
-  | ImplicitArg (c,(n,ido),b) ->
+  | Evar_kinds.QuestionMark _ -> str "underscore"
+  | Evar_kinds.CasesType -> str "pattern-matching return predicate"
+  | Evar_kinds.BinderType (Name id) -> str "type of " ++ Nameops.pr_id id
+  | Evar_kinds.BinderType Anonymous -> str "type of anonymous binder"
+  | Evar_kinds.ImplicitArg (c,(n,ido),b) ->
       let id = Option.get ido in
       str "parameter " ++ pr_id id ++ spc () ++ str "of" ++
       spc () ++ print_constr (constr_of_global c)
-  | InternalHole -> str "internal placeholder"
-  | TomatchTypeParameter (ind,n) ->
-      nth n ++ str " argument of type " ++ print_constr (mkInd ind)
-  | GoalEvar -> str "goal evar"
-  | ImpossibleCase -> str "type of impossible pattern-matching clause"
-  | MatchingVar _ -> str "matching variable"
+  | Evar_kinds.InternalHole -> str "internal placeholder"
+  | Evar_kinds.TomatchTypeParameter (ind,n) ->
+      pr_nth n ++ str " argument of type " ++ print_constr (mkInd ind)
+  | Evar_kinds.GoalEvar -> str "goal evar"
+  | Evar_kinds.ImpossibleCase -> str "type of impossible pattern-matching clause"
+  | Evar_kinds.MatchingVar _ -> str "matching variable"
 
 let pr_evar_info evi =
   let phyps =
     try
       let decls = List.combine (evar_context evi) (evar_filter evi) in
-      prlist_with_sep pr_spc pr_decl (List.rev decls)
+      prlist_with_sep spc pr_decl (List.rev decls)
     with Invalid_argument _ -> str "Ill-formed filtered context" in
   let pty = print_constr evi.evar_concl in
   let pb =
@@ -778,10 +763,18 @@ let pr_evar_info evi =
       | Evar_empty -> mt ()
       | Evar_defined c -> spc() ++ str"=> "  ++ print_constr c
   in
+  let candidates =
+    match evi.evar_body, evi.evar_candidates with
+      | Evar_empty, Some l ->
+           spc () ++ str "{" ++
+           prlist_with_sep (fun () -> str "|") print_constr l ++ str "}"
+      | _ ->
+          mt ()
+  in
   let src = str "(" ++ pr_evar_source (snd evi.evar_source) ++ str ")" in
   hov 2
     (str"["  ++ phyps ++ spc () ++ str"|- "  ++ pty ++ pb ++ str"]" ++
-       spc() ++ src)
+       candidates ++ spc() ++ src)
 
 let compute_evar_dependency_graph (sigma:evar_map) =
   (* Compute the map binding ev to the evars whose body depends on ev *)
@@ -802,15 +795,15 @@ let evar_dependency_closure n sigma =
     if n=0 then l
     else
       let l' =
-        list_map_append (fun (evk,_) ->
+        List.map_append (fun (evk,_) ->
           try ExistentialMap.find evk graph with Not_found -> []) l in
-      aux (n-1) (list_uniquize (Sort.list order (l@l'))) in
+      aux (n-1) (List.uniquize (Sort.list order (l@l'))) in
   aux n (undefined_list sigma)
 
 let pr_evar_map_t depth sigma =
   let (evars,(uvs,univs)) = sigma.evars in
   let pr_evar_list l =
-    h 0 (prlist_with_sep pr_fnl
+    h 0 (prlist_with_sep fnl
 	   (fun (ev,evi) ->
 	     h 0 (str(string_of_existential ev) ++
                     str"==" ++ pr_evar_info evi)) l) in
@@ -830,7 +823,7 @@ let pr_evar_map_t depth sigma =
   and svs =
     if Univ.UniverseLSet.is_empty uvs then mt ()
     else str"UNIVERSE VARIABLES:"++brk(0,1)++
-      h 0 (prlist_with_sep pr_fnl 
+      h 0 (prlist_with_sep fnl
 	     (fun u -> Univ.pr_uni_level u) (Univ.UniverseLSet.elements uvs))++fnl()
   and cs =
     if Univ.is_initial_universes univs then mt ()
@@ -844,12 +837,12 @@ let print_env_short env =
   let pr_rel_decl (n, b, _) = pr_body n b in
   let nc = List.rev (named_context env) in
   let rc = List.rev (rel_context env) in
-    str "[" ++ prlist_with_sep pr_spc pr_named_decl nc ++ str "]" ++ spc () ++
-    str "[" ++ prlist_with_sep pr_spc pr_rel_decl rc ++ str "]"
+    str "[" ++ pr_sequence pr_named_decl nc ++ str "]" ++ spc () ++
+    str "[" ++ pr_sequence pr_rel_decl rc ++ str "]"
 
 let pr_constraints pbs =
   h 0
-    (prlist_with_sep pr_fnl 
+    (prlist_with_sep fnl
        (fun (pbty,env,t1,t2) ->
 	  print_env_short env ++ spc () ++ str "|-" ++ spc () ++
 	    print_constr t1 ++ spc() ++
@@ -859,7 +852,7 @@ let pr_constraints pbs =
 	    spc() ++ print_constr t2) pbs)
 
 let pr_evar_map_constraints evd =
-  if evd.conv_pbs = [] then mt() 
+  if evd.conv_pbs = [] then mt()
   else pr_constraints evd.conv_pbs++fnl()
 
 let pr_evar_map allevars evd =
@@ -874,4 +867,4 @@ let pr_evar_map allevars evd =
   v 0 (pp_evm ++ cstrs ++ pp_met)
 
 let pr_metaset metas =
-  str "[" ++ prlist_with_sep spc pr_meta (Metaset.elements metas) ++ str "]"
+  str "[" ++ pr_sequence pr_meta (Metaset.elements metas) ++ str "]"

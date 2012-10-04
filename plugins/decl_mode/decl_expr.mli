@@ -1,13 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Names
-open Util
+open Pp
 open Tacexpr
 
 type 'it statement =
@@ -77,15 +77,15 @@ type ('hyp,'constr,'pat,'tac) gen_proof_instr=
 
 
 type raw_proof_instr =
-    ((identifier*(Topconstr.constr_expr option)) located,
-     Topconstr.constr_expr,
-     Topconstr.cases_pattern_expr,
+    ((identifier*(Constrexpr.constr_expr option)) Loc.located,
+     Constrexpr.constr_expr,
+     Constrexpr.cases_pattern_expr,
      raw_tactic_expr) gen_proof_instr
 
 type glob_proof_instr =
-    ((identifier*(Genarg.glob_constr_and_expr option)) located,
+    ((identifier*(Genarg.glob_constr_and_expr option)) Loc.located,
      Genarg.glob_constr_and_expr,
-     Topconstr.cases_pattern_expr,
+     Constrexpr.cases_pattern_expr,
      Tacexpr.glob_tactic_expr) gen_proof_instr
 
 type proof_pattern =
@@ -94,7 +94,7 @@ type proof_pattern =
      pat_constr: Term.constr;
      pat_typ: Term.types;
      pat_pat: Glob_term.cases_pattern;
-     pat_expr: Topconstr.cases_pattern_expr}
+     pat_expr: Constrexpr.cases_pattern_expr}
 
 type proof_instr =
     (Term.constr statement,

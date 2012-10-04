@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -10,12 +10,10 @@ open Hipattern
 open Names
 open Term
 open Termops
-open Reductionops
 open Tacmach
 open Util
 open Declarations
-open Libnames
-open Inductiveops
+open Globnames
 
 let qflag=ref true
 
@@ -76,7 +74,7 @@ type kind_of_formula=
   | Forall of constr*constr
   | Atom of constr
 
-let rec kind_of_formula gl term =
+let kind_of_formula gl term =
   let normalize=special_nf gl in
   let cciterm=special_whd gl term in
     match match_with_imp_term cciterm with
@@ -97,7 +95,7 @@ let rec kind_of_formula gl term =
 			let is_trivial=
 			  let is_constant c =
 			    nb_prod c = mib.mind_nparams in
-			    array_exists is_constant mip.mind_nf_lc in
+			    Array.exists is_constant mip.mind_nf_lc in
 			  if Inductiveops.mis_is_recursive (ind,mib,mip) ||
 			    (has_realargs && not is_trivial)
 			  then
@@ -144,9 +142,9 @@ let build_atoms gl metagen side cciterm =
 	  let g i _ (_,_,t) =
 	    build_rec env polarity (lift i t) in
 	  let f l =
-	    list_fold_left_i g (1-(List.length l)) () l in
+	    List.fold_left_i g (1-(List.length l)) () l in
 	    if polarity && (* we have a constant constructor *)
-	      array_exists (function []->true|_->false) v
+	      Array.exists (function []->true|_->false) v
 	    then trivial:=true;
 	    Array.iter f v
       | Exists(i,l)->
@@ -154,7 +152,7 @@ let build_atoms gl metagen side cciterm =
 	  let v =(ind_hyps 1 i l gl).(0) in
 	  let g i _ (_,_,t) =
 	    build_rec (var::env) polarity (lift i t) in
-	    list_fold_left_i g (2-(List.length l)) () v
+	    List.fold_left_i g (2-(List.length l)) () v
       | Forall(_,b)->
 	  let var=mkMeta (metagen true) in
 	    build_rec (var::env) polarity b
@@ -226,7 +224,7 @@ let build_formula side nam typ gl metagen=
 		  | And(_,_,_)        -> Rand
 		  | Or(_,_,_)         -> Ror
 		  | Exists (i,l) ->
-		      let (_,_,d)=list_last (ind_hyps 0 i l gl).(0) in
+		      let (_,_,d)=List.last (ind_hyps 0 i l gl).(0) in
 			Rexists(m,d,trivial)
 		  | Forall (_,a) -> Rforall
 		  | Arrow (a,b) -> Rarrow in

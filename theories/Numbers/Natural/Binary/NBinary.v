@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -31,8 +31,8 @@ Time Eval vm_compute in (log 500000). (* 11 sec *)
 Fixpoint binposlog (p : positive) : N :=
 match p with
 | xH => 0
-| xO p' => Nsucc (binposlog p')
-| xI p' => Nsucc (binposlog p')
+| xO p' => N.succ (binposlog p')
+| xI p' => N.succ (binposlog p')
 end.
 
 Definition binlog (n : N) : N :=

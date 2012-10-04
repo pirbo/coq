@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -50,7 +50,7 @@ Definition swap_sumbool {A B} (x : { A } + { B }) : { B } + { A } :=
 
 Require Import Coq.Program.Program.
 
-Open Local Scope program_scope.
+Local Open Scope program_scope.
 
 (** Invert the branches. *)
 
@@ -108,7 +108,7 @@ Program Instance prod_eqdec `(! EqDec (eq_setoid A), ! EqDec (eq_setoid B))
       else in_right
     else in_right.
 
-  Solve Obligations using unfold complement ; program_simpl.
+  Solve Obligations with unfold complement ; program_simpl.
 
 (** Objects of function spaces with countable domains like bool
   have decidable equality. *)
@@ -121,7 +121,7 @@ Program Instance bool_function_eqdec `(! EqDec (eq_setoid A))
       else in_right
     else in_right.
 
-  Solve Obligations using try red ; unfold equiv, complement ; program_simpl.
+  Solve Obligations with try red ; unfold equiv, complement ; program_simpl.
 
   Next Obligation.
   Proof.

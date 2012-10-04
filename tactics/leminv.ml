@@ -1,15 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
-open Nameops
 open Term
 open Termops
 open Namegen
@@ -17,21 +17,15 @@ open Sign
 open Evd
 open Printer
 open Reductionops
-open Declarations
 open Entries
 open Inductiveops
 open Environ
 open Tacmach
-open Proof_type
 open Pfedit
-open Evar_refiner
 open Clenv
 open Declare
 open Tacticals
 open Tactics
-open Inv
-open Vernacexpr
-open Safe_typing
 open Decl_kinds
 
 let no_inductive_inconstr env constr =
@@ -193,7 +187,7 @@ let inversion_scheme env sigma t sort dep_option inv_op =
     compute_first_inversion_scheme env sigma ind sort dep_option
   in
   assert
-    (list_subset
+    (List.subset
        (global_vars env invGoal)
        (ids_of_named_context (named_context invEnv)));
   (*

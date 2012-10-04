@@ -22,14 +22,14 @@ Program Fixpoint merge (n m : nat) {measure (n + m) (lt)} : nat :=
 Print merge.
 
 
-Print Zlt.
+Print Z.lt.
 Print Zwf.
 
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 
 Program Fixpoint Zwfrec (n m : Z) {measure (n + m) (Zwf 0)} : Z :=
   match n ?= m with
-    | Lt => Zwfrec n (Zpred m)
+    | Lt => Zwfrec n (Z.pred m)
     | _ => 0
   end.
 
@@ -100,6 +100,6 @@ Next Obligation. simpl in *; intros.
   apply H. simpl. omega.
 Qed.
 
-Program Fixpoint check_n'  (n : nat) (m : nat | m = n) (p : nat) (q : nat | q = p)
+Program Fixpoint check_n'  (n : nat) (m : {m:nat | m = n}) (p : nat) (q:{q : nat | q = p})
   {measure (p - n) p} : nat :=
   _.

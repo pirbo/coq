@@ -2,9 +2,9 @@
 ## tags for binaries
 
 <scripts/coqmktop.{native,byte}> : use_str, use_unix, use_dynlink, use_camlpX
-<scripts/coqc.{native,byte}> : use_unix, use_dynlink, use_camlpX
+<scripts/coqc.{native,byte}> : use_str, use_unix, use_dynlink, use_camlpX
 <tools/coqdep_boot.{native,byte}> : use_unix
-<tools/coqdep.{native,byte}> : use_unix, use_dynlink, use_camlpX
+<tools/coqdep.{native,byte}> : use_str, use_unix, use_dynlink, use_camlpX
 <tools/coq_tex.{native,byte}> : use_str
 <tools/coq_makefile.{native,byte}> : use_str, use_unix
 <tools/coqdoc/main.{native,byte}> : use_str
@@ -20,13 +20,14 @@
 
 ## tags for grammar.cm*
 
-<parsing/grammar.{cma,cmxa}> : use_unix
+<grammar/grammar.{cma,cmxa}> : use_unix
 
 ## tags for camlp4 files 
 
 "toplevel/mltop.ml4": is_mltop
 
 "toplevel/whelp.ml4": use_grammar
+"parsing/g_obligations.ml4": use_grammar
 "tactics/extraargs.ml4": use_grammar
 "tactics/extratactics.ml4": use_grammar
 "tactics/class_tactics.ml4": use_grammar
@@ -46,12 +47,11 @@
 "parsing/pcoq.ml4": use_compat5
 "plugins/decl_mode/g_decl_mode.ml4": use_compat5
 "plugins/funind/g_indfun.ml4": use_compat5
-"plugins/subtac/g_subtac.ml4": use_compat5
 
-"parsing/argextend.ml4": use_compat5b
-"parsing/q_constr.ml4": use_compat5b
-"parsing/tacextend.ml4": use_compat5b
-"parsing/vernacextend.ml4": use_compat5b
+"grammar/argextend.ml4": use_compat5b
+"grammar/q_constr.ml4": use_compat5b
+"grammar/tacextend.ml4": use_compat5b
+"grammar/vernacextend.ml4": use_compat5b
 
 <plugins/**/*.ml4>: use_grammar
 
@@ -64,6 +64,8 @@
 "ide": include
 "ide/utils": include
 "interp": include
+"intf": include
+"grammar": include
 "kernel": include
 "kernel/byterun": include
 "lib": include
@@ -71,6 +73,7 @@
 "parsing": include
 "plugins": include
 "pretyping": include
+"printing": include
 "proofs": include
 "scripts": include
 "states": include

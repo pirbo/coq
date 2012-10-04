@@ -21,7 +21,7 @@ let typesdtdname = "http://mowgli.cs.unibo.it/dtd/cictypes.dtd";;
 
 let rec find_last_id =
  function
-    [] -> Util.anomaly "find_last_id: empty list"
+    [] -> Errors.anomaly "find_last_id: empty list"
   | [id,_,_] -> id
   | _::tl -> find_last_id tl
 ;;
@@ -210,7 +210,7 @@ let param_attribute_of_params params =
 ;;
 
 let print_object uri ids_to_inner_sorts =
- let rec aux =
+ let aux =
   let module A = Acic in
   let module X = Xml in
     function

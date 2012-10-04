@@ -1,18 +1,18 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Names
 open Univ
 open Term
 open Declarations
 open Inductive
-open Sign
 open Environ
 open Reduction
 open Typeops
@@ -146,7 +146,7 @@ let small_unit constrsinfos =
 *)
 
 let extract_level (_,_,_,lc,lev) =
-  (* Enforce that the level is not in Prop if more than two constructors *)
+  (* Enforce that the level is not in Prop if more than one constructor *)
   if Array.length lc >= 2 then sup type0_univ lev else lev
 
 let inductive_levels arities inds =
@@ -253,7 +253,7 @@ let typecheck_inductive env mie =
   (* Compute/check the sorts of the inductive types *)
   let ind_min_levels = inductive_levels arities inds in
   let inds, cst =
-    array_fold_map2' (fun ((id,full_arity,ar_level),cn,info,lc,_) lev cst ->
+    Array.fold_map2' (fun ((id,full_arity,ar_level),cn,info,lc,_) lev cst ->
       let sign, s = dest_arity env full_arity in
       let status,cst = match s with
       | Type u when ar_level <> None (* Explicitly polymorphic *)
@@ -262,9 +262,9 @@ let typecheck_inductive env mie =
 	  (* conclusions of the parameters *)
           (* We enforce [u >= lev] in case [lev] has a strict upper *)
           (* constraints over [u] *)
-	  Inr (param_ccls, lev), enforce_geq u lev cst
+	  Inr (param_ccls, lev), enforce_leq lev u cst
       | Type u (* Not an explicit occurrence of Type *) ->
-	  Inl (info,full_arity,s), enforce_geq u lev cst
+	  Inl (info,full_arity,s), enforce_leq lev u cst
       | Prop Pos when engagement env <> Some ImpredicativeSet ->
 	  (* Predicative set: check that the content is indeed predicative *)
 	  if not (is_type0m_univ lev) & not (is_type0_univ lev) then
@@ -330,7 +330,7 @@ let check_correct_par (env,n,ntypes,_) hyps l largs =
   let largs = Array.of_list largs in
   if Array.length largs < nparams then
     raise (IllFormedInd (LocalNotEnoughArgs l));
-  let (lpar,largs') = array_chop nparams largs in
+  let (lpar,largs') = Array.chop nparams largs in
   let nhyps = List.length hyps in
   let rec check k index = function
     | [] -> ()
@@ -340,7 +340,7 @@ let check_correct_par (env,n,ntypes,_) hyps l largs =
 	  | Rel w when w = index -> check (k-1) (index+1) hyps
 	  | _ -> raise (IllFormedInd (LocalNonPar (k+1,l)))
   in check (nparams-1) (n-nhyps) hyps;
-  if not (array_for_all (noccur_between n ntypes) largs') then
+  if not (Array.for_all (noccur_between n ntypes) largs') then
     failwith_non_pos_vect n ntypes largs'
 
 (* Computes the maximum number of recursive parameters :
@@ -351,7 +351,7 @@ let check_correct_par (env,n,ntypes,_) hyps l largs =
 let compute_rec_par (env,n,_,_) hyps nmr largs =
 if nmr = 0 then 0 else
 (* start from 0, hyps will be in reverse order *)
-  let (lpar,_) = list_chop nmr largs in
+  let (lpar,_) = List.chop nmr largs in
   let rec find k index =
       function
 	  ([],_) -> nmr
@@ -375,7 +375,7 @@ let abstract_mind_lc env ntyps npars lc =
     lc
   else
     let make_abs =
-      list_tabulate
+      List.tabulate
 	(function i -> lambda_implicit_lift npars (mkRel (i+1))) ntyps
     in
     Array.map (substl make_abs) lc
@@ -457,7 +457,7 @@ let check_positivity_one (env,_,ntypes,_ as ienv) hyps (_,i as ind) nargs lcname
     let auxnpar = mib.mind_nparams_rec in
     let nonrecpar = mib.mind_nparams - auxnpar in
     let (lpar,auxlargs) =
-      try list_chop auxnpar largs
+      try List.chop auxnpar largs
       with Failure _ -> raise (IllFormedInd (LocalNonPos n)) in
       (* If the inductive appears in the args (non params) then the
 	 definition is not positive. *)
@@ -518,7 +518,7 @@ let check_positivity_one (env,_,ntypes,_ as ienv) hyps (_,i as ind) nargs lcname
     in check_constr_rec ienv nmr [] c
   in
   let irecargs_nmr =
-    array_map2
+    Array.map2
       (fun id c ->
         let _,rawc = mind_extract_params lparams c in
           try
@@ -539,7 +539,7 @@ let check_positivity kn env_ar params inds =
   let nmr = rel_context_nhyps params in
   let check_one i (_,lcnames,lc,(sign,_)) =
     let ra_env =
-      list_tabulate (fun _ -> (Norec,mk_norec)) lparams @ lra_ind in
+      List.tabulate (fun _ -> (Norec,mk_norec)) lparams @ lra_ind in
     let ienv = (env_ar, 1+lparams, ntypes, ra_env) in
     let nargs = rel_context_nhyps sign - nmr in
     check_positivity_one ienv params (kn,i) nargs lcnames lc
@@ -646,7 +646,7 @@ let build_inductive env env_ar params isrecord isfinite inds nmr recargs cst =
 	mind_nb_args = !nblock;
 	mind_reloc_tbl = rtbl;
       } in
-  let packets = array_map2 build_one_packet inds recargs in
+  let packets = Array.map2 build_one_packet inds recargs in
     (* Build the mutual inductive *)
     { mind_record = isrecord;
       mind_ntypes = ntypes;

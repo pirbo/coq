@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -18,7 +18,7 @@ open Term
    Currently, it is quite simple and we can hope to have, in the future, a more
    complete panel of commands dedicated to a proof assistant framework *)
 
-val set_tactic_printer : (glob_tactic_expr ->Pp.std_ppcmds) -> unit
+val set_tactic_printer : (glob_tactic_expr -> Pp.std_ppcmds) -> unit
 val set_match_pattern_printer :
   (env -> constr_pattern match_pattern -> Pp.std_ppcmds) -> unit
 val set_match_rule_printer :
@@ -78,4 +78,4 @@ val db_logic_failure : debug_info -> exn -> unit
 
 (** Prints a logic failure message for a rule *)
 val db_breakpoint : debug_info ->
-  identifier Util.located message_token list -> unit
+  identifier Loc.located message_token list -> unit

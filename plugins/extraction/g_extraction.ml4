@@ -1,17 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 (* ML names *)
 
-open Vernacexpr
-open Pcoq
 open Genarg
 open Pp
 open Names
@@ -99,7 +97,7 @@ END
 
 VERNAC COMMAND EXTEND PrintExtractionInline
 | [ "Print" "Extraction" "Inline" ]
-  -> [ print_extraction_inline () ]
+  -> [ msg_info (print_extraction_inline ()) ]
 END
 
 VERNAC COMMAND EXTEND ResetExtractionInline
@@ -121,7 +119,7 @@ END
 
 VERNAC COMMAND EXTEND PrintExtractionBlacklist
 | [ "Print" "Extraction" "Blacklist" ]
-  -> [ print_extraction_blacklist () ]
+  -> [ msg_info (print_extraction_blacklist ()) ]
 END
 
 VERNAC COMMAND EXTEND ResetExtractionBlacklist

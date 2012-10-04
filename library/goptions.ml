@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,17 +9,15 @@
 (* This module manages customization parameters at the vernacular level     *)
 
 open Pp
+open Errors
 open Util
 open Libobject
-open Names
 open Libnames
-open Term
-open Nametab
 open Mod_subst
 
-open Goptionstyp
+open Interface
 
-type option_name = Goptionstyp.option_name
+type option_name = Interface.option_name
 
 (****************************************************************************)
 (* 0- Common things                                                         *)
@@ -105,7 +103,7 @@ module MakeTable =
          (fun c -> t := MySet.remove c !t))
 
     let print_table table_name printer table =
-      msg (str table_name ++
+      pp (str table_name ++
 	   (hov 0
 	      (if MySet.is_empty table then str "None" ++ fnl ()
                else MySet.fold
@@ -119,7 +117,7 @@ module MakeTable =
       method mem x =
 	let y = A.encode x in
         let answer = MySet.mem y !t in
-        msg (A.member_message y answer ++ fnl ())
+        msg_info (A.member_message y answer)
       method print = print_table A.title A.printer !t
     end
 
@@ -201,8 +199,6 @@ type 'a option_sig = {
   optread  : unit -> 'a;
   optwrite : 'a -> unit }
 
-type option_type = bool * (unit -> option_value) -> (option_value -> unit)
-
 module OptionMap =
   Map.Make (struct  type t = option_name let compare = compare end)
 
@@ -247,6 +243,7 @@ let declare_option cast uncast
       declare_object {(default_object ("G  "^nickname key)) with
 		       cache_function = (fun (_,v) -> write v);
 		       classify_function = (fun v -> Substitute v);
+		       subst_function = (fun (_,v) -> v);
 		       discharge_function = (fun (_,v) -> Some v);
 		       load_function = (fun _ (_,v) -> write v)}
     in
@@ -352,11 +349,9 @@ let print_option_value key =
   let s = read () in
   match s with
     | BoolValue b ->
-	msg (str ("The "^name^" mode is "^(if b then "on" else "off")) ++
-	     fnl ())
+	msg_info (str ("The "^name^" mode is "^(if b then "on" else "off")))
     | _ ->
-	msg (str ("Current value of "^name^" is ") ++
-	     msg_option_value (name,s) ++ fnl ())
+	msg_info (str ("Current value of "^name^" is ") ++ msg_option_value (name, s))
 
 
 let get_tables () =
@@ -378,27 +373,26 @@ let print_tables () =
     if depr then msg ++ str " [DEPRECATED]" ++ fnl ()
     else msg ++ fnl ()
   in
-  msg
-    (str "Synchronous options:" ++ fnl () ++
-     OptionMap.fold
-       (fun key (name, depr, (sync,read,_,_,_)) p ->
-	  if sync then p ++ print_option key name (read ()) depr
-	  else p)
-       !value_tab (mt ()) ++
-     str "Asynchronous options:" ++ fnl () ++
-     OptionMap.fold
-       (fun key (name, depr, (sync,read,_,_,_)) p ->
-	  if sync then p
-	  else p ++ print_option key name (read ()) depr)
-       !value_tab (mt ()) ++
-     str "Tables:" ++ fnl () ++
-     List.fold_right
-       (fun (nickkey,_) p -> p ++ str ("  "^nickkey) ++ fnl ())
-       !string_table (mt ()) ++
-     List.fold_right
-       (fun (nickkey,_) p -> p ++ str ("  "^nickkey) ++ fnl ())
-       !ref_table (mt ()) ++
-     fnl ()
-    )
+  str "Synchronous options:" ++ fnl () ++
+    OptionMap.fold
+      (fun key (name, depr, (sync,read,_,_,_)) p ->
+        if sync then p ++ print_option key name (read ()) depr
+        else p)
+      !value_tab (mt ()) ++
+  str "Asynchronous options:" ++ fnl () ++
+    OptionMap.fold
+      (fun key (name, depr, (sync,read,_,_,_)) p ->
+        if sync then p
+        else p ++ print_option key name (read ()) depr)
+      !value_tab (mt ()) ++
+  str "Tables:" ++ fnl () ++
+    List.fold_right
+      (fun (nickkey,_) p -> p ++ str ("  "^nickkey) ++ fnl ())
+      !string_table (mt ()) ++
+    List.fold_right
+      (fun (nickkey,_) p -> p ++ str ("  "^nickkey) ++ fnl ())
+      !ref_table (mt ()) ++
+    fnl ()
+
 
 

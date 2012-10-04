@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,6 +12,7 @@ open Names
 open Term
 open Sign
 open Environ
+open Locus
 
 (** Universes *)
 val new_univ_level : unit -> Univ.universe_level
@@ -39,7 +40,10 @@ val print_env : env -> std_ppcmds
 val push_rel_assum : name * types -> env -> env
 val push_rels_assum : (name * types) list -> env -> env
 val push_named_rec_types : name array * types array * 'a -> env -> env
+
 val lookup_rel_id : identifier -> rel_context -> int * constr option * types
+(** Associates the contents of an identifier in a [rel_context]. Raise
+    [Not_found] if there is no such identifier. *)
 
 (** builds argument lists matching a block of binders or a context *)
 val rel_vect : int -> int -> constr array
@@ -144,11 +148,6 @@ val subst_term : constr -> constr -> constr
 (** [replace_term d e c] replaces [d] by [e] in [c] *)
 val replace_term : constr -> constr -> constr -> constr
 
-(** In occurrences sets, false = everywhere except and true = nowhere except *)
-type occurrences = bool * int list
-val all_occurrences : occurrences
-val no_occurrences_in_set : occurrences
-
 (** [subst_closed_term_occ_gen occl n c d] replaces occurrences of closed [c] at
    positions [occl], counting from [n], by [Rel 1] in [d] *)
 val subst_closed_term_occ_gen :
@@ -159,11 +158,6 @@ val subst_closed_term_occ_gen :
     with NotUnifiable); a function for merging substitution (possibly
     failing with NotUnifiable) and an initial substitution are
     required too *)
-
-type hyp_location_flag = (** To distinguish body and type of local defs *)
-  | InHyp
-  | InHypTypeOnly
-  | InHypValueOnly
 
 type 'a testing_function = {
   match_fun : constr -> 'a;

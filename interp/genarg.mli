@@ -1,28 +1,26 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Loc
+open Pp
 open Names
 open Term
 open Libnames
+open Globnames
 open Glob_term
+open Genredexpr
 open Pattern
-open Topconstr
+open Constrexpr
 open Term
 open Evd
+open Misctypes
 
-type 'a and_short_name = 'a * identifier located option
-
-type 'a or_by_notation =
-  | AN of 'a
-  | ByNotation of (loc * string * Notation.delimiters option)
-
-val loc_of_or_by_notation : ('a -> loc) -> 'a or_by_notation -> loc
+val loc_of_or_by_notation : ('a -> Loc.t) -> 'a or_by_notation -> Loc.t
 
 (** In globalize tactics, we need to keep the initial [constr_expr] to recompute
    in the environment by the effective calls to Intro, Inversion, etc 
@@ -33,21 +31,6 @@ type open_constr_expr = unit * constr_expr
 type open_glob_constr = unit * glob_constr_and_expr
 
 type glob_constr_pattern_and_expr = glob_constr_and_expr * constr_pattern
-
-type 'a with_ebindings = 'a * open_constr bindings
-
-type intro_pattern_expr =
-  | IntroOrAndPattern of or_and_intro_pattern_expr
-  | IntroWildcard
-  | IntroRewrite of bool
-  | IntroIdentifier of identifier
-  | IntroFresh of identifier
-  | IntroForthcoming of bool
-  | IntroAnonymous
-and or_and_intro_pattern_expr = (loc * intro_pattern_expr) list list
-
-val pr_intro_pattern : intro_pattern_expr located -> Pp.std_ppcmds
-val pr_or_and_intro_pattern : or_and_intro_pattern_expr -> Pp.std_ppcmds
 
 (** The route of a generic argument, from parsing to evaluation.
 In the following diagram, "object" can be tactic_expr, constr, tactic_arg, etc.
@@ -256,7 +239,8 @@ val app_pair :
 
 (** create a new generic type of argument: force to associate
    unique ML types at each of the three levels *)
-val create_arg : string ->
+val create_arg : 'rawa option ->
+    string ->
       ('a,tlevel) abstract_argument_type
       * ('globa,glevel) abstract_argument_type
       * ('rawa,rlevel) abstract_argument_type
@@ -298,7 +282,6 @@ val in_gen :
 val out_gen :
   ('a,'co) abstract_argument_type -> 'co generic_argument -> 'a
 
-
 (** [in_generic] is used in combination with camlp4 [Gramext.action] magic
 
    [in_generic: !l:type, !a:argument_type -> |a|_l -> 'l generic_argument]
@@ -312,3 +295,5 @@ type an_arg_of_this_type
 
 val in_generic :
   argument_type -> an_arg_of_this_type -> 'co generic_argument
+
+val default_empty_value : ('a,rlevel) abstract_argument_type -> 'a option

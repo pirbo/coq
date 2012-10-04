@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -101,15 +101,14 @@
 
 
 (*i*)
-open Pp
+open Errors
 open Util
 open Names
 open Term
 open Pattern
+open Patternops
 open Matching
 open Tacmach
-open Tactics
-open Tacexpr
 (*i*)
 
 (*s First, we need to access some Coq constants
@@ -209,7 +208,7 @@ let compute_rhs bodyi index_of_f =
   let rec aux c =
     match kind_of_term c with
       | App (j, args) when isRel j && destRel j = index_of_f (* recursive call *) ->
-          let i = destRel (array_last args) in
+          let i = destRel (Array.last args) in
 	  PMeta (Some (coerce_meta_in i))
       | App (f,args) ->
           PApp (snd (pattern_of_constr Evd.empty f), Array.map aux args)
@@ -299,7 +298,7 @@ let rec closed_under cset t =
   (ConstrSet.mem t cset) or
   (match (kind_of_term t) with
      | Cast(c,_,_) -> closed_under cset c
-     | App(f,l) -> closed_under cset f && array_for_all (closed_under cset) l
+     | App(f,l) -> closed_under cset f && Array.for_all (closed_under cset) l
      | _ -> false)
 
 (*s [btree_of_array [| c1; c2; c3; c4; c5 |]] builds the complete
@@ -360,7 +359,7 @@ let path_of_int n =
 let rec subterm gl (t : constr) (t' : constr) =
   (pf_conv_x gl t t') or
   (match (kind_of_term t) with
-     | App (f,args) -> array_exists (fun t -> subterm gl t t') args
+     | App (f,args) -> Array.exists (fun t -> subterm gl t t') args
      | Cast(t,_,_) -> (subterm gl t t')
      | _ -> false)
 

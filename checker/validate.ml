@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -195,7 +195,7 @@ let val_ind = val_tuple ~name:"inductive"[|val_con;val_int|]
 let val_cstr = val_tuple ~name:"constructor"[|val_ind;val_int|]
 
 (* univ *)
-let val_level = val_sum "level" 1 [|[|val_dp;val_int|]|]
+let val_level = val_sum "level" 1 [|[|val_int;val_dp|]|]
 let val_univ = val_sum "univ" 0
   [|[|val_level|];[|val_list val_level;val_list val_level|]|]
 

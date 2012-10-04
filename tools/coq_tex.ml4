@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -122,7 +122,7 @@ let insert texfile coq_output result =
   let next_block k =
     if !last_read = "" then last_read := input_line c_coq;
     (* skip k prompts *)
-    for i = 1 to k do
+    for _i = 1 to k do
       last_read := remove_prompt !last_read;
     done;
     (* read and return the following lines until a prompt is found *)

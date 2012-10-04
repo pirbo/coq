@@ -26,7 +26,6 @@
 #
 # make VERBOSE=1           # restore the raw echoing of commands
 # make NO_RECALC_DEPS=1    # avoid recomputing dependencies
-# make NO_RECOMPILE_LIB=1  # a coqtop rebuild does not trigger a stdlib rebuild
 #
 # Nota: the 1 above can be replaced by any non-empty value
 #
@@ -39,9 +38,13 @@
 # File lists
 ###########################################################################
 
+# NB: due to limitations in Win32, please refrain using 'export' too much
+# to communicate between make sub-calls (in Win32, 8kb max per env variable,
+# 32kb total)
+
 # !! Before using FIND_VCS_CLAUSE, please read how you should in the !!
 # !! FIND_VCS_CLAUSE section of dev/doc/build-system.dev.txt         !!
-export FIND_VCS_CLAUSE:='(' \
+FIND_VCS_CLAUSE:='(' \
   -name '{arch}' -o \
   -name '.svn' -o \
   -name '_darcs' -o \
@@ -58,8 +61,8 @@ endef
 
 ## Files in the source tree
 
-export YACCFILES:=$(call find, '*.mly')
-export LEXFILES := $(call find, '*.mll')
+YACCFILES:=$(call find, '*.mly')
+LEXFILES := $(call find, '*.mll')
 export MLLIBFILES := $(call find, '*.mllib')
 export ML4FILES := $(call find, '*.ml4')
 export CFILES := $(call find, '*.c')
@@ -73,13 +76,13 @@ EXISTINGMLI := $(call find, '*.mli')
 
 ## Files that will be generated
 
-export GENMLFILES:=$(LEXFILES:.mll=.ml) $(YACCFILES:.mly=.ml) \
+GENML4FILES:= $(ML4FILES:.ml4=.ml)
+GENMLFILES:=$(LEXFILES:.mll=.ml) $(YACCFILES:.mly=.ml) \
   scripts/tolink.ml kernel/copcodes.ml
-export GENMLIFILES:=$(YACCFILES:.mly=.mli)
+GENMLIFILES:=$(YACCFILES:.mly=.mli)
+GENPLUGINSMOD:=$(filter plugins/%,$(MLLIBFILES:%.mllib=%_mod.ml))
 export GENHFILES:=kernel/byterun/coq_jumptbl.h
 export GENVFILES:=theories/Numbers/Natural/BigN/NMake_gen.v
-export GENPLUGINSMOD:=$(filter plugins/%,$(MLLIBFILES:%.mllib=%_mod.ml))
-export GENML4FILES:= $(ML4FILES:.ml4=.ml)
 export GENFILES:=$(GENMLFILES) $(GENMLIFILES) $(GENHFILES) $(GENVFILES) $(GENPLUGINSMOD)
 
 # NB: all files in $(GENFILES) can be created initially, while
@@ -92,12 +95,9 @@ define diff
  $(strip $(foreach f, $(1), $(if $(filter $(f),$(2)),,$f)))
 endef
 
-export MLSTATICFILES := \
- $(call diff, $(EXISTINGML), $(GENMLFILES) $(GENML4FILES) $(GENPLUGINSMOD))
-export MLFILES := \
- $(sort $(EXISTINGML) $(GENMLFILES) $(GENML4FILES) $(GENPLUGINSMOD))
+export MLEXTRAFILES := $(GENMLFILES) $(GENML4FILES) $(GENPLUGINSMOD)
+export MLSTATICFILES := $(call diff, $(EXISTINGML), $(MLEXTRAFILES))
 export MLIFILES := $(sort $(GENMLIFILES) $(EXISTINGMLI))
-export MLWITHOUTMLI := $(call diff, $(MLFILES), $(MLIFILES:.mli=.ml))
 
 include Makefile.common
 
@@ -165,7 +165,7 @@ cruftclean: ml4clean
 
 indepclean:
 	rm -f $(GENFILES)
-	rm -f $(COQTOPBYTE) $(COQMKTOPBYTE) $(COQCBYTE) $(CHICKENBYTE) bin/fake_ide
+	rm -f $(COQTOPBYTE) $(CHICKENBYTE) bin/fake_ide
 	find . -name '*~' -o -name '*.cm[ioa]' | xargs rm -f
 	rm -f */*.pp[iox] plugins/*/*.pp[iox]
 	rm -rf $(SOURCEDOCDIR)
@@ -193,17 +193,16 @@ docclean:
 	rm -f doc/coq.tex
 
 archclean: clean-ide optclean voclean
-	rm -rf _build myocamlbuild_config.ml
+	rm -rf _build
 	rm -f $(ALLSTDLIB).*
 
 optclean:
 	rm -f $(COQTOPEXE) $(COQMKTOP) $(COQC) $(CHICKEN) $(COQDEPBOOT)
-	rm -f $(COQTOPOPT) $(COQMKTOPOPT) $(COQCOPT) $(CHICKENOPT)
 	rm -f $(TOOLS) $(CSDPCERT)
 	find . -name '*.cmx' -o -name '*.cmxs' -o -name '*.cmxa' -o -name '*.[soa]' -o -name '*.so' | xargs rm -f
 
 clean-ide:
-	rm -f $(COQIDECMO) $(COQIDECMX) $(COQIDECMO:.cmo=.cmi) $(COQIDEBYTE) $(COQIDEOPT) $(COQIDE)
+	rm -f $(COQIDECMO) $(COQIDECMX) $(COQIDECMO:.cmo=.cmi) $(COQIDEBYTE) $(COQIDE)
 	rm -f ide/input_method_lexer.ml
 	rm -f ide/highlight.ml ide/config_lexer.ml ide/config_parser.mli ide/config_parser.ml
 	rm -f ide/utf8_convert.ml
@@ -218,12 +217,11 @@ depclean:
 	find . $(FIND_VCS_CLAUSE) '(' -name '*.d' ')' -print | xargs rm -f
 
 cleanconfig:
-	rm -f config/Makefile config/coq_config.ml dev/ocamldebug-v7 ide/undo.mli
+	rm -f config/Makefile config/coq_config.ml myocamlbuild_config.ml dev/ocamldebug-v7
 
 distclean: clean cleanconfig
 
 voclean:
-	rm -f states/*.coq
 	find theories plugins test-suite -name '*.vo' -o -name '*.glob' | xargs rm -f
 
 devdocclean:
@@ -236,7 +234,7 @@ devdocclean:
 # Emacs tags
 ###########################################################################
 
-.PHONY: tags otags
+.PHONY: tags
 
 tags:
 	echo $(MLIFILES) $(MLSTATICFILES) $(ML4FILES) | sort -r | xargs \
@@ -253,19 +251,6 @@ tags:
 	      "--regex=/[ \t]*\([^: \t]+\)[ \t]*:/\1/"
 
 
-otags: 
-	echo $(MLIFILES) $(MLSTATICFILES) | sort -r | xargs otags
-	echo $(ML4FILES) | sort -r | xargs \
-	etags --append --language=none\
-	      "--regex=/let[ \t]+\([^ \t]+\)/\1/" \
-	      "--regex=/let[ \t]+rec[ \t]+\([^ \t]+\)/\1/" \
-	      "--regex=/and[ \t]+\([^ \t]+\)/\1/" \
-	      "--regex=/type[ \t]+\([^ \t]+\)/\1/" \
-              "--regex=/exception[ \t]+\([^ \t]+\)/\1/" \
-	      "--regex=/val[ \t]+\([^ \t]+\)/\1/" \
-	      "--regex=/module[ \t]+\([^ \t]+\)/\1/"
-
-
 %.elc: %.el
 ifdef COQ_CONFIGURED
 	echo "(setq load-path (cons \".\" load-path))" > $*.compile
@@ -275,3 +260,14 @@ ifdef COQ_CONFIGURED
 else
 	@echo "Please run ./configure first" >&2; exit 1
 endif
+
+# Useful to check that the exported variables are within the win32 limits
+
+printenv:
+	@env
+	@echo
+	@echo -n "Maxsize (win32 limit is 8k) : "
+	@env | wc -L
+	@echo -n "Total (win32 limit is 32k) : "
+	@env | wc -m
+

@@ -1,4 +1,3 @@
-open Util
 open Names
 open Term
 

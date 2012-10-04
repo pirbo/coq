@@ -104,10 +104,10 @@ let _build = Options.build_dir
 (** Abbreviations about files *)
 
 let core_libs =
-  ["lib/lib"; "kernel/kernel"; "library/library";
+  ["lib/clib"; "lib/lib"; "kernel/kernel"; "library/library";
    "pretyping/pretyping"; "interp/interp";  "proofs/proofs";
-   "parsing/parsing"; "tactics/tactics"; "toplevel/toplevel";
-   "parsing/highparsing"; "tactics/hightactics"]
+   "printing/printing"; "parsing/parsing"; "tactics/tactics";
+   "toplevel/toplevel";  "parsing/highparsing"; "tactics/hightactics"]
 let core_cma = List.map (fun s -> s^".cma") core_libs
 let core_cmxa = List.map (fun s -> s^".cmxa") core_libs
 let core_mllib = List.map (fun s -> s^".mllib") core_libs
@@ -126,9 +126,7 @@ let copcodes = "kernel/copcodes.ml"
 
 let libcoqrun = "kernel/byterun/libcoqrun.a"
 
-let initialcoq = "states/initial.coq"
-let init_vo = ["theories/Init/Prelude.vo";"theories/Init/Logic_Type.vo"]
-let makeinitial = "states/MakeInitial.v"
+let init_vo = "theories/Init/Prelude.vo"
 
 let nmake = "theories/Numbers/Natural/BigN/NMake_gen.v"
 let nmakegen = "theories/Numbers/Natural/BigN/NMake_gen.ml"
@@ -278,8 +276,8 @@ let extra_rules () = begin
 	      T(tags_of_pathname ml4 ++ "p4option"); camlp4compat;
 	      A"-o"; Px ml; A"-impl"; P ml4]));
 
-  flag_and_dep ["p4mod"; "use_grammar"] (P "parsing/grammar.cma");
-  flag_and_dep ["p4mod"; "use_constr"] (P "parsing/q_constr.cmo");
+  flag_and_dep ["p4mod"; "use_grammar"] (P "grammar/grammar.cma");
+  flag_and_dep ["p4mod"; "use_constr"] (P "grammar/q_constr.cmo");
 
   flag_and_dep ["p4mod"; "use_compat5"] (P "tools/compat5.cmo");
   flag_and_dep ["p4mod"; "use_compat5b"] (P "tools/compat5b.cmo");
@@ -331,8 +329,10 @@ let extra_rules () = begin
   flag ["link"; "ocaml"] (S [A"-rectypes"; camlp4incl]);
   flag ["ocaml"; "ide"; "compile"] lablgtkincl;
   flag ["ocaml"; "ide"; "link"] lablgtkincl;
-  flag ["ocaml"; "ide"; "link"; "byte"] (S [A"lablgtk.cma"; A"gtkThread.cmo"]);
-  flag ["ocaml"; "ide"; "link"; "native"] (S [A"lablgtk.cmxa"; A"gtkThread.cmx"]);
+  flag ["ocaml"; "ide"; "link"; "byte"]
+    (S [A"lablgtk.cma"; A"lablgtksourceview2.cma"; A"gtkThread.cmo"]);
+  flag ["ocaml"; "ide"; "link"; "native"]
+    (S [A"lablgtk.cmxa"; A"lablgtksourceview2.cmxa"; A"gtkThread.cmx"]);
 
 (** C code for the VM *)
 
@@ -381,8 +381,8 @@ let extra_rules () = begin
        let core_mods = String.concat " " (List.map cat core_mllib) in
        let core_cmas = String.concat " " core_cma in
        Echo (["let copts = \"-cclib -lcoqrun\"\n";
-	      "let core_libs = \"coq_config.cmo "^core_cmas^"\"\n";
-	      "let core_objs = \"Coq_config "^core_mods^"\"\n"],
+	      "let core_libs = \""^core_cmas^"\"\n";
+	      "let core_objs = \""^core_mods^"\"\n"],
 	     tolink));
 
 (** For windows, building coff object file from a .rc (for the icon) *)
@@ -407,15 +407,15 @@ let extra_rules () = begin
   let () =
     let fo = coqtop^".native" and fb = coqtop^".byte" in
     let depsall = (if w32 then [w32ico] else [])@[coqmktop_boot;libcoqrun] in
-    let depso = "coq_config.cmx" :: core_cmxa in
-    let depsb = "coq_config.cmo" :: core_cma in
+    let depso =  core_cmxa in
+    let depsb =  core_cma in
     let w32flag =
       if not w32 then N else S ([A"-camlbin";A w32bin;A "-ccopt";P w32ico])
     in
     if opt then rule fo ~prod:fo ~deps:(depsall@depso) ~insert:`top
-      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-opt";incl fo;A"-o";Px fo]);
+      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-opt";incl fo;camlp4incl;A"-o";Px fo]);
     rule fb ~prod:fb ~deps:(depsall@depsb) ~insert:`top
-      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-top";incl fb;A"-o";Px fb]);
+      (cmd [P coqmktop_boot;w32flag;A"-boot";A"-top";incl fb;camlp4incl;A"-o";Px fb]);
   in
 
 (** Coq files dependencies *)
@@ -447,8 +447,8 @@ let extra_rules () = begin
   in
 
   let coq_v_rule d init =
-    let bootflag = if init then A"-nois" else N in
-    let gendep = if init then coqtopbest else initialcoq in
+    let bootflag = if init then A"-noinit" else N in
+    let gendep = if init then coqtopbest else init_vo in
     rule (d^".v.vo")
       ~prods:[d^"%.vo";d^"%.glob"] ~deps:[gendep;d^"%.v";d^"%.v.depends"]
       (fun env build ->
@@ -458,12 +458,6 @@ let extra_rules () = begin
   in
   coq_v_rule "theories/Init/" true;
   coq_v_rule "" false;
-
-(** Initial state *)
-
-  rule "initial.coq" ~prod:initialcoq ~deps:(makeinitial::init_vo)
-    (cmd [P coqtopbest;A"-boot";A"-batch";A"-nois";A"-notop";A"-silent";
-	  A"-l";P makeinitial; A"-outputstate";Px initialcoq]);
 
 (** Generation of _plugin_mod.ml files *)
 

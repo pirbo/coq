@@ -1,15 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
 open Names
 open Term
-open Sign
 open Environ
 open Safe_typing
 open Summary
@@ -133,7 +131,7 @@ let mind_of_delta_kn kn =
     Mod_subst.mind_of_delta resolver_param
       (Mod_subst.mind_of_delta_kn resolver kn)
 
-let exists_label id = exists_label id !global_env
+let exists_objlabel id = exists_objlabel id !global_env
 
 let start_library dir =
   let mp,newenv = start_library dir !global_env in
@@ -155,7 +153,7 @@ let import cenv digest =
 let env_of_context hyps =
   reset_with_named_context hyps (env())
 
-open Libnames
+open Globnames
 
 let type_of_reference env = function
   | VarRef id -> Environ.named_type id env

@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -287,9 +287,6 @@ Definition max p p' :=
  end.
 
 (** ** Boolean equality and comparisons *)
-
-(** Nota: this [eqb] is not convertible with the generated [positive_beq], due
-    to a different guard argument. We keep this version for compatibility. *)
 
 Fixpoint eqb p q {struct q} :=
   match p, q with

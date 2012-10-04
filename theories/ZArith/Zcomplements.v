@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -10,7 +10,7 @@ Require Import ZArithRing.
 Require Import ZArith_base.
 Require Export Omega.
 Require Import Wf_nat.
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 
 
 (**********************************************************************)
@@ -39,8 +39,8 @@ Proof. reflexivity. Qed.
 Lemma floor_ok : forall p:positive, floor p <= Zpos p < 2 * floor p.
 Proof.
  unfold floor. induction p; simpl.
- - rewrite !Z.pos_xI, (Z.pos_xO (xO _)), Z.pos_xO. omega.
- - rewrite (Z.pos_xO (xO _)), (Z.pos_xO p), Z.pos_xO. omega.
+ - rewrite !Pos2Z.inj_xI, (Pos2Z.inj_xO (xO _)), Pos2Z.inj_xO. omega.
+ - rewrite (Pos2Z.inj_xO (xO _)), (Pos2Z.inj_xO p), Pos2Z.inj_xO. omega.
  - omega.
 Qed.
 
@@ -56,7 +56,7 @@ Proof.
   set (Q := fun z => 0 <= z -> P z * P (- z)) in *.
   cut (Q (Z.abs p)); [ intros | apply (Z_lt_rec Q); auto with zarith ].
   elim (Zabs_dec p); intro eq; rewrite eq; elim H; auto with zarith.
-  unfold Q in |- *; clear Q; intros.
+  unfold Q; clear Q; intros.
   split; apply HP.
   rewrite Z.abs_eq; auto; intros.
   elim (H (Z.abs m)); intros; auto with zarith.
@@ -75,7 +75,7 @@ Proof.
   set (Q := fun z => 0 <= z -> P z /\ P (- z)) in *.
   cut (Q (Z.abs p)); [ intros | apply (Z_lt_induction Q); auto with zarith ].
   elim (Zabs_dec p); intro eq; rewrite eq; elim H; auto with zarith.
-  unfold Q in |- *; clear Q; intros.
+  unfold Q; clear Q; intros.
   split; apply HP.
   rewrite Z.abs_eq; auto; intros.
   elim (H (Z.abs m)); intros; auto with zarith.
@@ -107,7 +107,7 @@ Require Import List.
 Fixpoint Zlength_aux (acc:Z) (A:Type) (l:list A) : Z :=
   match l with
     | nil => acc
-    | _ :: l => Zlength_aux (Zsucc acc) A l
+    | _ :: l => Zlength_aux (Z.succ acc) A l
   end.
 
 Definition Zlength := Zlength_aux 0.

@@ -7,19 +7,17 @@
 (***********************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
-open Pcoq
 open Glob_term
-open Topconstr
-open Libnames
+open Globnames
 open Coqlib
-open Bigint
 
 exception Non_closed_ascii
 
 let make_dir l = make_dirpath (List.map id_of_string (List.rev l))
-let make_kn dir id = Libnames.encode_mind (make_dir dir) (id_of_string id)
+let make_kn dir id = Globnames.encode_mind (make_dir dir) (id_of_string id)
 let make_path dir id = Libnames.make_path (make_dir dir) (id_of_string id)
 
 let ascii_module = ["Coq";"Strings";"Ascii"]
@@ -61,7 +59,7 @@ let uninterp_ascii r =
     | GRef (_,k)::l when k = glob_false -> 2*(uninterp_bool_list (n-1) l)
     | _ -> raise Non_closed_ascii in
   try
-    let rec aux = function
+    let aux = function
     | GApp (_,GRef (_,k),l) when k = force glob_Ascii -> uninterp_bool_list 8 l
     | _ -> raise Non_closed_ascii in
     Some (aux r)
@@ -78,4 +76,4 @@ let _ =
   Notation.declare_string_interpreter "char_scope"
     (ascii_path,ascii_module)
     interp_ascii_string
-    ([GRef (dummy_loc,static_glob_Ascii)], uninterp_ascii_string, true)
+    ([GRef (Loc.ghost,static_glob_Ascii)], uninterp_ascii_string, true)

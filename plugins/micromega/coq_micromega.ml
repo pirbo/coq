@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -16,6 +16,7 @@
 (*                                                                      *)
 (************************************************************************)
 
+open Pp
 open Mutils
 
 (**
@@ -300,6 +301,8 @@ struct
      ["Coq";"Reals" ; "Rpow_def"] ;
 ]
 
+  let z_modules = [["Coq";"ZArith";"BinInt"]]
+
   (**
     * Initialization : a large amount of Caml symbols are derived from
     * ZMicromega.v
@@ -309,6 +312,7 @@ struct
   let constant = gen_constant_in_modules "ZMicromega" coq_modules
   let bin_constant = gen_constant_in_modules "ZMicromega" bin_module
   let r_constant = gen_constant_in_modules "ZMicromega" r_modules
+  let z_constant = gen_constant_in_modules "ZMicromega" z_modules
   (* let constant = gen_constant_in_modules "Omicron" coq_modules *)
 
   let coq_and = lazy (init_constant "and")
@@ -371,17 +375,17 @@ struct
   let coq_cutProof = lazy (constant "CutProof")
   let coq_enumProof = lazy (constant "EnumProof")
 
-  let coq_Zgt = lazy (constant "Zgt")
-  let coq_Zge = lazy (constant "Zge")
-  let coq_Zle = lazy (constant "Zle")
-  let coq_Zlt = lazy (constant "Zlt")
+  let coq_Zgt = lazy (z_constant "Z.gt")
+  let coq_Zge = lazy (z_constant "Z.ge")
+  let coq_Zle = lazy (z_constant "Z.le")
+  let coq_Zlt = lazy (z_constant "Z.lt")
   let coq_Eq  = lazy (init_constant "eq")
 
-  let coq_Zplus = lazy (constant "Zplus")
-  let coq_Zminus = lazy (constant "Zminus")
-  let coq_Zopp = lazy (constant "Zopp")
-  let coq_Zmult = lazy (constant "Zmult")
-  let coq_Zpower = lazy (constant "Zpower")
+  let coq_Zplus = lazy (z_constant "Z.add")
+  let coq_Zminus = lazy (z_constant "Z.sub")
+  let coq_Zopp = lazy (z_constant "Z.opp")
+  let coq_Zmult = lazy (z_constant "Z.mul")
+  let coq_Zpower = lazy (z_constant "Z.pow")
 
   let coq_Qgt = lazy (constant "Qgt")
   let coq_Qge = lazy (constant "Qge")
@@ -570,7 +574,7 @@ struct
 
   let pp_positive o x = Printf.fprintf o "%i" (CoqToCaml.positive x)
 
-  let rec dump_n x =
+  let dump_n x =
    match x with
     | Mc.N0 -> Lazy.force coq_N0
     | Mc.Npos p -> Term.mkApp(Lazy.force coq_Npos,[| dump_positive p|])
@@ -583,12 +587,12 @@ struct
 
   let pp_index o x = Printf.fprintf o "%i" (CoqToCaml.index x)
 
-  let rec pp_n o x =  output_string o  (string_of_int (CoqToCaml.n x))
+  let pp_n o x =  output_string o  (string_of_int (CoqToCaml.n x))
 
   let dump_pair t1 t2 dump_t1 dump_t2 (x,y) =
    Term.mkApp(Lazy.force coq_pair,[| t1 ; t2 ; dump_t1 x ; dump_t2 y|])
 
-  let rec parse_z term =
+  let parse_z term =
    let (i,c) = get_left_construct term in
     match i with
      | 1 -> Mc.Z0
@@ -773,7 +777,7 @@ struct
         Printf.fprintf o "0" in
     pp_cone o e
 
-  let rec dump_op = function
+  let dump_op = function
    | Mc.OpEq-> Lazy.force coq_OpEq
    | Mc.OpNEq-> Lazy.force coq_OpNEq
    | Mc.OpLe -> Lazy.force coq_OpLe
@@ -894,10 +898,7 @@ struct
 
   let parse_expr parse_constant parse_exp ops_spec env term =
     if debug
-    then (Pp.pp (Pp.str "parse_expr: ");
-          Pp.pp (Printer.prterm term);
-          Pp.pp (Pp.str "\n");
-          Pp.pp_flush ());
+    then Pp.msg_debug (Pp.str "parse_expr: " ++ Printer.prterm term);
 
 (*
     let constant_or_variable env term =
@@ -1013,11 +1014,7 @@ struct
 
   let rconstant term = 
     if debug
-    then (Pp.pp_flush ();
-          Pp.pp (Pp.str "rconstant: ");
-          Pp.pp (Printer.prterm  term);
-          Pp.pp (Pp.str "\n");
-          Pp.pp_flush ());
+    then Pp.msg_debug (Pp.str "rconstant: " ++ Printer.prterm term ++ fnl ());
     let res = rconstant term in
       if debug then 
 	(Printf.printf "rconstant -> %a\n" pp_Rcst res ; flush stdout) ;
@@ -1057,11 +1054,7 @@ struct
 
   let  parse_arith parse_op parse_expr env cstr =
    if debug
-   then (Pp.pp_flush ();
-         Pp.pp (Pp.str "parse_arith: ");
-         Pp.pp (Printer.prterm  cstr);
-         Pp.pp (Pp.str "\n");
-         Pp.pp_flush ());
+   then Pp.msg_debug (Pp.str "parse_arith: " ++ Printer.prterm  cstr ++ fnl ());
    match kind_of_term cstr with
     | App(op,args) ->
        let (op,lhs,rhs) = parse_op (op,args) in
@@ -1645,8 +1638,6 @@ let micromega_gen
 		  (Term.mkApp(Lazy.force coq_list, [|spec.proof_typ|])) env ff'
 	      ]) gl
   with
-(*   | Failure x -> flush stdout ; Pp.pp_flush () ;
-      Tacticals.tclFAIL 0 (Pp.str x) gl *)
    | ParseError  -> Tacticals.tclFAIL 0 (Pp.str "Bad logical fragment") gl
    | CsdpNotFound -> flush stdout ; Pp.pp_flush () ;
       Tacticals.tclFAIL 0 (Pp.str 
@@ -1716,8 +1707,6 @@ let micromega_genr prover gl =
                 micromega_order_changer res' env (abstract_wrt_formula ff' ff)
               ]) gl
   with
-(*   | Failure x -> flush stdout ; Pp.pp_flush () ;
-      Tacticals.tclFAIL 0 (Pp.str x) gl *)
    | ParseError  -> Tacticals.tclFAIL 0 (Pp.str "Bad logical fragment") gl
    | CsdpNotFound -> flush stdout ; Pp.pp_flush () ;
       Tacticals.tclFAIL 0 (Pp.str 
@@ -1770,7 +1759,7 @@ let really_call_csdpcert : provername -> micromega_polys -> Sos_types.positivste
   Lazy.force require_csdp;
 
   let cmdname =
-    List.fold_left Filename.concat (Envars.coqlib ())
+    List.fold_left Filename.concat (Envars.coqlib Errors.error)
       ["plugins"; "micromega"; "csdpcert" ^ Coq_config.exec_extension] in
 
     match ((command cmdname [|cmdname|] (provername,poly)) : csdp_certificate) with

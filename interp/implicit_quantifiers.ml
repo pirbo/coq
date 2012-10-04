@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,21 +9,18 @@
 (*i*)
 open Names
 open Decl_kinds
-open Term
-open Sign
-open Evd
-open Environ
-open Nametab
-open Mod_subst
+open Errors
 open Util
 open Glob_term
-open Topconstr
+open Constrexpr
 open Libnames
+open Globnames
 open Typeclasses
 open Typeclasses_errors
 open Pp
 open Libobject
 open Nameops
+open Misctypes
 (*i*)
 
 let generalizable_table = ref Idpred.empty
@@ -57,7 +54,7 @@ let cache_generalizable_type (_,(local,cmd)) =
 let load_generalizable_type _ (_,(local,cmd)) =
   generalizable_table := add_generalizable cmd !generalizable_table
 
-let in_generalizable : bool * identifier located list option -> obj =
+let in_generalizable : bool * identifier Loc.located list option -> obj =
   declare_object {(default_object "GENERALIZED-IDENT") with
     load_function = load_generalizable_type;
     cache_function = cache_generalizable_type;
@@ -109,8 +106,8 @@ let free_vars_of_constr_expr c ?(bound=Idset.empty) l =
   let rec aux bdvars l c = match c with
     | CRef (Ident (loc,id)) -> found loc id bdvars l
     | CNotation (_, "{ _ : _ | _ }", (CRef (Ident (_, id)) :: _, [], [])) when not (Idset.mem id bdvars) ->
-	fold_constr_expr_with_binders (fun a l -> Idset.add a l) aux (Idset.add id bdvars) l c
-    | c -> fold_constr_expr_with_binders (fun a l -> Idset.add a l) aux bdvars l c
+	Topconstr.fold_constr_expr_with_binders (fun a l -> Idset.add a l) aux (Idset.add id bdvars) l c
+    | c -> Topconstr.fold_constr_expr_with_binders (fun a l -> Idset.add a l) aux bdvars l c
   in aux bound l c
 
 let ids_of_names l =
@@ -179,9 +176,9 @@ let generalizable_vars_of_glob_constr ?(bound=Idset.empty) ?(allowed=Idset.empty
 	  let vs2 = vars bound1 vs1 tyl.(i) in
 	  vars bound1 vs2 bv.(i)
 	in
-	array_fold_left_i vars_fix vs idl
+	Array.fold_left_i vars_fix vs idl
     | GCast (loc,c,k) -> let v = vars bound vs c in
-	(match k with CastConv (_,t) -> vars bound v t | _ -> v)
+	(match k with CastConv t | CastVM t -> vars bound v t | _ -> v)
     | (GSort _ | GHole _ | GRef _ | GEvar _ | GPatVar _) -> vs
 
   and vars_pattern bound vs (loc,idl,p,c) =
@@ -244,13 +241,13 @@ let combine_params avoid fn applied needed =
 	    aux (t' :: ids) avoid' app need
 
       | (x,_) :: _, [] ->
-	  user_err_loc (constr_loc x,"",str "Typeclass does not expect more arguments")
+	  user_err_loc (Constrexpr_ops.constr_loc x,"",str "Typeclass does not expect more arguments")
   in aux [] avoid applied needed
 
 let combine_params_freevar =
   fun avoid (_, (na, _, _)) ->
     let id' = next_name_away_from na avoid in
-      (CRef (Ident (dummy_loc, id')), Idset.add id' avoid)
+      (CRef (Ident (Loc.ghost, id')), Idset.add id' avoid)
 
 let destClassApp cl =
   match cl with
@@ -312,13 +309,13 @@ let implicits_of_glob_constr ?(with_products=true) l =
 	  if with_products then abs na bk b
 	  else 
 	    (if bk = Implicit then
-	       msg_warning (str "Ignoring implicit status of product binder " ++ 
-			      pr_name na ++ str " and following binders");
+	       msg_warning (strbrk "Ignoring implicit status of product binder " ++ 
+			      pr_name na ++ strbrk " and following binders");
 	     [])
       | GLambda (loc, na, bk, t, b) -> abs na bk b
       | GLetIn (loc, na, t, b) -> aux i b
       | GRec (_, fix_kind, nas, args, tys, bds) ->
        let nb = match fix_kind with |GFix (_, n) -> n | GCoFix n -> n in
-       list_fold_left_i (fun i l (na,bk,_,_) -> add_impl i na bk l) i (aux (List.length args.(nb) + i) bds.(nb)) args.(nb)
+       List.fold_left_i (fun i l (na,bk,_,_) -> add_impl i na bk l) i (aux (List.length args.(nb) + i) bds.(nb)) args.(nb)
       | _ -> []
   in aux 1 l

@@ -15,8 +15,6 @@
 (*CSC: tutto da rifare!!! Basarsi su Retyping che e' meno costoso! *)
 type types = {synthesized : Term.types ; expected : Term.types option};;
 
-let prerr_endline _ = ();;
-
 let cprop =
  let module N = Names in
   N.make_con
@@ -27,7 +25,6 @@ let cprop =
 ;;
 
 let whd_betadeltaiotacprop env _evar_map ty =
- let module R = Glob_term in
  let module C = Closure in
  let module CR = C.RedFlags in
  (*** CProp is made Opaque ***)
@@ -67,7 +64,7 @@ let double_type_of env sigma cstr expectedty subterms_to_types =
    let judgement =
     match T.kind_of_term cstr with
        T.Meta n ->
-        Util.error
+        Errors.error
          "DoubleTypeInference.double_type_of: found a non-instanciated goal"
 
      | T.Evar ((n,l) as ev) ->
@@ -148,7 +145,7 @@ let double_type_of env sigma cstr expectedty subterms_to_types =
 (try
         Typeops.judge_of_type u
  with _ -> (* Successor of a non universe-variable universe anomaly *)
- (Pp.ppnl (Pp.str "Warning: universe refresh performed!!!") ; flush stdout ) ;
+  Pp.msg_warning (Pp.str "Universe refresh performed!!!");
   Typeops.judge_of_type (Termops.new_univ ())
 )
 
@@ -240,7 +237,7 @@ let double_type_of env sigma cstr expectedty subterms_to_types =
       in
 (*CSC: debugging stuff to be removed *)
 if Acic.CicHash.mem subterms_to_types cstr then
- (Pp.ppnl (Pp.(++) (Pp.str "DUPLICATE INSERTION: ") (Printer.pr_lconstr cstr)) ; flush stdout ) ;
+ Pp.msg_warning (Pp.(++) (Pp.str "DUPLICATE INSERTION: ") (Printer.pr_lconstr cstr));
        Acic.CicHash.add subterms_to_types cstr types ;
        E.make_judge cstr res
 

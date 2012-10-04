@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,18 +13,18 @@
 
 (* *)
 open Pp
-open Util
-open Names
+open Errors
 open Libnames
-open Genarg
+open Globnames
+open Misctypes
 open Syntax_def
-open Topconstr
+open Notation_term
 
 let global_of_extended_global = function
   | TrueGlobal ref -> ref
   | SynDef kn ->
   match search_syntactic_definition kn with
-  | [],ARef ref -> ref
+  | [],NRef ref -> ref
   | _ -> raise Not_found
 
 let locate_global_with_alias (loc,qid) =

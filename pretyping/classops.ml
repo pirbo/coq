@@ -1,23 +1,23 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Pp
 open Flags
 open Names
 open Libnames
+open Globnames
 open Nametab
 open Environ
 open Libobject
-open Library
 open Term
 open Termops
-open Glob_term
 open Decl_kinds
 open Mod_subst
 
@@ -273,7 +273,7 @@ let print_path x = !path_printer x
 
 let message_ambig l =
   (str"Ambiguous paths:" ++ spc () ++
-   prlist_with_sep pr_fnl (fun ijp -> print_path ijp) l)
+   prlist_with_sep fnl (fun ijp -> print_path ijp) l)
 
 (* add_coercion_in_graph : coe_index * cl_index * cl_index -> unit
                          coercion,source,target *)
@@ -313,7 +313,7 @@ let add_coercion_in_graph (ic,source,target) =
              try_add_new_path1 (s,target) (p@[ic]);
              Gmap.iter
 	       (fun (u,v) q ->
-                  if u<>v & u = target &&  not (list_equal coe_info_typ_equal p q) then
+                  if u<>v & u = target &&  not (List.equal coe_info_typ_equal p q) then
 		    try_add_new_path1 (s,v) (p@[ic]@q))
                old_inheritance_graph
            end;
@@ -322,7 +322,7 @@ let add_coercion_in_graph (ic,source,target) =
       old_inheritance_graph
   end;
   if (!ambig_paths <> []) && is_verbose () then
-    ppnl (message_ambig !ambig_paths)
+    msg_warning (message_ambig !ambig_paths)
 
 type coercion = coe_typ * locality * bool * cl_typ * cl_typ * int
 
@@ -406,10 +406,7 @@ let discharge_coercion (_,(coe,stre,isid,cls,clt,ps)) =
 let classify_coercion (coe,stre,isid,cls,clt,ps as obj) =
   if stre = Local then Dispose else Substitute obj
 
-type coercion_obj =
-  coe_typ * Decl_kinds.locality * bool * cl_typ * cl_typ * int
-
-let inCoercion : coercion_obj -> obj =
+let inCoercion : coercion -> obj =
   declare_object {(default_object "COERCION") with
     open_function = open_coercion;
     load_function = load_coercion;

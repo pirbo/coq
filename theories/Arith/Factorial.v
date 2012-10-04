@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,7 +9,7 @@
 Require Import Plus.
 Require Import Mult.
 Require Import Lt.
-Open Local Scope nat_scope.
+Local Open Scope nat_scope.
 
 (** Factorial *)
 
@@ -23,13 +23,13 @@ Arguments fact n%nat.
 
 Lemma lt_O_fact : forall n:nat, 0 < fact n.
 Proof.
-  simple induction n; unfold lt in |- *; simpl in |- *; auto with arith.
+  simple induction n; unfold lt; simpl; auto with arith.
 Qed.
 
 Lemma fact_neq_0 : forall n:nat, fact n <> 0.
 Proof.
   intro.
-  apply sym_not_eq.
+  apply not_eq_sym.
   apply lt_O_neq.
   apply lt_O_fact.
 Qed.

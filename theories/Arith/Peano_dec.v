@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,7 +9,7 @@
 Require Import Decidable.
 Require Eqdep_dec.
 Require Import Le Lt.
-Open Local Scope nat_scope.
+Local Open Scope nat_scope.
 
 Implicit Types m n x y : nat.
 
@@ -29,7 +29,7 @@ Defined.
 Hint Resolve O_or_S eq_nat_dec: arith.
 
 Theorem dec_eq_nat : forall n m, decidable (n = m).
-  intros x y; unfold decidable in |- *; elim (eq_nat_dec x y); auto with arith.
+  intros x y; unfold decidable; elim (eq_nat_dec x y); auto with arith.
 Defined.
 
 Definition UIP_nat:= Eqdep_dec.UIP_dec eq_nat_dec.

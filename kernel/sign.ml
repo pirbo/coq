@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -34,7 +34,7 @@ let rec lookup_named id = function
   | [] -> raise Not_found
 
 let named_context_length = List.length
-let named_context_equal = list_equal eq_named_declaration
+let named_context_equal = List.equal eq_named_declaration
 
 let vars_of_named_context = List.map (fun (id,_,_) -> id)
 
@@ -61,7 +61,7 @@ let map_context f l =
       if body_o' == body_o && typ' == typ then decl else
 	(n, body_o', typ')
   in
-    list_smartmap map_decl l
+    List.smartmap map_decl l
 
 let map_rel_context = map_context
 let map_named_context = map_context

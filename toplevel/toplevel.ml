@@ -1,19 +1,17 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Flags
-open Cerrors
 open Vernac
-open Vernacexpr
 open Pcoq
-open Compat
 
 (* A buffer for the character read from a channel. We store the command
  * entered to be able to report errors without pretty-printing. *)
@@ -124,7 +122,7 @@ let blanch_utf8_string s bp ep =
   String.sub s' 0 !j
 
 let print_highlight_location ib loc =
-  let (bp,ep) = unloc loc in
+  let (bp,ep) = Loc.unloc loc in
   let bp = bp - ib.start
   and ep = ep - ib.start in
   let highlight_lines =
@@ -146,7 +144,7 @@ let print_highlight_location ib loc =
                       str sn ++ str dn) in
 	  (l1 ++ li ++ ln)
   in
-  let loc = make_loc (bp,ep) in
+  let loc = Loc.make_loc (bp,ep) in
   (str"Toplevel input, characters " ++ Cerrors.print_loc loc ++ str":" ++ fnl () ++
      highlight_lines ++ fnl ())
 
@@ -154,7 +152,7 @@ let print_highlight_location ib loc =
 
 let print_location_in_file s inlibrary fname loc =
   let errstrm = str"Error while reading " ++ str s in
-  if loc = dummy_loc then
+  if loc = Loc.ghost then
     hov 1 (errstrm ++ spc() ++ str" (unknown location):") ++ fnl ()
   else
     let errstrm =
@@ -163,7 +161,7 @@ let print_location_in_file s inlibrary fname loc =
       hov 0 (errstrm ++ str"Module " ++ str ("\""^fname^"\"") ++ spc() ++
              str"characters " ++ Cerrors.print_loc loc) ++ fnl ()
     else
-      let (bp,ep) = unloc loc in
+      let (bp,ep) = Loc.unloc loc in
       let ic = open_in fname in
       let rec line_of_pos lin bol cnt =
         if cnt < bp then
@@ -178,7 +176,7 @@ let print_location_in_file s inlibrary fname loc =
         hov 0 (* No line break so as to follow emacs error message format *)
           (errstrm ++ str"File " ++ str ("\""^fname^"\"") ++
            str", line " ++ int line ++ str", characters " ++
-           Cerrors.print_loc (make_loc (bp-bol,ep-bol))) ++ str":" ++
+           Cerrors.print_loc (Loc.make_loc (bp-bol,ep-bol))) ++ str":" ++
         fnl ()
       with e ->
         (close_in ic;
@@ -192,15 +190,15 @@ let print_command_location ib dloc =
     | None -> (mt ())
 
 let valid_loc dloc loc =
-  loc <> dummy_loc
+  loc <> Loc.ghost
   & match dloc with
     | Some dloc ->
-	let (bd,ed) = unloc dloc in let (b,e) = unloc loc in bd<=b & e<=ed
+	let (bd,ed) = Loc.unloc dloc in let (b,e) = Loc.unloc loc in bd<=b & e<=ed
     | _ -> true
 
 let valid_buffer_loc ib dloc loc =
   valid_loc dloc loc &
-  let (b,e) = unloc loc in b-ib.start >= 0 & e-ib.start < ib.len & b<=e
+  let (b,e) = Loc.unloc loc in b-ib.start >= 0 & e-ib.start < ib.len & b<=e
 
 (*s The Coq prompt is the name of the focused proof, if any, and "Coq"
     otherwise. We trap all exceptions to prevent the error message printing
@@ -283,7 +281,7 @@ let print_toplevel_error exc =
   let (dloc,exc) =
     match exc with
       | DuringCommandInterp (loc,ie) ->
-          if loc = dummy_loc then (None,ie) else (Some loc, ie)
+          if loc = Loc.ghost then (None,ie) else (Some loc, ie)
       | _ -> (None, exc)
   in
   let (locstrm,exc) =
@@ -293,6 +291,12 @@ let print_toplevel_error exc =
             (print_highlight_location top_buffer loc, ie)
           else
 	    ((mt ()) (* print_command_location top_buffer dloc *), ie)
+      | Compat.Exc_located (loc, ie) ->
+          let loc = Compat.to_coqloc loc in
+          if valid_buffer_loc top_buffer dloc loc then
+            (print_highlight_location top_buffer loc, ie)
+          else
+            ((mt ()) (* print_command_location top_buffer dloc *), ie)
       | Error_in_file (s, (inlibrary, fname, loc), ie) ->
           (print_location_in_file s inlibrary fname loc, ie)
       | _ ->
@@ -301,18 +305,18 @@ let print_toplevel_error exc =
   match exc with
     | End_of_input ->
 	msgerrnl (mt ()); pp_flush(); exit 0
-    | Vernacexpr.Drop ->  (* Last chance *)
-        if Mltop.is_ocaml_top() then raise Vernacexpr.Drop;
+    | Errors.Drop ->  (* Last chance *)
+        if Mltop.is_ocaml_top() then raise Errors.Drop;
         (str"Error: There is no ML toplevel." ++ fnl ())
-    | Vernacexpr.Quit ->
-	raise Vernacexpr.Quit
+    | Errors.Quit ->
+	raise Errors.Quit
     | _ ->
 	(if is_pervasive_exn exc then (mt ()) else locstrm) ++
         Errors.print exc
 
 (* Read the input stream until a dot is encountered *)
 let parse_to_dot =
-  let rec dot st = match get_tok (Stream.next st) with
+  let rec dot st = match Compat.get_tok (Stream.next st) with
     | Tok.KEYWORD "." -> ()
     | Tok.EOI -> raise End_of_input
     | _ -> dot st
@@ -323,7 +327,7 @@ let parse_to_dot =
 let rec discard_to_dot () =
   try
     Gram.entry_parse parse_to_dot top_buffer.tokens
-  with Loc.Exc_located(_,(Token.Error _|Lexer.Error.E _)) ->
+  with Loc.Exc_located(_,(Compat.Token.Error _|Lexer.Error.E _)) ->
     discard_to_dot()
 
 
@@ -353,9 +357,9 @@ let do_vernac () =
   resynch_buffer top_buffer;
   begin
     try
-      raw_do_vernac top_buffer.tokens
+      ignore (raw_do_vernac top_buffer.tokens)
     with e ->
-      msgnl (print_toplevel_error (process_error e))
+      ppnl (print_toplevel_error (process_error e))
   end;
   flush_all()
 
@@ -367,16 +371,13 @@ let do_vernac () =
 
 let rec loop () =
   Sys.catch_break true;
-  (* ensure we have a command separator object (DOT) so that the first
-     command can be reseted. *)
-  Lib.mark_end_of_command();
   try
     reset_input_buffer stdin top_buffer;
     while true do do_vernac() done
   with
-    | Vernacexpr.Drop -> ()
+    | Errors.Drop -> ()
     | End_of_input -> msgerrnl (mt ()); pp_flush(); exit 0
-    | Vernacexpr.Quit -> exit 0
+    | Errors.Quit -> exit 0
     | e ->
 	msgerrnl (str"Anomaly. Please report.");
 	loop ()

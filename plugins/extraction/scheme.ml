@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,10 +9,9 @@
 (*s Production of Scheme syntax. *)
 
 open Pp
+open Errors
 open Util
 open Names
-open Nameops
-open Libnames
 open Miniml
 open Mlutil
 open Table
@@ -27,7 +26,10 @@ let keywords =
       "error"; "delay"; "force"; "_"; "__"]
     Idset.empty
 
-let preamble _ _ usf =
+let pp_comment s = str";; "++h 0 s++fnl ()
+
+let preamble _ comment _ usf =
+  pp_comment comment ++ fnl () ++
   str ";; This extracted scheme code relies on some additional macros\n" ++
   str ";; available at http://www.pps.jussieu.fr/~letouzey/scheme\n" ++
   str "(load \"macros_extr.scm\")\n\n" ++
@@ -161,7 +163,7 @@ and pp_fix env j (ids,bl) args =
 	       (prvect_with_sep fnl
 		  (fun (fi,ti) ->
 		     paren ((pr_id fi) ++ spc () ++ (pp_expr env [] ti)))
-		  (array_map2 (fun id b -> (id,b)) ids bl)) ++
+		  (Array.map2 (fun id b -> (id,b)) ids bl)) ++
 	     fnl () ++
       	     hov 2 (pp_apply (pr_id (ids.(j))) true args))))
 
@@ -222,7 +224,7 @@ let scheme_descr = {
   preamble = preamble;
   pp_struct = pp_struct;
   sig_suffix = None;
-  sig_preamble = (fun _ _ _ -> mt ());
+  sig_preamble = (fun _ s _ _ -> pp_comment s ++ fnl () ++ fnl ());
   pp_sig = (fun _ -> mt ());
   pp_decl = pp_decl;
 }

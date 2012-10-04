@@ -1,18 +1,18 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Term
+open Errors
 open Util
 open Formula
 open Unify
 open Tacmach
-open Names
-open Libnames
+open Globnames
 open Pp
 
 let newcnt ()=
@@ -48,8 +48,6 @@ let priority = (* pure heuristics, <=0 for non reversible *)
 		| LLexists (_,_)   ->  50
 		| LLarrow  (_,_,_) -> -10
 
-let left_reversible lpat=(priority lpat)>0
-
 module OrderedFormula=
 struct
   type t=Formula.t
@@ -69,7 +67,7 @@ module Hitem=
 struct
   type t = h_item
   let compare (id1,co1) (id2,co2)=
-    (Libnames.RefOrdered.compare
+    (Globnames.RefOrdered.compare
      =? (fun oc1 oc2 ->
 	   match oc1,oc2 with
 	       Some (m1,c1),Some (m2,c2) ->
@@ -123,7 +121,7 @@ let lookup item seq=
 	    | Some ((m2,t2) as c2)->id=id2 && m2>m && more_general c2 c in
 	  History.exists p seq.history
 
-let rec add_formula side nam t seq gl=
+let add_formula side nam t seq gl=
   match build_formula side nam t gl seq.cnt with
       Left f->
 	begin
@@ -163,8 +161,6 @@ let find_left t seq=List.hd (CM.find t seq.context)
       left_reversible lpat
   with Heap.EmptyHeap -> false
 *)
-let no_formula seq=
-  seq.redexes=HP.empty
 
 let rec take_formula seq=
   let hd=HP.maximum seq.redexes
@@ -191,9 +187,9 @@ let empty_seq depth=
    depth=depth}
 
 let expand_constructor_hints =
-  list_map_append (function
+  List.map_append (function
     | IndRef ind ->
-	list_tabulate (fun i -> ConstructRef (ind,i+1))
+	List.tabulate (fun i -> ConstructRef (ind,i+1))
 	  (Inductiveops.nconstructors ind)
     | gr ->
 	[gr])
@@ -235,12 +231,12 @@ let print_cmap map=
   let print_entry c l s=
     let xc=Constrextern.extern_constr false (Global.env ()) c in
       str "| " ++
-      Util.prlist Printer.pr_global l ++
+      prlist Printer.pr_global l ++
       str " : " ++
       Ppconstr.pr_constr_expr xc ++
       cut () ++
       s in
-    msgnl (v 0
+    (v 0
 	     (str "-----" ++
 	      cut () ++
 	      CM.fold print_entry map (mt ()) ++

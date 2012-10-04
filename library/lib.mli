@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -62,17 +62,6 @@ val add_leaves : Names.identifier -> Libobject.obj list -> Libnames.object_name
 
 val add_frozen_state : unit -> unit
 
-(** Adds a "dummy" entry in lib_stk with a unique new label number. *)
-val mark_end_of_command : unit -> unit
-
-(** Returns the current label number *)
-val current_command_label : unit -> int
-
-(** [reset_label n] resets [lib_stk] to the label n registered by
-   [mark_end_of_command()]. It forgets the label and anything
-   registered after it. The label should be strictly in the past. *)
-val reset_label : int -> unit
-
 (** {6 ... } *)
 (** The function [contents_after] returns the current library segment,
   starting from a given section path. If not given, the entire segment
@@ -102,6 +91,9 @@ val sections_depth : unit -> int
 (** Are we inside an opened module type *)
 val is_module_or_modtype : unit -> bool
 val is_modtype : unit -> bool
+(* [is_modtype_strict] checks not only if we are in a module type, but
+   if the latest module started is a module type.  *)
+val is_modtype_strict : unit -> bool
 val is_module : unit -> bool
 val current_mod_id : unit -> Names.module_ident
 
@@ -143,24 +135,36 @@ val library_dp : unit -> Names.dir_path
 val dp_of_mp : Names.module_path -> Names.dir_path
 val split_mp : Names.module_path -> Names.dir_path * Names.dir_path
 val split_modpath : Names.module_path -> Names.dir_path * Names.identifier list
-val library_part :  Libnames.global_reference -> Names.dir_path
-val remove_section_part : Libnames.global_reference -> Names.dir_path
+val library_part :  Globnames.global_reference -> Names.dir_path
+val remove_section_part : Globnames.global_reference -> Names.dir_path
 
 (** {6 Sections } *)
 
 val open_section : Names.identifier -> unit
 val close_section : unit -> unit
 
-(** {6 Backtracking (undo). } *)
+(** {6 Backtracking } *)
 
-val reset_to : Libnames.object_name -> unit
-val reset_name : Names.identifier Util.located -> unit
-val remove_name : Names.identifier Util.located -> unit
-val reset_mod : Names.identifier Util.located -> unit
+(** NB: The next commands are low-level ones, do not use them directly
+    otherwise the command history stack in [Backtrack] will be out-of-sync.
+    Also note that [reset_initial] is now [reset_label first_command_label] *)
 
-(** [back n] resets to the place corresponding to the {% $ %}n{% $ %}-th call of
-   [mark_end_of_command] (counting backwards) *)
-val back : int -> unit
+(** Adds a "dummy" entry in lib_stk with a unique new label number. *)
+val mark_end_of_command : unit -> unit
+
+(** Returns the current label number *)
+val current_command_label : unit -> int
+
+(** The first label number *)
+val first_command_label : int
+
+(** [reset_label n] resets [lib_stk] to the label n registered by
+   [mark_end_of_command()]. It forgets anything registered after
+   this label. The label should be strictly in the past. *)
+val reset_label : int -> unit
+
+(** search the label registered immediately before adding some definition *)
+val label_before_name : Names.identifier Loc.located -> int
 
 (** {6 We can get and set the state of the operations (used in [States]). } *)
 
@@ -171,18 +175,13 @@ val unfreeze : frozen -> unit
 
 val init : unit -> unit
 
-val declare_initial_state : unit -> unit
-val reset_initial : unit -> unit
-
-
 (** XML output hooks *)
 val set_xml_open_section : (Names.identifier -> unit) -> unit
 val set_xml_close_section : (Names.identifier -> unit) -> unit
 
-type binding_kind = Explicit | Implicit
-
 (** {6 Section management for discharge } *)
-type variable_info = Names.identifier * binding_kind * Term.constr option * Term.types
+type variable_info = Names.identifier * Decl_kinds.binding_kind *
+    Term.constr option * Term.types
 type variable_context = variable_info list
 
 val instance_from_variable_context : variable_context -> Names.identifier array
@@ -191,10 +190,10 @@ val named_of_variable_context : variable_context -> Sign.named_context
 val section_segment_of_constant : Names.constant -> variable_context
 val section_segment_of_mutual_inductive: Names.mutual_inductive -> variable_context
 
-val section_instance : Libnames.global_reference -> Names.identifier array
-val is_in_section : Libnames.global_reference -> bool
+val section_instance : Globnames.global_reference -> Names.identifier array
+val is_in_section : Globnames.global_reference -> bool
 
-val add_section_variable : Names.identifier -> binding_kind -> unit
+val add_section_variable : Names.identifier -> Decl_kinds.binding_kind -> unit
 
 val add_section_constant : Names.constant -> Sign.named_context -> unit
 val add_section_kn : Names.mutual_inductive -> Sign.named_context -> unit
@@ -205,7 +204,7 @@ val replacement_context : unit ->
 
 val discharge_kn :  Names.mutual_inductive -> Names.mutual_inductive
 val discharge_con : Names.constant -> Names.constant
-val discharge_global : Libnames.global_reference -> Libnames.global_reference
+val discharge_global : Globnames.global_reference -> Globnames.global_reference
 val discharge_inductive : Names.inductive -> Names.inductive
 
 

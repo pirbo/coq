@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -58,8 +58,8 @@ Proof (Zodd_equiv n).
 
 (** Boolean tests of parity (now in BinInt.Z) *)
 
-Notation Zeven_bool := Z.even (only parsing).
-Notation Zodd_bool := Z.odd (only parsing).
+Notation Zeven_bool := Z.even (compat "8.3").
+Notation Zodd_bool := Z.odd (compat "8.3").
 
 Lemma Zeven_bool_iff n : Z.even n = true <-> Zeven n.
 Proof.
@@ -130,17 +130,17 @@ Qed.
 
 Hint Unfold Zeven Zodd: zarith.
 
-Notation Zeven_bool_succ := Z.even_succ (only parsing).
-Notation Zeven_bool_pred := Z.even_pred (only parsing).
-Notation Zodd_bool_succ := Z.odd_succ (only parsing).
-Notation Zodd_bool_pred := Z.odd_pred (only parsing).
+Notation Zeven_bool_succ := Z.even_succ (compat "8.3").
+Notation Zeven_bool_pred := Z.even_pred (compat "8.3").
+Notation Zodd_bool_succ := Z.odd_succ (compat "8.3").
+Notation Zodd_bool_pred := Z.odd_pred (compat "8.3").
 
 (******************************************************************)
-(** * Definition of [Zquot2], [Zdiv2] and properties wrt [Zeven]
+(** * Definition of [Z.quot2], [Z.div2] and properties wrt [Zeven]
   and [Zodd] *)
 
-Notation Zdiv2 := Z.div2 (only parsing).
-Notation Zquot2 := Z.quot2 (only parsing).
+Notation Zdiv2 := Z.div2 (compat "8.3").
+Notation Zquot2 := Z.quot2 (compat "8.3").
 
 (** Properties of [Z.div2] *)
 
@@ -225,7 +225,7 @@ Lemma Zsplit2 n :
  {p : Z * Z | let (x1, x2) := p in n = x1 + x2 /\ (x1 = x2 \/ x2 = x1 + 1)}.
 Proof.
  destruct (Z_modulo_2 n) as [(y,Hy)|(y,Hy)];
-  rewrite Z.mul_comm, <- Zplus_diag_eq_mult_2 in Hy.
+  rewrite <- Z.add_diag in Hy.
  - exists (y, y). split. assumption. now left.
  - exists (y, y + 1). split. now rewrite Z.add_assoc. now right.
 Qed.

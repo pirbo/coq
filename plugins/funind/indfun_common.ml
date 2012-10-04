@@ -1,8 +1,9 @@
 open Names
 open Pp
-
 open Libnames
-
+open Globnames
+open Refiner
+open Hiddentac 
 let mk_prefix pre id = id_of_string (pre^(string_of_id id))
 let mk_rel_id = mk_prefix "R_"
 let mk_correct_id id = Nameops.add_suffix (mk_rel_id id) "_correct"
@@ -54,7 +55,7 @@ let locate_with_msg msg f x =
   try
     f x
   with
-    | Not_found -> raise (Util.UserError("", msg))
+    | Not_found -> raise (Errors.UserError("", msg))
     | e -> raise e
 
 
@@ -79,7 +80,7 @@ let chop_rlambda_n  =
 	  | Glob_term.GLambda(_,name,k,t,b) -> chop_lambda_n ((name,t,false)::acc) (n-1) b
 	  | Glob_term.GLetIn(_,name,v,b) -> chop_lambda_n ((name,v,true)::acc) (n-1) b
 	  | _ ->
-	      raise (Util.UserError("chop_rlambda_n",
+	      raise (Errors.UserError("chop_rlambda_n",
 				    str "chop_rlambda_n: Not enough Lambdas"))
   in
   chop_lambda_n []
@@ -91,7 +92,7 @@ let chop_rprod_n  =
       else
 	match rt with
 	  | Glob_term.GProd(_,name,k,t,b) -> chop_prod_n ((name,t)::acc) (n-1) b
-	  | _ -> raise (Util.UserError("chop_rprod_n",str "chop_rprod_n: Not enough products"))
+	  | _ -> raise (Errors.UserError("chop_rprod_n",str "chop_rprod_n: Not enough products"))
   in
   chop_prod_n []
 
@@ -112,10 +113,10 @@ let list_add_set_eq eq_fun x l =
 
 let const_of_id id =
   let _,princ_ref =
-    qualid_of_reference (Libnames.Ident (Util.dummy_loc,id))
+    qualid_of_reference (Libnames.Ident (Loc.ghost,id))
   in
   try Nametab.locate_constant princ_ref
-  with Not_found -> Util.error ("cannot find "^ string_of_id id)
+  with Not_found -> Errors.error ("cannot find "^ string_of_id id)
 
 let def_of_const t =
    match (Term.kind_of_term t) with
@@ -130,12 +131,6 @@ let coq_constant s =
   Coqlib.gen_constant_in_modules "RecursiveDefinition"
     Coqlib.init_modules s;;
 
-let constant sl s =
-  constr_of_global
-    (Nametab.locate (make_qualid(Names.make_dirpath
-			   (List.map id_of_string (List.rev sl)))
-	       (id_of_string s)));;
-
 let find_reference sl s =
     (Nametab.locate (make_qualid(Names.make_dirpath
 			   (List.map id_of_string (List.rev sl)))
@@ -148,13 +143,11 @@ let refl_equal = lazy(coq_constant "eq_refl")
 (* Copy of the standart save mechanism but without the much too  *)
 (* slow reduction function                                       *)
 (*****************************************************************)
-open Declarations
 open Entries
 open Decl_kinds
 open Declare
-let definition_message id =
-  Flags.if_verbose message ((string_of_id id) ^ " is defined")
 
+let definition_message = Declare.definition_message
 
 let save with_clean id const (locality,kind) hook =
   let {const_entry_body = pft;
@@ -163,16 +156,16 @@ let save with_clean id const (locality,kind) hook =
        const_entry_opaque = opacity } = const in
   let l,r = match locality with
     | Local when Lib.sections_are_opened () ->
-        let k = logical_kind_of_goal_kind kind in
+        let k = Kindops.logical_kind_of_goal_kind kind in
 	let c = SectionLocalDef (pft, tpo, opacity) in
 	let _ = declare_variable id (Lib.cwd(), c, k) in
 	(Local, VarRef id)
     | Local ->
-        let k = logical_kind_of_goal_kind kind in
+        let k = Kindops.logical_kind_of_goal_kind kind in
         let kn = declare_constant id (DefinitionEntry const, k) in
 	(Global, ConstRef kn)
     | Global ->
-        let k = logical_kind_of_goal_kind kind in
+        let k = Kindops.logical_kind_of_goal_kind kind in
         let kn = declare_constant id (DefinitionEntry const, k) in
 	(Global, ConstRef kn) in
   if with_clean then  Pfedit.delete_current_proof ();
@@ -278,7 +271,6 @@ let cache_Function (_,finfos) =
 
 
 let load_Function _  = cache_Function
-let open_Function _ = cache_Function
 let subst_Function (subst,finfos) =
   let do_subst_con c = fst (Mod_subst.subst_con subst c)
   and do_subst_ind (kn,i) = (Mod_subst.subst_ind subst kn,i)
@@ -361,7 +353,7 @@ let pr_info f_info =
 
 let pr_table tb =
   let l = Cmap.fold (fun k v acc -> v::acc) tb [] in
-  Util.prlist_with_sep fnl pr_info l
+  Pp.prlist_with_sep fnl pr_info l
 
 let in_Function : function_info -> Libobject.obj =
   Libobject.declare_object
@@ -397,7 +389,7 @@ let _ =
 
 let find_or_none id =
   try Some
-    (match Nametab.locate (qualid_of_ident id) with ConstRef c -> c | _ -> Util.anomaly "Not a constant"
+    (match Nametab.locate (qualid_of_ident id) with ConstRef c -> c | _ -> Errors.anomaly "Not a constant"
     )
   with Not_found -> None
 
@@ -425,7 +417,7 @@ let add_Function is_general f =
   and prop_lemma = find_or_none (Nameops.add_suffix f_id "_ind")
   and graph_ind =
     match Nametab.locate (qualid_of_ident (mk_rel_id f_id))
-    with | IndRef ind -> ind | _ -> Util.anomaly "Not an inductive"
+    with | IndRef ind -> ind | _ -> Errors.anomaly "Not an inductive"
   in
   let finfos =
     { function_constant = f;
@@ -475,8 +467,7 @@ let function_debug_sig =
 let _ = declare_bool_option function_debug_sig
 
 
-let do_observe () =
-  !function_debug = true
+let do_observe () = !function_debug 
 
 
 
@@ -510,14 +501,31 @@ let jmeq () =
      init_constant ["Logic";"JMeq"] "JMeq")
   with e -> raise (ToShow e)
 
-let jmeq_rec () =
-  try
-    Coqlib.check_required_library ["Coq";"Logic";"JMeq"];
-	  init_constant ["Logic";"JMeq"] "JMeq_rec"
-  with e -> raise (ToShow e)
-
 let jmeq_refl () =
   try
     Coqlib.check_required_library ["Coq";"Logic";"JMeq"];
     init_constant ["Logic";"JMeq"] "JMeq_refl"
   with e -> raise (ToShow e)
+
+let h_intros l =
+  tclMAP h_intro l
+
+let h_id = id_of_string "h"
+let hrec_id = id_of_string "hrec"
+let well_founded = function () -> (coq_constant "well_founded")
+let acc_rel = function () -> (coq_constant "Acc")
+let acc_inv_id = function () -> (coq_constant "Acc_inv")
+let well_founded_ltof = function () ->  (Coqlib.coq_constant "" ["Arith";"Wf_nat"] "well_founded_ltof")
+let ltof_ref = function  () -> (find_reference ["Coq";"Arith";"Wf_nat"] "ltof")
+
+let evaluable_of_global_reference r = (* Tacred.evaluable_of_global_reference (Global.env ()) *)
+  match r with
+      ConstRef sp -> EvalConstRef sp
+    | VarRef id -> EvalVarRef id
+    | _ -> assert false;;
+
+let list_rewrite (rev:bool) (eqs: (constr*bool) list) =
+  tclREPEAT
+    (List.fold_right
+       (fun (eq,b) i -> tclORELSE ((if b then Equality.rewriteLR else Equality.rewriteRL) eq) i)
+       (if rev then (List.rev eqs) else eqs) (tclFAIL 0 (mt())));;

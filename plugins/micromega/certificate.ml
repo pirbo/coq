@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -405,9 +405,7 @@ let pplus x y = Mc.PEadd(x,y)
 let pmult x y = Mc.PEmul(x,y)
 let pconst x = Mc.PEc x
 let popp x = Mc.PEopp x
- 
-let debug = false
- 
+
 (* keep track of enumerated vectors *)
 let rec mem p x  l = 
  match l with  [] -> false | e::l -> if p x e then true else mem p x l
@@ -816,7 +814,7 @@ let pivot v (c1,p1) (c2,p2) =
 	    
 exception FoundProof of  prf_rule
 
-let rec simpl_sys sys = 
+let simpl_sys sys = 
   List.fold_left (fun acc (c,p) -> 
 		    match check_sat (c,p) with
 		    | Tauto -> acc

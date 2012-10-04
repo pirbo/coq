@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -27,11 +27,14 @@ let print_usage_channel co command =
 \n  -notop                 set the toplevel name to be the empty logical path\
 \n  -exclude-dir f         exclude subdirectories named f for option -R\
 \n\
+\n  -noinit                start without loading the Init library\
+\n  -nois                  (idem)\
 \n  -inputstate f          read state from file f.coq\
 \n  -is f                  (idem)\
-\n  -nois                  start with an empty state\
 \n  -outputstate f         write state in file f.coq\
 \n  -compat X.Y            provides compatibility support for Coq version X.Y\
+\n  -verbose-compat-notations  be warned when using compatibility notations\
+\n  -no-compat-notations   get an error when using compatibility notations\
 \n\
 \n  -load-ml-object f      load ML object file f\
 \n  -load-ml-source f      load ML file f\
@@ -90,7 +93,7 @@ let print_usage_coqc () =
 
 let print_config () =
   if Coq_config.local then Printf.printf "LOCAL=1\n" else Printf.printf "LOCAL=0\n";
-  Printf.printf "COQLIB=%s/\n" (Envars.coqlib ());
+  Printf.printf "COQLIB=%s/\n" (Envars.coqlib Errors.error);
   Printf.printf "DOCDIR=%s/\n" (Envars.docdir ());
   Printf.printf "OCAMLDEP=%s\n" Coq_config.ocamldep;
   Printf.printf "OCAMLC=%s\n" Coq_config.ocamlc;
@@ -99,6 +102,8 @@ let print_config () =
   Printf.printf "CAMLBIN=%s/\n" (Envars.camlbin ());
   Printf.printf "CAMLLIB=%s/\n" (Envars.camllib ());
   Printf.printf "CAMLP4=%s\n" Coq_config.camlp4;
+  Printf.printf "CAMLP4O=%s\n" Coq_config.camlp4o;
   Printf.printf "CAMLP4BIN=%s/\n" (Envars.camlp4bin ());
   Printf.printf "CAMLP4LIB=%s\n" (Envars.camlp4lib ());
+  Printf.printf "CAMLP4OPTIONS=%s\n" Coq_config.camlp4compat;
   Printf.printf "HASNATDYNLINK=%s\n" (if Coq_config.has_natdynlink then "true" else "false")

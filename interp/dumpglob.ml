@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -60,11 +60,6 @@ let previous_state = ref MultFiles
 let pause () = previous_state := !glob_output; glob_output := NoGlob
 let continue () = glob_output := !previous_state
 
-type coqdoc_state = Lexer.location_table
-
-let coqdoc_freeze = Lexer.location_table
-let coqdoc_unfreeze = Lexer.restore_location_table
-
 open Decl_kinds
 
 let type_of_logical_kind = function
@@ -102,18 +97,18 @@ let type_of_global_ref gr =
     "class"
   else
     match gr with
-    | Libnames.ConstRef cst ->
+    | Globnames.ConstRef cst ->
 	type_of_logical_kind (Decls.constant_kind cst)
-    | Libnames.VarRef v ->
+    | Globnames.VarRef v ->
 	"var" ^ type_of_logical_kind (Decls.variable_kind v)
-    | Libnames.IndRef ind ->
+    | Globnames.IndRef ind ->
 	let (mib,oib) = Inductive.lookup_mind_specif (Global.env ()) ind in
 	  if mib.Declarations.mind_record then
 	    if mib.Declarations.mind_finite then "rec"
 	    else "corec"
 	  else if mib.Declarations.mind_finite then "ind"
 	  else "coind"
-    | Libnames.ConstructRef _ -> "constr"
+    | Globnames.ConstructRef _ -> "constr"
 
 let remove_sections dir =
   if Libnames.is_dirpath_prefix_of dir (Lib.cwd ()) then
@@ -124,7 +119,7 @@ let remove_sections dir =
     dir
 
 let interval loc =
-  let loc1,loc2 = Util.unloc loc in
+  let loc1,loc2 = Loc.unloc loc in
   loc1, loc2-1
 
 let dump_ref loc filepath modpath ident ty =
@@ -143,7 +138,7 @@ let add_glob_gen loc sp lib_dp ty =
       dump_ref loc filepath modpath ident ty
 
 let add_glob loc ref =
-  if dump () && loc <> Util.dummy_loc then
+  if dump () && loc <> Loc.ghost then
     let sp = Nametab.path_of_global ref in
     let lib_dp = Lib.library_part ref in
     let ty = type_of_global_ref ref in
@@ -154,7 +149,7 @@ let mp_of_kn kn =
     Names.MPdot (mp,l)
 
 let add_glob_kn loc kn =
-  if dump () && loc <> Util.dummy_loc then
+  if dump () && loc <> Loc.ghost then
     let sp = Nametab.path_of_syndef kn in
     let lib_dp = Lib.dp_of_mp (mp_of_kn kn) in
       add_glob_gen loc sp lib_dp "syndef"
@@ -179,7 +174,7 @@ let dump_constraint ((loc, n), _, _) sec ty =
 let dump_modref loc mp ty =
   if dump () then
     let (dp, l) = Lib.split_modpath mp in
-    let l = if l = [] then l else Util.list_drop_last l in
+    let l = if l = [] then l else Util.List.drop_last l in
     let fp = Names.string_of_dirpath dp in
     let mp = Names.string_of_dirpath (Names.make_dirpath l) in
     let bl,el = interval loc in
@@ -237,7 +232,7 @@ let cook_notation df sc =
 
 let dump_notation (loc,(df,_)) sc sec =
   (* We dump the location of the opening '"' *)
-  dump_string (Printf.sprintf "not %d %s %s\n" (fst (Util.unloc loc))
+  dump_string (Printf.sprintf "not %d %s %s\n" (fst (Loc.unloc loc))
     (Names.string_of_dirpath (Lib.current_dirpath sec)) (cook_notation df sc))
 
 let dump_notation_location posl df (((path,secpath),_),sc) =

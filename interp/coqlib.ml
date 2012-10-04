@@ -1,17 +1,18 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Pp
 open Names
 open Term
 open Libnames
-open Pattern
+open Globnames
 open Nametab
 open Smartlocate
 
@@ -44,7 +45,7 @@ let gen_constant_in_modules locstr dirs s =
   let dirs = List.map make_dir dirs in
   let qualid = qualid_of_string s in
   let all = Nametab.locate_extended_all qualid in
-  let all = list_uniquize (list_map_filter global_of_extended all) in
+  let all = List.uniquize (List.map_filter global_of_extended all) in
   let these = List.filter (has_suffix_in_dirs dirs) all in
   match these with
     | [x] -> constr_of_global x
@@ -72,9 +73,9 @@ let check_required_library d =
   if not (Library.library_is_loaded dir) then
     if not current_dir then
 (* Loading silently ...
-    let m, prefix = list_sep_last d' in
+    let m, prefix = List.sep_last d' in
     read_library
-     (dummy_loc,make_qualid (make_dirpath (List.rev prefix)) m)
+     (Loc.ghost,make_qualid (make_dirpath (List.rev prefix)) m)
 *)
 (* or failing ...*)
       error ("Library "^(string_of_dirpath dir)^" has to be required first.")
@@ -124,8 +125,8 @@ let jmeq_module_name = ["Coq";"Logic";"JMeq"]
 let jmeq_module = make_dir jmeq_module_name
 
 (* TODO: temporary hack *)
-let make_kn dir id = Libnames.encode_mind dir id
-let make_con dir id = Libnames.encode_con dir id
+let make_kn dir id = Globnames.encode_mind dir id
+let make_con dir id = Globnames.encode_con dir id
 
 (** Identity *)
 

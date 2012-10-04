@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -51,7 +51,7 @@ Section WfUnion.
 
     elim strip_commut with x x0 y0; auto with sets; intros.
     apply Acc_inv_trans with x1; auto with sets.
-    unfold union in |- *.
+    unfold union.
     elim H11; auto with sets; intros.
     apply t_trans with y1; auto with sets.
 
@@ -65,7 +65,7 @@ Section WfUnion.
   Theorem wf_union :
     commut A R1 R2 -> well_founded R1 -> well_founded R2 -> well_founded Union.
   Proof.
-    unfold well_founded in |- *.
+    unfold well_founded.
     intros.
     apply Acc_union; auto with sets.
   Qed.

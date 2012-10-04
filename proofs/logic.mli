@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -32,10 +32,6 @@ val with_check    : tactic -> tactic
 
 val prim_refiner : prim_rule -> evar_map -> goal -> goal list * evar_map
 
-type proof_variable
-
-
-val proof_variable_index : identifier -> proof_variable list -> int
 
 (** {6 Refiner errors. } *)
 

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,9 +9,8 @@
 (*s Target language for extraction: a core ML called MiniML. *)
 
 open Pp
-open Util
 open Names
-open Libnames
+open Globnames
 
 (* The [signature] type is used to know how many arguments a CIC
    object expects, and what these arguments will become in the ML
@@ -196,12 +195,14 @@ type language_descr = {
 
   (* Concerning the source file *)
   file_suffix : string;
-  preamble : identifier -> module_path list -> unsafe_needs -> std_ppcmds;
+  (* the second argument is a comment to add to the preamble *)
+  preamble : identifier -> std_ppcmds -> module_path list -> unsafe_needs -> std_ppcmds;
   pp_struct : ml_structure -> std_ppcmds;
 
   (* Concerning a possible interface file *)
   sig_suffix : string option;
-  sig_preamble : identifier -> module_path list -> unsafe_needs -> std_ppcmds;
+  (* the second argument is a comment to add to the preamble *)
+  sig_preamble : identifier -> std_ppcmds -> module_path list -> unsafe_needs -> std_ppcmds;
   pp_sig : ml_signature -> std_ppcmds;
 
   (* for an isolated declaration print *)

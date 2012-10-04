@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,9 +12,7 @@ open Rules
 open Instances
 open Term
 open Tacmach
-open Tactics
 open Tacticals
-open Libnames
 
 let update_flags ()=
   let predref=ref Names.Cpred.empty in
@@ -33,7 +31,7 @@ let ground_tac solver startseq gl=
   update_flags ();
   let rec toptac skipped seq gl=
     if Tacinterp.get_debug()=Tactic_debug.DebugOn 0
-    then Pp.msgnl (Printer.pr_goal gl);
+    then Pp.msg_debug (Printer.pr_goal gl);
     tclORELSE (axiom_tac seq.gl seq)
       begin
 	try

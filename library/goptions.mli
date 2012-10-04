@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -44,14 +44,13 @@
    (synchronous = consistent with the resetting commands)                   *)
 
 open Pp
-open Util
 open Names
 open Libnames
 open Term
 open Nametab
 open Mod_subst
 
-type option_name = Goptionstyp.option_name
+type option_name = Interface.option_name
 
 (** {6 Tables. } *)
 
@@ -164,7 +163,7 @@ val set_string_option_value : option_name -> string -> unit
 
 val print_option_value : option_name -> unit
 
-val get_tables : unit -> Goptionstyp.option_state OptionMap.t
-val print_tables : unit -> unit
+val get_tables : unit -> Interface.option_state OptionMap.t
+val print_tables : unit -> std_ppcmds
 
 val error_undeclared_key : option_name -> 'a

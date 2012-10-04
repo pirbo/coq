@@ -1,27 +1,26 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
 open Names
 open Libnames
-open Ppextend
-open Extend
 open Tacexpr
 open Vernacexpr
 open Notation
-open Topconstr
+open Constrexpr
+open Notation_term
 
 val add_token_obj : string -> unit
 
 (** Adding a tactic notation in the environment *)
 
 val add_tactic_notation :
-  int * grammar_tactic_prod_item_expr list * raw_tactic_expr -> unit
+  locality_flag * int * grammar_tactic_prod_item_expr list * raw_tactic_expr ->
+    unit
 
 (** Adding a (constr) notation in the environment*)
 
@@ -34,7 +33,7 @@ val add_notation : locality_flag -> constr_expr ->
 (** Declaring delimiter keys and default scopes *)
 
 val add_delimiters : scope_name -> string -> unit
-val add_class_scope : scope_name -> Classops.cl_typ -> unit
+val add_class_scope : scope_name -> scope_class list -> unit
 
 (** Add only the interpretation of a notation that already has pa/pp rules *)
 
@@ -54,10 +53,12 @@ val add_syntax_extension :
 (** Add a syntactic definition (as in "Notation f := ...") *)
 
 val add_syntactic_definition : identifier -> identifier list * constr_expr ->
-  bool -> bool -> unit
+  bool -> Flags.compat_version option -> unit
 
 (** Print the Camlp4 state of a grammar *)
 
-val print_grammar : string -> unit
+val pr_grammar : string -> Pp.std_ppcmds
 
 val check_infix_modifiers : syntax_modifier list -> unit
+
+val with_syntax_protection : ('a -> 'b) -> 'a -> 'b

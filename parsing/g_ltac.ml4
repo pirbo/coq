@@ -1,21 +1,21 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pp
-open Util
-open Topconstr
-open Glob_term
+open Compat
+open Constrexpr
 open Tacexpr
-open Vernacexpr
-open Pcoq
-open Prim
-open Tactic
+open Misctypes
+open Genredexpr
 open Tok
+
+open Pcoq
+open Pcoq.Prim
+open Pcoq.Tactic
 
 let fail_default_value = ArgArg 0
 
@@ -26,7 +26,7 @@ let arg_of_expr = function
 (* Tactics grammar rules *)
 
 GEXTEND Gram
-  GLOBAL: tactic Vernac_.command tactic_expr binder_tactic tactic_arg
+  GLOBAL: tactic tacdef_body tactic_expr binder_tactic tactic_arg
           constr_may_eval;
 
   tactic_then_last:
@@ -60,6 +60,7 @@ GEXTEND Gram
       | IDENT "timeout"; n = int_or_var; ta = tactic_expr -> TacTimeout (n,ta)
       | IDENT "repeat"; ta = tactic_expr -> TacRepeat ta
       | IDENT "progress"; ta = tactic_expr -> TacProgress ta
+      | IDENT "infoH"; ta = tactic_expr -> TacShowHyps ta
 (*To do: put Abstract in Refiner*)
       | IDENT "abstract"; tc = NEXT -> TacAbstract (tc,None)
       | IDENT "abstract"; tc = NEXT; "using";  s = ident ->
@@ -80,25 +81,24 @@ GEXTEND Gram
 	  TacFirst l
       | IDENT "solve" ; "["; l = LIST0 tactic_expr SEP "|"; "]" ->
 	  TacSolve l
-      | IDENT "complete" ; ta = tactic_expr -> TacComplete ta
       | IDENT "idtac"; l = LIST0 message_token -> TacId l
       | IDENT "fail"; n = [ n = int_or_var -> n | -> fail_default_value ];
 	  l = LIST0 message_token -> TacFail (n,l)
       | IDENT "external"; com = STRING; req = STRING; la = LIST1 tactic_arg ->
-	  TacArg (loc,TacExternal (loc,com,req,la))
-      | st = simple_tactic -> TacAtom (loc,st)
-      | a = may_eval_arg -> TacArg(loc,a)
+	  TacArg (!@loc,TacExternal (!@loc,com,req,la))
+      | st = simple_tactic -> TacAtom (!@loc,st)
+      | a = may_eval_arg -> TacArg(!@loc,a)
       | IDENT "constr"; ":"; id = METAIDENT ->
-          TacArg(loc,MetaIdArg (loc,false,id))
+          TacArg(!@loc,MetaIdArg (!@loc,false,id))
       | IDENT "constr"; ":"; c = Constr.constr ->
-          TacArg(loc,ConstrMayEval(ConstrTerm c))
+          TacArg(!@loc,ConstrMayEval(ConstrTerm c))
       | IDENT "ipattern"; ":"; ipat = simple_intropattern ->
-	  TacArg(loc,IntroPattern ipat)
+	  TacArg(!@loc,IntroPattern ipat)
       | r = reference; la = LIST0 tactic_arg ->
-          TacArg(loc,TacCall (loc,r,la)) ]
+          TacArg(!@loc,TacCall (!@loc,r,la)) ]
     | "0"
       [ "("; a = tactic_expr; ")" -> a
-      | a = tactic_atom -> TacArg (loc,a) ] ]
+      | a = tactic_atom -> TacArg (!@loc,a) ] ]
   ;
   (* binder_tactic: level 5 of tactic_expr *)
   binder_tactic:
@@ -119,7 +119,7 @@ GEXTEND Gram
       | r = reference -> Reference r
       | c = Constr.constr -> ConstrMayEval (ConstrTerm c)
       (* Unambigous entries: tolerated w/o "ltac:" modifier *)
-      | id = METAIDENT -> MetaIdArg (loc,true,id)
+      | id = METAIDENT -> MetaIdArg (!@loc,true,id)
       | "()" -> TacVoid ] ]
   ;
   may_eval_arg:
@@ -127,7 +127,7 @@ GEXTEND Gram
       | IDENT "fresh"; l = LIST0 fresh_id -> TacFreshId l ] ]
   ;
   fresh_id:
-    [ [ s = STRING -> ArgArg s | id = ident -> ArgVar (loc,id) ] ]
+    [ [ s = STRING -> ArgArg s | id = ident -> ArgVar (!@loc,id) ] ]
   ;
   constr_eval:
     [ [ IDENT "eval"; rtc = red_expr; "in"; c = Constr.constr ->
@@ -142,9 +142,9 @@ GEXTEND Gram
       | c = Constr.constr -> ConstrTerm c ] ]
   ;
   tactic_atom:
-    [ [ id = METAIDENT -> MetaIdArg (loc,true,id)
+    [ [ id = METAIDENT -> MetaIdArg (!@loc,true,id)
       | n = integer -> Integer n
-      | r = reference -> TacCall (loc,r,[])
+      | r = reference -> TacCall (!@loc,r,[])
       | "()" -> TacVoid ] ]
   ;
   match_key:
@@ -176,10 +176,10 @@ GEXTEND Gram
 	  let t, ty =
 	    match mpv with
 	    | Term t -> (match t with
-	      | CCast (loc, t, CastConv (_, ty)) -> Term t, Some (Term ty)
+	      | CCast (loc, t, (CastConv ty | CastVM ty)) -> Term t, Some (Term ty)
 	      | _ -> mpv, None)
 	    | _ -> mpv, None
-	  in Def (na, t, Option.default (Term (CHole (dummy_loc, None))) ty)
+	  in Def (na, t, Option.default (Term (CHole (Loc.ghost, None))) ty)
     ] ]
   ;
   match_context_rule:
@@ -221,10 +221,5 @@ GEXTEND Gram
   ;
   tactic:
     [ [ tac = tactic_expr -> tac ] ]
-  ;
-  Vernac_.command:
-    [ [ IDENT "Ltac";
-        l = LIST1 tacdef_body SEP "with" ->
-          VernacDeclareTacticDefinition (use_module_locality (), true, l) ] ]
   ;
   END

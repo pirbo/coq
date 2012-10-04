@@ -1,32 +1,33 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
 open Term
 open Termops
-open Sign
-open Reduction
 open Proof_type
-open Declarations
 open Tacticals
 open Tacmach
-open Evar_refiner
 open Tactics
-open Pattern
+open Patternops
 open Clenv
 open Auto
-open Glob_term
+open Genredexpr
 open Hiddentac
+open Tacexpr
+open Misctypes
+open Locus
+open Locusops
 
 let eauto_unif_flags = { auto_unif_flags with Unification.modulo_delta = full_transparent_state }
 
@@ -71,7 +72,7 @@ let prolog_tac l n gl =
   let l = List.map (prepare_hint (pf_env gl)) l in
   let n =
     match n with
-      |  ArgArg n -> n
+      | ArgArg n -> n
       | _ -> error "Prolog called with a non closed argument."
   in
   try (prolog l n gl)
@@ -113,11 +114,11 @@ and e_my_find_search db_list local_db hdc concl =
   let hdc = head_of_constr_reference hdc in
   let hintl =
     if occur_existential concl then
-      list_map_append (fun db ->
+      List.map_append (fun db ->
 	let flags = {auto_unif_flags with modulo_delta = Hint_db.transparent_state db} in
 	  List.map (fun x -> flags, x) (Hint_db.map_all hdc db)) (local_db::db_list)
     else
-      list_map_append (fun db ->
+      List.map_append (fun db ->
 	let flags = {auto_unif_flags with modulo_delta = Hint_db.transparent_state db} in
 	  List.map (fun x -> flags, x) (Hint_db.map_auto (hdc,concl) db)) (local_db::db_list)
   in
@@ -132,18 +133,10 @@ and e_my_find_search db_list local_db hdc concl =
 	   | Res_pf_THEN_trivial_fail (term,cl) ->
                tclTHEN (unify_e_resolve st (term,cl))
 		 (e_trivial_fail_db db_list local_db)
-	   | Unfold_nth c -> h_reduce (Unfold [all_occurrences_expr,c]) onConcl
+	   | Unfold_nth c -> h_reduce (Unfold [AllOccurrences,c]) onConcl
 	   | Extern tacast -> conclPattern concl p tacast
        in
        (tac,lazy (pr_autotactic t)))
-       (*i
-	 fun gls -> pPNL (pr_autotactic t); Format.print_flush ();
-                     try tac gls
-		     with e when Logic.catchable_exception(e) ->
-                            (Format.print_string "Fail\n";
-			     Format.print_flush ();
-			     raise e)
-       i*)
   in
   List.map tac_of_hint hintl
 
@@ -171,7 +164,14 @@ type search_state = {
   tacres : goal list sigma;
   last_tactic : std_ppcmds Lazy.t;
   dblist : Auto.hint_db list;
-  localdb :  Auto.hint_db list }
+  localdb :  Auto.hint_db list;
+  prev : prev_search_state
+}
+
+and prev_search_state = (* for info eauto *)
+  | Unknown
+  | Init
+  | State of search_state
 
 module SearchProblem = struct
 
@@ -211,6 +211,7 @@ module SearchProblem = struct
     if s.depth = 0 then
       []
     else
+      let ps = if s.prev = Unknown then Unknown else State s in
       let lg = s.tacres in
       let nbgl = List.length (sig_it lg) in
       assert (nbgl > 0);
@@ -225,7 +226,8 @@ module SearchProblem = struct
 	in
 	List.map (fun (res,pp) -> { depth = s.depth; tacres = res;
 				    last_tactic = pp; dblist = s.dblist;
-				    localdb = List.tl s.localdb }) l
+				    localdb = List.tl s.localdb;
+				    prev = ps}) l
       in
       let intro_tac =
 	List.map
@@ -237,7 +239,7 @@ module SearchProblem = struct
              let ldb = Hint_db.add_list hintl (List.hd s.localdb) in
 	     { depth = s.depth; tacres = res;
 	       last_tactic = pp; dblist = s.dblist;
-	       localdb = ldb :: List.tl s.localdb })
+	       localdb = ldb :: List.tl s.localdb; prev = ps })
 	  (filter_tactics s.tacres [Tactics.intro,lazy (str "intro")])
       in
       let rec_tacs =
@@ -248,73 +250,120 @@ module SearchProblem = struct
 	  (fun (lgls as res, pp) ->
 	     let nbgl' = List.length (sig_it lgls) in
 	     if nbgl' < nbgl then
-	       { depth = s.depth; tacres = res; last_tactic = pp;
+	       { depth = s.depth; tacres = res; last_tactic = pp; prev = ps;
 		 dblist = s.dblist; localdb = List.tl s.localdb }
 	     else
 	       { depth = pred s.depth; tacres = res;
-		 dblist = s.dblist; last_tactic = pp;
+		 dblist = s.dblist; last_tactic = pp; prev = ps;
 		 localdb =
-		   list_addn (nbgl'-nbgl) (List.hd s.localdb) s.localdb })
+		   List.addn (nbgl'-nbgl) (List.hd s.localdb) s.localdb })
 	  l
       in
       List.sort compare (assumption_tacs @ intro_tac @ rec_tacs)
 
-  let pp s =
-    msg (hov 0 (str " depth=" ++ int s.depth ++ spc () ++
-		  (Lazy.force s.last_tactic) ++ str "\n"))
+  let pp s = hov 0 (str " depth=" ++ int s.depth ++ spc () ++
+		      (Lazy.force s.last_tactic))
 
 end
 
 module Search = Explore.Make(SearchProblem)
 
-let make_initial_state n gl dblist localdb =
+(** Utilities for debug eauto / info eauto *)
+
+let global_debug_eauto = ref false
+let global_info_eauto = ref false
+
+let _ =
+  Goptions.declare_bool_option
+    { Goptions.optsync  = true;
+      Goptions.optdepr  = false;
+      Goptions.optname  = "Debug Eauto";
+      Goptions.optkey   = ["Debug";"Eauto"];
+      Goptions.optread  = (fun () -> !global_debug_eauto);
+      Goptions.optwrite = (:=) global_debug_eauto }
+
+let _ =
+  Goptions.declare_bool_option
+    { Goptions.optsync  = true;
+      Goptions.optdepr  = false;
+      Goptions.optname  = "Info Eauto";
+      Goptions.optkey   = ["Info";"Eauto"];
+      Goptions.optread  = (fun () -> !global_info_eauto);
+      Goptions.optwrite = (:=) global_info_eauto }
+
+let mk_eauto_dbg d =
+  if d = Debug || !global_debug_eauto then Debug
+  else if d = Info || !global_info_eauto then Info
+  else Off
+
+let pr_info_nop = function
+  | Info -> msg_debug (str "idtac.")
+  | _ -> ()
+
+let pr_dbg_header = function
+  | Off -> ()
+  | Debug -> msg_debug (str "(* debug eauto : *)")
+  | Info -> msg_debug (str "(* info eauto : *)")
+
+let pr_info dbg s =
+  if dbg <> Info then ()
+  else
+    let rec loop s =
+      match s.prev with
+	| Unknown | Init -> s.depth
+	| State sp ->
+	  let mindepth = loop sp in
+	  let indent = String.make (mindepth - sp.depth) ' ' in
+	  msg_debug (str indent ++ Lazy.force s.last_tactic ++ str ".");
+	  mindepth
+    in
+    ignore (loop s)
+
+(** Eauto main code *)
+
+let make_initial_state dbg n gl dblist localdb =
   { depth = n;
     tacres = tclIDTAC gl;
     last_tactic = lazy (mt());
     dblist = dblist;
-    localdb = [localdb] }
-
-let e_depth_search debug p db_list local_db gl =
-  try
-    let tac = if debug then Search.debug_depth_first else Search.depth_first in
-    let s = tac (make_initial_state p gl db_list local_db) in
-    s.tacres
-  with Not_found -> error "eauto: depth first search failed."
-
-let e_breadth_search debug n db_list local_db gl =
-  try
-    let tac =
-      if debug then Search.debug_breadth_first else Search.breadth_first
-    in
-    let s = tac (make_initial_state n gl db_list local_db) in
-    s.tacres
-  with Not_found -> error "eauto: breadth first search failed."
+    localdb = [localdb];
+    prev = if dbg=Info then Init else Unknown;
+  }
 
 let e_search_auto debug (in_depth,p) lems db_list gl =
   let local_db = make_local_hint_db ~ts:full_transparent_state true lems gl in
-  if in_depth then
-    e_depth_search debug p db_list local_db gl
-  else
-    e_breadth_search debug p db_list local_db gl
+  let d = mk_eauto_dbg debug in
+  let tac = match in_depth,d with
+    | (true,Debug) -> Search.debug_depth_first
+    | (true,_) -> Search.depth_first
+    | (false,Debug) -> Search.debug_breadth_first
+    | (false,_) -> Search.breadth_first
+  in
+  try
+    pr_dbg_header d;
+    let s = tac (make_initial_state d p gl db_list local_db) in
+    pr_info d s;
+    s.tacres
+  with Not_found ->
+    pr_info_nop d;
+    error "eauto: search failed"
 
-open Evd
-
-let eauto_with_bases debug np lems db_list =
+let eauto_with_bases ?(debug=Off) np lems db_list =
   tclTRY (e_search_auto debug np lems db_list)
 
-let eauto debug np lems dbnames =
+let eauto ?(debug=Off) np lems dbnames =
   let db_list = make_db_list dbnames in
   tclTRY (e_search_auto debug np lems db_list)
 
-let full_eauto debug n lems gl =
+let full_eauto ?(debug=Off) n lems gl =
   let dbnames = current_db_names () in
-  let dbnames =  list_remove "v62" dbnames in
+  let dbnames =  List.remove "v62" dbnames in
   let db_list = List.map searchtable_map dbnames in
   tclTRY (e_search_auto debug n lems db_list) gl
 
-let gen_eauto d np lems = function
-  | None -> full_eauto d np lems
-  | Some l -> eauto d np lems l
+let gen_eauto ?(debug=Off) np lems = function
+  | None -> full_eauto ~debug np lems
+  | Some l -> eauto ~debug np lems l
 
 let make_depth = function
   | None -> !default_search_depth
@@ -362,7 +411,7 @@ END
 TACTIC EXTEND eauto
 | [ "eauto" int_or_var_opt(n) int_or_var_opt(p) auto_using(lems)
     hintbases(db) ] ->
-    [ gen_eauto false (make_dimension n p) lems db ]
+    [ gen_eauto (make_dimension n p) lems db ]
 END
 
 TACTIC EXTEND new_eauto
@@ -370,20 +419,25 @@ TACTIC EXTEND new_eauto
     hintbases(db) ] ->
     [ match db with
       | None -> new_full_auto (make_depth n) lems
-      | Some l ->
-	  new_auto (make_depth n) lems l ]
+      | Some l -> new_auto (make_depth n) lems l ]
 END
 
 TACTIC EXTEND debug_eauto
 | [ "debug" "eauto" int_or_var_opt(n) int_or_var_opt(p) auto_using(lems)
     hintbases(db) ] ->
-    [ gen_eauto true (make_dimension n p) lems db ]
+    [ gen_eauto ~debug:Debug (make_dimension n p) lems db ]
+END
+
+TACTIC EXTEND info_eauto
+| [ "info_eauto" int_or_var_opt(n) int_or_var_opt(p) auto_using(lems)
+    hintbases(db) ] ->
+    [ gen_eauto ~debug:Info (make_dimension n p) lems db ]
 END
 
 TACTIC EXTEND dfs_eauto
 | [ "dfs" "eauto" int_or_var_opt(p) auto_using(lems)
       hintbases(db) ] ->
-    [ gen_eauto false (true, make_depth p) lems db ]
+    [ gen_eauto (true, make_depth p) lems db ]
 END
 
 let cons a l = a :: l
@@ -394,12 +448,12 @@ let autounfolds db occs =
       with Not_found -> errorlabstrm "autounfold" (str "Unknown database " ++ str dbname)
     in
     let (ids, csts) = Hint_db.unfolds db in
-      Cset.fold (fun cst -> cons (all_occurrences, EvalConstRef cst)) csts
-	(Idset.fold (fun id -> cons (all_occurrences, EvalVarRef id)) ids [])) db)
+      Cset.fold (fun cst -> cons (AllOccurrences, EvalConstRef cst)) csts
+	(Idset.fold (fun id -> cons (AllOccurrences, EvalVarRef id)) ids [])) db)
   in unfold_option unfolds
 
 let autounfold db cls gl =
-  let cls = concrete_clause_of cls gl in
+  let cls = concrete_clause_of (fun () -> pf_ids_of_hyps gl) cls in
   let tac = autounfolds db in
   tclMAP (function
     | OnHyp (id,occs,where) -> tac occs (Some (id,where))
@@ -428,7 +482,7 @@ let unfold_head env (ids, csts) c =
 	| true, f' -> true, Reductionops.whd_betaiota Evd.empty (mkApp (f', args))
 	| false, _ -> 
 	    let done_, args' = 
-	      array_fold_left_i (fun i (done_, acc) arg -> 
+	      Array.fold_left_i (fun i (done_, acc) arg -> 
 		if done_ then done_, arg :: acc 
 		else match aux arg with
 		| true, arg' -> true, arg' :: acc
@@ -505,7 +559,7 @@ let pr_hints_path_atom prc _ _ a =
   match a with
   | PathAny -> str"."
   | PathHints grs ->
-    prlist_with_sep pr_spc Printer.pr_global grs
+    pr_sequence Printer.pr_global grs
 
 ARGUMENT EXTEND hints_path_atom
   TYPED AS hints_path_atom
@@ -548,6 +602,6 @@ END
 VERNAC COMMAND EXTEND HintCut
 | [ "Hint" "Cut" "[" hints_path(p) "]" opthints(dbnames) ] -> [
   let entry = HintsCutEntry p in
-    Auto.add_hints (Vernacexpr.use_section_locality ()) 
+    Auto.add_hints (Locality.use_section_locality ())
       (match dbnames with None -> ["core"] | Some l -> l) entry ]
 END

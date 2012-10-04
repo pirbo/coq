@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -8,7 +8,6 @@
 
 open Names
 open Term
-open Conv_oracle
 open Cbytecodes
 
 external set_drawinstr : unit -> unit = "coq_set_drawinstr"
@@ -43,7 +42,6 @@ let fun_code v = tcode_of_obj (Obj.field (Obj.repr v) 0)
 
 external mkAccuCode : int -> tcode = "coq_makeaccu"
 external mkPopStopCode : int -> tcode = "coq_pushpop"
-external mkAccuCond : int -> tcode = "coq_accucond"
 
 external offset_tcode : tcode -> int -> tcode = "coq_offset_tcode"
 external int_tcode : tcode -> int -> int = "coq_int_tcode"
@@ -224,7 +222,7 @@ let whd_val : values -> whd =
 	   | 1 -> Vfix(Obj.obj o, None)
 	   | 2 -> Vfix(Obj.obj (Obj.field o 1), Some (Obj.obj o))
 	   | 3 -> Vatom_stk(Aid(RelKey(int_tcode (fun_code o) 1)), [])
-	   | _ -> Util.anomaly "Vm.whd : kind_of_closure does not work")
+	   | _ -> Errors.anomaly "Vm.whd : kind_of_closure does not work")
 	else Vconstr_block(Obj.obj o)
 
 
@@ -316,17 +314,10 @@ let val_of_idkey key =
     v
 
 let val_of_rel k = val_of_idkey (RelKey k)
-let val_of_rel_def k v = val_of_atom(Aiddef(RelKey k, v))
 
 let val_of_named id = val_of_idkey (VarKey id)
-let val_of_named_def id v = val_of_atom(Aiddef(VarKey id, v))
 
 let val_of_constant c = val_of_idkey (ConstKey c)
-let val_of_constant_def n c v =
-  let res = Obj.new_block accu_tag 2 in
-  Obj.set_field res 0 (Obj.repr (mkAccuCond n));
-  Obj.set_field res 1 (Obj.repr (Aiddef(ConstKey c, v)));
-  val_of_obj res
 
 external val_of_annot_switch : annot_switch -> values = "%identity"
 

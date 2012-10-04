@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,12 +9,13 @@
 (** This module is about the low-level declaration of logical objects *)
 
 open Pp
+open Errors
 open Util
 open Names
 open Libnames
+open Globnames
 open Nameops
 open Term
-open Sign
 open Declarations
 open Entries
 open Libobject
@@ -64,11 +65,11 @@ let cache_variable ((sp,_),o) =
   let impl,opaq,cst = match d with (* Fails if not well-typed *)
     | SectionLocalAssum (ty, impl) ->
         let cst = Global.push_named_assum (id,ty) in
-	let impl = if impl then Lib.Implicit else Lib.Explicit in
+	let impl = if impl then Implicit else Explicit in
 	impl, true, cst
     | SectionLocalDef (c,t,opaq) ->
         let cst = Global.push_named_def (id,c,t) in
-        Lib.Explicit, opaq, cst in
+        Explicit, opaq, cst in
   Nametab.push (Nametab.Until 1) (restrict_path 0 sp) (VarRef id);
   add_section_variable id impl;
   Dischargedhypsmap.set_discharged_hyps sp [];
@@ -116,7 +117,7 @@ let open_constant i ((sp,kn),_) =
     Nametab.push (Nametab.Exactly i) sp (ConstRef con)
 
 let exists_name id =
-  variable_exists id or Global.exists_label (label_of_id id)
+  variable_exists id or Global.exists_objlabel (label_of_id id)
 
 let check_exists sp =
   let id = basename sp in
@@ -182,7 +183,7 @@ let declare_constant ?(internal = UserVerbose) id (cd,kind) =
 (** Declaration of inductive blocks *)
 
 let declare_inductive_argument_scopes kn mie =
-  list_iter_i (fun i {mind_entry_consnames=lc} ->
+  List.iteri (fun i {mind_entry_consnames=lc} ->
     Notation.declare_ref_arguments_scope (IndRef (kn,i));
     for j=1 to List.length lc do
       Notation.declare_ref_arguments_scope (ConstructRef ((kn,i),j));
@@ -277,10 +278,10 @@ let declare_mind isrecord mie =
 
 (* Declaration messages *)
 
-let pr_rank i = str (ordinal (i+1))
+let pr_rank i = pr_nth (i+1)
 
 let fixpoint_message indexes l =
-  Flags.if_verbose msgnl (match l with
+  Flags.if_verbose msg_info (match l with
   | [] -> anomaly "no recursive definition"
   | [id] -> pr_id id ++ str " is recursively defined" ++
       (match indexes with
@@ -295,7 +296,7 @@ let fixpoint_message indexes l =
 		    | None -> mt ()))
 
 let cofixpoint_message l =
-  Flags.if_verbose msgnl (match l with
+  Flags.if_verbose msg_info (match l with
   | [] -> anomaly "No corecursive definition."
   | [id] -> pr_id id ++ str " is corecursively defined"
   | l -> hov 0 (prlist_with_sep pr_comma pr_id l ++
@@ -305,7 +306,7 @@ let recursive_message isfix i l =
   (if isfix then fixpoint_message i else cofixpoint_message) l
 
 let definition_message id =
-  Flags.if_verbose msgnl (pr_id id ++ str " is defined")
+  Flags.if_verbose msg_info (pr_id id ++ str " is defined")
 
 let assumption_message id =
-  Flags.if_verbose msgnl (pr_id id ++ str " is assumed")
+  Flags.if_verbose msg_info (pr_id id ++ str " is assumed")

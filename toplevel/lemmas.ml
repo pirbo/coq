@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,6 +9,7 @@
 (* Created by Hugo Herbelin from contents related to lemma proofs in
    file command.ml, Aug 2009 *)
 
+open Errors
 open Util
 open Flags
 open Pp
@@ -18,17 +19,16 @@ open Declarations
 open Entries
 open Environ
 open Nameops
-open Libnames
+open Globnames
 open Decls
 open Decl_kinds
 open Declare
 open Pretyping
 open Termops
 open Namegen
-open Evd
 open Evarutil
 open Reductionops
-open Topconstr
+open Constrexpr
 open Constrintern
 open Impargs
 open Tacticals
@@ -51,11 +51,11 @@ let adjust_guardness_conditions const = function
   | Fix ((nv,0),(_,_,fixdefs as fixdecls)) ->
 (*      let possible_indexes =
 	List.map2 (fun i c -> match i with Some i -> i | None ->
-	  interval 0 (List.length ((lam_assum c))))
+	  List.interval 0 (List.length ((lam_assum c))))
 	  lemma_guard (Array.to_list fixdefs) in
 *)
       let indexes =
-	search_guard dummy_loc (Global.env()) possible_indexes fixdecls in
+	search_guard Loc.ghost (Global.env()) possible_indexes fixdecls in
       { const with const_entry_body = mkFix ((indexes,0),fixdecls) }
   | c -> const
 
@@ -84,7 +84,7 @@ let find_mutually_recursive_statements thms =
         (fun env c -> fst (whd_betadeltaiota_stack env Evd.empty c))
         (Global.env()) hyps in
       let ind_hyps =
-        List.flatten (list_map_i (fun i (_,b,t) ->
+        List.flatten (List.map_i (fun i (_,b,t) ->
           match kind_of_term t with
           | Ind (kn,_ as ind) when
                 let mind = Global.lookup_mind kn in
@@ -108,14 +108,14 @@ let find_mutually_recursive_statements thms =
     (* Check if all conclusions are coinductive in the same type *)
     (* (degenerated cartesian product since there is at most one coind ccl) *)
     let same_indccl =
-      list_cartesians_filter (fun hyp oks ->
+      List.cartesians_filter (fun hyp oks ->
 	if List.for_all (of_same_mutind hyp) oks
 	then Some (hyp::oks) else None) [] ind_ccls in
     let ordered_same_indccl =
-      List.filter (list_for_all_i (fun i ((kn,j),_,_) -> i=j) 0) same_indccl in
+      List.filter (List.for_all_i (fun i ((kn,j),_,_) -> i=j) 0) same_indccl in
     (* Check if some hypotheses are inductive in the same type *)
     let common_same_indhyp =
-      list_cartesians_filter (fun hyp oks ->
+      List.cartesians_filter (fun hyp oks ->
 	if List.for_all (of_same_mutind hyp) oks
 	then Some (hyp::oks) else None) [] inds_hyps in
     let ordered_inds,finite,guard =
@@ -124,16 +124,16 @@ let find_mutually_recursive_statements thms =
 	  assert (rest=[]);
           (* One occ. of common coind ccls and no common inductive hyps *)
 	  if common_same_indhyp <> [] then
-	    if_verbose msgnl (str "Assuming mutual coinductive statements.");
+	    if_verbose msg_info (str "Assuming mutual coinductive statements.");
 	  flush_all ();
           indccl, true, []
       | [], _::_ ->
 	  if same_indccl <> [] &&
-	     list_distinct (List.map pi1 (List.hd same_indccl)) then
-	    if_verbose msgnl (strbrk "Coinductive statements do not follow the order of definition, assuming the proof to be by induction."); flush_all ();
+	     List.distinct (List.map pi1 (List.hd same_indccl)) then
+	    if_verbose msg_info (strbrk "Coinductive statements do not follow the order of definition, assuming the proof to be by induction."); flush_all ();
           let possible_guards = List.map (List.map pi3) inds_hyps in
 	  (* assume the largest indices as possible *)
-	  list_last common_same_indhyp, false, possible_guards
+	  List.last common_same_indhyp, false, possible_guards
       | _, [] ->
 	  error
             ("Cannot find common (mutual) inductive premises or coinductive" ^
@@ -160,7 +160,7 @@ let save id const do_guard (locality,kind) hook =
   let {const_entry_body = pft;
        const_entry_type = tpo;
        const_entry_opaque = opacity } = const in
-  let k = logical_kind_of_goal_kind kind in
+  let k = Kindops.logical_kind_of_goal_kind kind in
   let l,r = match locality with
     | Local when Lib.sections_are_opened () ->
 	let c = SectionLocalDef (pft, tpo, opacity) in
@@ -202,7 +202,7 @@ let save_remaining_recthms (local,kind) body opaq i (id,(t_i,(_,imps))) =
           let kn = declare_constant id (ParameterEntry (None,t_i,None), k) in
           (Global,ConstRef kn,imps))
   | Some body ->
-      let k = logical_kind_of_goal_kind kind in
+      let k = Kindops.logical_kind_of_goal_kind kind in
       let body_i = match kind_of_term body with
         | Fix ((nv,0),decls) -> mkFix ((nv,i),decls)
         | CoFix (0,decls) -> mkCoFix (i,decls)
@@ -265,7 +265,7 @@ let rec_tac_initializer finite guard thms snl =
   else
     (* nl is dummy: it will be recomputed at Qed-time *)
     let nl = match snl with 
-     | None -> List.map succ (List.map list_last guard)
+     | None -> List.map succ (List.map List.last guard)
      | Some nl -> nl
     in match List.map2 (fun (id,(t,_)) n -> (id,n,t)) thms nl with
        | (id,n,_)::l -> Hiddentac.h_mutual_fix true id n l
@@ -302,7 +302,7 @@ let start_proof_with_initialization kind recguard thms snl hook =
           if other_thms = [] then [] else
             (* there are several theorems defined mutually *)
             let body,opaq = retrieve_first_recthm ref in
-            list_map_i (save_remaining_recthms kind body opaq) 1 other_thms in
+            List.map_i (save_remaining_recthms kind body opaq) 1 other_thms in
         let thms_data = (strength,ref,imps)::other_thms_data in
         List.iter (fun (strength,ref,imps) ->
 	  maybe_declare_manual_implicits false ref imps;

@@ -1,21 +1,24 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Loc
+open Pp
 open Names
 open Glob_term
 open Extend
 open Vernacexpr
 open Genarg
-open Topconstr
+open Constrexpr
 open Tacexpr
 open Libnames
 open Compat
+open Misctypes
+open Genredexpr
 
 (** The parser of Coq *)
 
@@ -153,7 +156,6 @@ val create_generic_entry : string -> ('a, rlevel) abstract_argument_type ->
 
 module Prim :
   sig
-    open Util
     open Names
     open Libnames
     val preident : string Gram.entry
@@ -170,7 +172,7 @@ module Prim :
     val qualid : qualid located Gram.entry
     val fullyqualid : identifier list located Gram.entry
     val reference : reference Gram.entry
-    val by_notation : (loc * string * string option) Gram.entry
+    val by_notation : (Loc.t * string * string option) Gram.entry
     val smart_global : reference or_by_notation Gram.entry
     val dirpath : dir_path Gram.entry
     val ne_string : string Gram.entry
@@ -219,12 +221,13 @@ module Tactic :
     val int_or_var : int or_var Gram.entry
     val red_expr : raw_red_expr Gram.entry
     val simple_tactic : raw_atomic_tactic_expr Gram.entry
-    val simple_intropattern : Genarg.intro_pattern_expr located Gram.entry
+    val simple_intropattern : intro_pattern_expr located Gram.entry
     val tactic_arg : raw_tactic_arg Gram.entry
     val tactic_expr : raw_tactic_expr Gram.entry
     val binder_tactic : raw_tactic_expr Gram.entry
     val tactic : raw_tactic_expr Gram.entry
     val tactic_eoi : raw_tactic_expr Gram.entry
+    val tacdef_body : (reference * bool * raw_tactic_expr) Gram.entry
   end
 
 module Vernac_ :
@@ -240,7 +243,7 @@ module Vernac_ :
   end
 
 (** The main entry: reads an optional vernac command *)
-val main_entry : (loc * vernac_expr) option Gram.entry
+val main_entry : (Loc.t * vernac_expr) option Gram.entry
 
 (** Mapping formal entries into concrete ones *)
 
@@ -287,15 +290,15 @@ val interp_entry_name : bool (** true to fail on unknown entry *) ->
 
 val find_position :
   bool (** true if for creation in pattern entry; false if in constr entry *) ->
-  gram_assoc option -> int option ->
-    gram_position option * gram_assoc option * string option *
-    (** for reinitialization: *) gram_assoc option
+  Extend.gram_assoc option -> int option ->
+    Extend.gram_position option * Extend.gram_assoc option * string option *
+    (** for reinitialization: *) Extend.gram_assoc option
 
 val synchronize_level_positions : unit -> unit
 
 val register_empty_levels : bool -> int list ->
-    (gram_position option * gram_assoc option *
-     string option * gram_assoc option) list
+    (Extend.gram_position option * Extend.gram_assoc option *
+     string option * Extend.gram_assoc option) list
 
 val remove_levels : int -> unit
 

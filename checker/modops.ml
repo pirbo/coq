@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 (*i*)
+open Errors
 open Util
 open Pp
 open Names
@@ -36,7 +37,7 @@ let error_no_such_label_sub l l1 =
 let error_not_a_module_loc loc s =
   user_err_loc (loc,"",str ("\""^string_of_label s^"\" is not a module"))
 
-let error_not_a_module s = error_not_a_module_loc dummy_loc s
+let error_not_a_module s = error_not_a_module_loc Loc.ghost s
 
 let error_with_incorrect l =
   error ("Incorrect constraint for label \""^(string_of_label l)^"\"")

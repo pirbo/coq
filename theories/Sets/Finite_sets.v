@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -61,7 +61,7 @@ Section Ensembles_finis_facts.
             (exists x : _, X = Add U A x /\ ~ In U A x /\ cardinal U A n)
       end.
   Proof.
-    induction 1; simpl in |- *; auto.
+    induction 1; simpl; auto.
     exists A; exists x; auto.
   Qed.
 
@@ -73,7 +73,7 @@ Section Ensembles_finis_facts.
 	| S n => Inhabited U X
       end.
   Proof.
-    intros X p C; elim C; simpl in |- *; trivial with sets.
+    intros X p C; elim C; simpl; trivial with sets.
   Qed.
 
 End Ensembles_finis_facts.

@@ -133,7 +133,7 @@
 
 %%%%%%% Coq pour les nuls %%%%%%%
 
-\title{Coq Version 8.3 for the Clueless\\
+\title{Coq Version 8.4 for the Clueless\\
   \large(\protect\ref{lastquestion}
   \ Hints)
 }
@@ -379,15 +379,15 @@ This FAQ is unfinished (in the sense that there are some obvious
 sections that are missing). Please send contributions to Coq-Club.
 
 \Question{Is there any mailing list about {\Coq}?} 
-The main {\Coq} mailing list is \url{coq-club@pauillac.inria.fr}, which
+The main {\Coq} mailing list is \url{coq-club@inria.fr}, which
 broadcasts questions and suggestions about the implementation, the
 logical formalism or proof developments. See
-\ahref{http://coq.inria.fr/mailman/listinfo/coq-club}{\url{http://pauillac.inria.fr/mailman/listinfo/coq-club}} for
+\ahref{http://coq.inria.fr/mailman/listinfo/coq-club}{\url{http://sympa-roc.inria.fr/wws/info/coq-club}} for
 subscription. For bugs reports see question \ref{coqbug}.
 
 \Question{Where can I find an archive of the list?}
 The archives of the {\Coq} mailing list are available at
-\ahref{http://pauillac.inria.fr/pipermail/coq-club}{\url{http://coq.inria.fr/pipermail/coq-club}}.
+\ahref{http://pauillac.inria.fr/pipermail/coq-club}{\url{http://sympa-roc.inria.fr/wws/arc/coq-club}}.
 
 
 \Question{How can I be kept informed of new releases of {\Coq}?}
@@ -545,7 +545,7 @@ dependent elimination of reflexive equality proofs.
 \begin{coq_example*}
 Axiom Streicher_K :
   forall (A:Type) (x:A) (P: x=x -> Prop),
-    P (refl_equal x) -> forall p: x=x, P p.
+    P (eq_refl x) -> forall p: x=x, P p.
 \end{coq_example*}
 
 In the general case, axiom $K$ is an independent statement of the
@@ -563,7 +563,7 @@ Axiom UIP : forall (A:Set) (x y:A) (p1 p2: x=y), p1 = p2.
 Axiom $K$ is also equivalent to {\em Uniqueness of Reflexive Identity Proofs} \cite{HofStr98}
 
 \begin{coq_example*}
-Axiom UIP_refl : forall (A:Set) (x:A) (p: x=x), p = refl_equal x.
+Axiom UIP_refl : forall (A:Set) (x:A) (p: x=x), p = eq_refl x.
 \end{coq_example*}
 
 Axiom $K$ is also equivalent to 
@@ -1028,7 +1028,7 @@ You can use a what is called a hints' base.
 \begin{coq_example}
 Require Import ZArith.
 Require Ring.
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 Lemma toto1 : 1+1 = 2.
 ring.
 Qed.
@@ -1124,7 +1124,7 @@ Just use the {\ring} tactic.
 \begin{coq_example}
 Require Import ZArith.
 Require Ring.
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 Goal forall a b : Z, (a+b)*(a+b) = a*a + 2*a*b + b*b. 
 intros.
 ring.
@@ -1138,7 +1138,7 @@ Just use the {\field} tactic.
 \begin{coq_example}
 Require Import Reals.
 Require Ring.
-Open Local Scope R_scope.
+Local Open Scope R_scope.
 Goal forall a b : R, b*a<>0 -> (a/b) * (b/a) = 1. 
 intros.
 field.
@@ -1157,7 +1157,7 @@ Qed.
 \begin{coq_example}
 Require Import ZArith.
 Require Omega.
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 Goal forall a : Z, a>0 -> a+a > a. 
 intros.
 omega.
@@ -1310,7 +1310,7 @@ You need to use the {\try} and {\solve} tactics. For instance:
 \begin{coq_example}
 Require Import ZArith.
 Require Ring.
-Open Local Scope Z_scope.
+Local Open Scope Z_scope.
 Goal forall a b c : Z, a+b=b+a.
 Proof with try solve [ring].
 intros...
@@ -2013,7 +2013,7 @@ containing:
   \begin{itemize}
   \item in \verb+g_hello.ml4+:
 \begin{verbatim}
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 TACTIC EXTEND Hello
 | [ "hello" ] -> [ Coq_hello.printHello ]
 END
@@ -2108,7 +2108,7 @@ Yes, because equality is decidable on {\tt nat}. Here is the proof.
 Require Import Eqdep_dec.
 Require Import Peano_dec.
 Theorem K_nat :
-  forall (x:nat) (P:x = x -> Prop), P (refl_equal x) -> forall p:x = x, P p.
+  forall (x:nat) (P:x = x -> Prop), P (eq_refl x) -> forall p:x = x, P p.
 Proof.
 intros; apply K_dec_set with (p := p).
 apply eq_nat_dec.
@@ -2139,16 +2139,16 @@ Theorem le_uniqueness_proof : forall (n m : nat) (p q : n <= m), p = q.
 Proof.
 induction p using le_ind'; intro q.
  replace (le_n n) with
-  (eq_rect _ (fun n0 => n <= n0) (le_n n) _ (refl_equal n)).
+  (eq_rect _ (fun n0 => n <= n0) (le_n n) _ eq_refl).
  2:reflexivity.
-  generalize (refl_equal n).
+  generalize (eq_refl n).
     pattern n at 2 4 6 10, q; case q; [intro | intros m l e].
      rewrite <- eq_rect_eq_nat; trivial.
      contradiction (le_Sn_n m); rewrite <- e; assumption.
  replace (le_S n m p) with
-  (eq_rect _ (fun n0 => n <= n0) (le_S n m p) _ (refl_equal (S m))).
+  (eq_rect _ (fun n0 => n <= n0) (le_S n m p) _ eq_refl).
  2:reflexivity.
-  generalize (refl_equal (S m)).
+  generalize (eq_refl (S m)).
     pattern (S m) at 1 3 4 6, q; case q; [intro Heq | intros m0 l HeqS].
      contradiction (le_Sn_n m); rewrite Heq; assumption.
      injection HeqS; intro Heq; generalize l HeqS.
@@ -2342,20 +2342,13 @@ rendering tool provided by the server (see
 
 \Question{How to enable Emacs keybindings?}
 
-Depending on your configuration, use either one of these two methods
-
-\begin{itemize}
-
-\item Insert \texttt{gtk-key-theme-name = "Emacs"}
-    in your \texttt{coqide-gtk2rc} file. It should be in
-    \verb#$XDG_CONFIG_DIRS/coq# dir. This is done by default.
-
-\item If in Gnome, run the gnome configuration editor (\texttt{gconf-editor})
+If in Gnome, run the gnome configuration editor (\texttt{gconf-editor})
 and set key \texttt{gtk-key-theme} to \texttt{Emacs} in the category
 \texttt{desktop/gnome/interface}.
 
-\end{itemize}
-
+Otherwise, you need to find where the \verb#gtk-key-theme-name# option is located in
+your configuration, and set it to \texttt{Emacs}. Usually, it is in the
+\verb#$(HOME)/.gtkrc-2.0# file.
 
 
 %$ juste pour que la coloration emacs marche
@@ -2405,34 +2398,16 @@ keycode  24 = a A a A U2200 NoSymbol U2200 NoSymbol
 keycode  26 = e E e E U2203 NoSymbol U2203 NoSymbol
 \end{verbatim}
 and then run xmodmap ~/.xmodmaprc.
-
-	Alternatively, if your version of \verb=xmodmap= does not support unicode, you need to use something like
-\begin{verbatim}
-xmodmap -e "keycode  24 = a A F13 F13"
-xmodmap -e "keycode  26 = e E F14 F14"
-\end{verbatim}
-	and then to add
-
-\verb=bind "F13" {"insert-at-cursor" ("=$\forall$\verb=")}=\\
-\verb=bind "F14" {"insert-at-cursor" ("=$\exists$\verb=")}=
-
-	to your "binding "text"" section in \verb#coqiderc-gtk2rc#.
-	The last arguments to {\tt bind} between "" are
-        the UTF-8 encodings for 0x2200 and 0x2203.
-	You can compute these encodings using the lablgtk2 toplevel with
-\begin{verbatim}		
-Glib.Utf8.from_unichar 0x2200;;
-\end{verbatim}
-	Further symbols can be bound on higher Fxx keys or on even on other keys you
-	do not need .
 \end{itemize}
+
+	Alternatively, you may use an input method editor such as SCIM or iBus.
+The latter offers a \LaTeX-like input method.
 
 \Question{How to customize the shortcuts for menus?}
  Two solutions are offered:
 \begin{itemize}
 \item Edit \verb+$XDG_CONFIG_HOME/coq/coqide.keys+ (which is usually \verb+$HOME/.config/coq/coqide.keys+) by hand or
-\item Add "gtk-can-change-accels = 1" in your coqide-gtk2rc file. Then
-    from \CoqIde, you may select a menu entry and press the desired 
+\item If your system supports it, from \CoqIde, you may select a menu entry and press the desired 
     shortcut. 
 \end{itemize}
 
@@ -2561,7 +2536,7 @@ existential variables.
 Lemma example_show_existentials :  forall a b c:nat, a=b -> b=c -> a=c.
 Proof.
 intros.
-eapply trans_equal.
+eapply eq_trans.
 Show Existentials.
 eassumption.
 assumption.

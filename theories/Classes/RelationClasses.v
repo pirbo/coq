@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -130,7 +130,7 @@ Tactic Notation "apply" "*" constr(t) :=
 
 Ltac simpl_relation :=
   unfold flip, impl, arrow ; try reduce ; program_simpl ;
-    try ( solve [ intuition ]).
+    try ( solve [ dintuition ]).
 
 Local Obligation Tactic := simpl_relation.
 
@@ -286,7 +286,7 @@ Definition predicate_implication {l : Tlist} :=
 Infix "<∙>" := predicate_equivalence (at level 95, no associativity) : predicate_scope.
 Infix "-∙>" := predicate_implication (at level 70, right associativity) : predicate_scope.
 
-Open Local Scope predicate_scope.
+Local Open Scope predicate_scope.
 
 (** The pointwise liftings of conjunction and disjunctions.
    Note that these are [binary_operation]s, building new relations out of old ones. *)
@@ -316,7 +316,8 @@ Notation "∙⊥∙" := false_predicate : predicate_scope.
 
 (** Predicate equivalence is an equivalence, and predicate implication defines a preorder. *)
 
-Program Instance predicate_equivalence_equivalence : Equivalence (@predicate_equivalence l).
+Program Instance predicate_equivalence_equivalence : 
+  Equivalence (@predicate_equivalence l).
 
   Next Obligation.
     induction l ; firstorder.

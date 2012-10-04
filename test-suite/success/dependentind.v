@@ -68,7 +68,7 @@ where " Γ ⊢ τ " := (term Γ τ) : type_scope.
 
 Hint Constructors term : lambda.
 
-Open Local Scope context_scope.
+Local Open Scope context_scope.
 
 Ltac eqns := subst ; reverse ; simplify_dep_elim ; simplify_IH_hyps.
 
@@ -90,6 +90,28 @@ Proof with simpl in * ; eqns ; eauto with lambda.
   intro. eapply app...
 Defined.
 
+Lemma weakening_ctx : forall Γ Δ τ, Γ ; Δ ⊢ τ ->
+  forall Δ', Γ ; Δ' ; Δ ⊢ τ.
+Proof with simpl in * ; eqns ; eauto with lambda.
+  intros Γ Δ τ H.
+
+  dependent induction H.
+
+  destruct Δ as [|Δ τ'']...
+  induction Δ'...
+
+  destruct Δ as [|Δ τ'']...
+  induction Δ'...
+
+  destruct Δ as [|Δ τ'']...
+    apply abs.
+    specialize (IHterm Γ (empty, τ))...
+
+    apply abs.
+    specialize (IHterm Γ (Δ, τ'', τ))...
+
+  intro. eapply app...
+Defined.
 
 Lemma exchange : forall Γ Δ α β τ, term (Γ, α, β ; Δ) τ -> term (Γ, β, α ; Δ) τ.
 Proof with simpl in * ; eqns ; eauto.
@@ -111,6 +133,8 @@ Proof with simpl in * ; eqns ; eauto.
 
   eapply app...
 Defined.
+
+
 
 (** Example by Andrew Kenedy, uses simplification of the first component of dependent pairs. *)
 

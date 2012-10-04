@@ -1,17 +1,17 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Names
 open Univ
 open Term
 open Declarations
-open Sign
 open Environ
 open Entries
 open Reduction
@@ -21,7 +21,7 @@ open Type_errors
 let conv_leq l2r = default_conv CUMUL ~l2r
 
 let conv_leq_vecti env v1 v2 =
-  array_fold_left2_i
+  Array.fold_left2_i
     (fun i c t1 t2 ->
       let c' =
         try default_conv CUMUL env t1 t2
@@ -94,7 +94,7 @@ let judge_of_variable env id =
 (* Checks if a context of variable can be instantiated by the
    variables of the current env *)
 (* TODO: check order? *)
-let rec check_hyps_inclusion env sign =
+let check_hyps_inclusion env sign =
   Sign.fold_named_context
     (fun (id,_,ty1) () ->
       let ty2 = named_type id env in
@@ -476,7 +476,7 @@ and execute_recdef env (names,lar,vdef) i cu =
   univ_combinator cu2
     ((lara.(i),(names,lara,vdefv)),cst)
 
-and execute_array env = array_fold_map' (execute env)
+and execute_array env = Array.fold_map' (execute env)
 
 (* Derived functions *)
 let infer env constr =

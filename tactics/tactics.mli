@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Loc
+open Pp
 open Names
 open Term
 open Environ
@@ -19,7 +20,7 @@ open Evar_refiner
 open Clenv
 open Redexpr
 open Tacticals
-open Libnames
+open Globnames
 open Genarg
 open Tacexpr
 open Nametab
@@ -27,6 +28,8 @@ open Glob_term
 open Pattern
 open Termops
 open Unification
+open Misctypes
+open Locus
 
 (** Main tactics. *)
 
@@ -115,7 +118,7 @@ val assumption       : tactic
 val exact_no_check   : constr -> tactic
 val vm_cast_no_check : constr -> tactic
 val exact_check      : constr -> tactic
-val exact_proof      : Topconstr.constr_expr -> tactic
+val exact_proof      : Constrexpr.constr_expr -> tactic
 
 (** {6 Reduction tactics. } *)
 
@@ -292,10 +295,10 @@ val new_destruct : evars_flag ->
 (** {6 Generic case analysis / induction tactics. } *)
 
 val induction_destruct : rec_flag -> evars_flag ->
-  ((evar_map * constr with_bindings) induction_arg list *
-  constr with_bindings option *
+  ((evar_map * constr with_bindings) induction_arg *
   (intro_pattern_expr located option * intro_pattern_expr located option))
   list *
+  constr with_bindings option *
   clause option -> tactic
 
 (** {6 Eliminations giving the type instead of the proof. } *)

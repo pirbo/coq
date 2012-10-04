@@ -1,13 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Names
-open Libnames
+open Globnames
 open Term
 open Environ
 open Nametab
@@ -87,7 +87,7 @@ val positions_of_implicits : implicits_list -> int list
 (** A [manual_explicitation] is a tuple of a positional or named explicitation with
    maximal insertion, force inference and force usage flags. Forcing usage makes
    the argument implicit even if the automatic inference considers it not inferable. *)
-type manual_explicitation = Topconstr.explicitation * 
+type manual_explicitation = Constrexpr.explicitation *
     (maximal_insertion * force_inference * bool)
 
 type manual_implicits = manual_explicitation list

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -22,7 +22,7 @@ let (extern_state,intern_state) =
     extern_intern Coq_config.state_magic_number ".coq" in
   (fun s ->
     if !Flags.load_proofs <> Flags.Force then
-      Util.error "Write State only works with option -force-load-proofs";
+      Errors.error "Write State only works with option -force-load-proofs";
     raw_extern s (freeze())),
   (fun s ->
     unfreeze

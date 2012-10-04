@@ -1,22 +1,20 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pp
+open Errors
 open Util
 open Names
 open Term
 open Termops
 open Univ
 open Evd
-open Declarations
 open Environ
 open Closure
-open Esubst
 open Reduction
 
 exception Elimconst
@@ -28,19 +26,19 @@ exception Elimconst
 type 'a stack_member =
   | Zapp of 'a list
   | Zcase of case_info * 'a * 'a array
-  | Zfix of 'a * 'a stack
+  | Zfix of fixpoint * 'a list
   | Zshift of int
   | Zupdate of 'a
 
 and 'a stack = 'a stack_member list
 
 let empty_stack = []
-let append_stack_list l s =
+let append_stack_app_list l s =
   match (l,s) with
   | ([],s) -> s
   | (l1, Zapp l :: s) -> Zapp (l1@l) :: s
   | (l1, s) -> Zapp l1 :: s
-let append_stack v s = append_stack_list (Array.to_list v) s
+let append_stack_app v s = append_stack_app_list (Array.to_list v) s
 
 let rec stack_args_size = function
   | Zapp l::s -> List.length l + stack_args_size s
@@ -54,21 +52,35 @@ let rec decomp_stack = function
   | Zapp(v::l)::s -> Some (v, (Zapp l :: s))
   | Zapp [] :: s -> decomp_stack s
   | _ -> None
-let array_of_stack s =
-  let rec stackrec = function
-  | [] -> []
-  | Zapp args :: s -> args :: (stackrec s)
-  | _ -> assert false
-  in Array.of_list (List.concat (stackrec s))
-let rec list_of_stack = function
-  | [] -> []
-  | Zapp args :: s -> args @ (list_of_stack s)
-  | _ -> assert false
-let rec app_stack = function
+let rec strip_app = function
+  | Zapp args :: s -> let (args',s') = strip_app s in args @ args', s'
+  | s -> [],s
+let strip_n_app n s =
+  let apps,s' = strip_app s in
+  try
+    let bef,aft = List.chop n apps in
+    match aft with
+      |h::[] -> Some (bef,h,s')
+      |h::t -> Some (bef,h,append_stack_app_list t s')
+      |[] -> None
+  with
+    |Failure _ -> None
+let nfirsts_app_of_stack n s =
+  let (args, _) = strip_app s in List.firstn n args
+let list_of_app_stack s =
+  let (out,s') = strip_app s in
+  Option.init (s' = []) out
+let array_of_app_stack s =
+  Option.map Array.of_list (list_of_app_stack s)
+let rec zip = function
   | f, [] -> f
-  | f, (Zapp [] :: s) -> app_stack (f, s)
+  | f, (Zapp [] :: s) -> zip (f, s)
   | f, (Zapp args :: s) ->
-      app_stack (applist (f, args), s)
+      zip (applist (f, args), s)
+  | f, (Zcase (ci,rt,br)::s) -> zip (mkCase (ci,rt,f,br), s)
+  | f, (Zfix (fix,st)::s) -> zip
+    (mkFix fix, append_stack_app_list st (append_stack_app_list [f] s))
+  | f, (Zshift n::s) -> zip (lift n f, s)
   | _ -> assert false
 let rec stack_assign s p c = match s with
   | Zapp args :: s ->
@@ -76,7 +88,7 @@ let rec stack_assign s p c = match s with
       if p >= q then
 	Zapp args :: stack_assign s (p-q) c
       else
-        (match list_chop p args with
+        (match List.chop p args with
             (bef, _::aft) -> Zapp (bef@c::aft) :: s
           | _ -> assert false)
   | _ -> s
@@ -86,7 +98,7 @@ let rec stack_tail p s =
       | Zapp args :: s ->
 	  let q = List.length args in
 	  if p >= q then stack_tail (p-q) s
-	  else Zapp (list_skipn p args) :: s
+	  else Zapp (List.skipn p args) :: s
       | _ -> failwith "stack_tail"
 let rec stack_nth s p = match s with
   | Zapp args :: s ->
@@ -122,25 +134,11 @@ let safe_evar_value sigma ev =
   try Some (Evd.existential_value sigma ev)
   with NotInstantiatedEvar | Not_found -> None
 
-let rec whd_app_state sigma (x, stack as s) =
-  match kind_of_term x with
-    | App (f,cl) -> whd_app_state sigma (f, append_stack cl stack)
-    | Cast (c,_,_)  -> whd_app_state sigma (c, stack)
-    | Evar ev ->
-        (match safe_evar_value sigma ev with
-            Some c -> whd_app_state sigma (c,stack)
-          | _ -> s)
-    | _             -> s
-
 let safe_meta_value sigma ev =
   try Some (Evd.meta_value sigma ev)
   with Not_found -> None
 
-let appterm_of_stack (f,s) = (f,list_of_stack s)
-
-let whd_stack sigma x =
-  appterm_of_stack (whd_app_state sigma (x, empty_stack))
-let whd_castapp_stack = whd_stack
+let appterm_of_stack t = decompose_app (zip t)
 
 let strong whdfun env sigma t =
   let rec strongrec env t =
@@ -200,6 +198,7 @@ end : RedFlagsSig)
 open RedFlags
 
 (* Local *)
+let nored = mkflags []
 let beta = mkflags [fbeta]
 let eta = mkflags [feta]
 let zeta = mkflags [fzeta]
@@ -224,7 +223,7 @@ let rec stacklam recfun env t stack =
     | _ -> recfun (substl env t, stack)
 
 let beta_applist (c,l) =
-  stacklam app_stack [] c (append_stack_list l empty_stack)
+  stacklam zip [] c (append_stack_app_list l empty_stack)
 
 (* Iota reduction tools *)
 
@@ -242,13 +241,13 @@ let reducible_mind_case c = match kind_of_term c with
 let contract_cofix (bodynum,(types,names,bodies as typedbodies)) =
   let nbodies = Array.length bodies in
   let make_Fi j = mkCoFix (nbodies-j-1,typedbodies) in
-  substl (list_tabulate make_Fi nbodies) bodies.(bodynum)
+  substl (List.tabulate make_Fi nbodies) bodies.(bodynum)
 
 let reduce_mind_case mia =
   match kind_of_term mia.mconstr with
     | Construct (ind_sp,i) ->
 (*	let ncargs = (fst mia.mci).(i-1) in*)
-	let real_cargs = list_skipn mia.mci.ci_npar mia.mcargs in
+	let real_cargs = List.skipn mia.mci.ci_npar mia.mcargs in
         applist (mia.mlf.(i-1),real_cargs)
     | CoFix cofix ->
 	let cofix_def = contract_cofix cofix in
@@ -261,7 +260,7 @@ let reduce_mind_case mia =
 let contract_fix ((recindices,bodynum),(types,names,bodies as typedbodies)) =
   let nbodies = Array.length recindices in
   let make_Fi j = mkFix ((recindices,nbodies-j-1),typedbodies) in
-  substl (list_tabulate make_Fi nbodies) bodies.(bodynum)
+  substl (List.tabulate make_Fi nbodies) bodies.(bodynum)
 
 let fix_recarg ((recindices,bodynum),_) stack =
   assert (0 <= bodynum & bodynum < Array.length recindices);
@@ -270,18 +269,6 @@ let fix_recarg ((recindices,bodynum),_) stack =
     Some (recargnum, stack_nth stack recargnum)
   with Not_found ->
     None
-
-type fix_reduction_result = NotReducible | Reduced of state
-
-let reduce_fix whdfun sigma fix stack =
-  match fix_recarg fix stack with
-    | None -> NotReducible
-    | Some (recargnum,recarg) ->
-        let (recarg'hd,_ as recarg') = whdfun sigma (recarg, empty_stack) in
-        let stack' = stack_assign stack recargnum (app_stack recarg') in
-	(match kind_of_term recarg'hd with
-           | Construct _ -> Reduced (contract_fix fix, stack')
-	   | _ -> NotReducible)
 
 (* Generic reduction function *)
 
@@ -317,20 +304,20 @@ let rec whd_state_gen flags ts env sigma =
 	     | None -> s)
       | LetIn (_,b,_,c) when red_zeta flags -> stacklam whrec [b] c stack
       | Cast (c,_,_) -> whrec (c, stack)
-      | App (f,cl)  -> whrec (f, append_stack cl stack)
+      | App (f,cl)  -> whrec (f, append_stack_app cl stack)
       | Lambda (na,t,c) ->
           (match decomp_stack stack with
              | Some (a,m) when red_beta flags -> stacklam whrec [a] c m
              | None when red_eta flags ->
 		 let env' = push_rel (na,None,t) env in
 		 let whrec' = whd_state_gen flags ts env' sigma in
-                 (match kind_of_term (app_stack (whrec' (c, empty_stack))) with
+                 (match kind_of_term (zip (whrec' (c, empty_stack))) with
                     | App (f,cl) ->
 			let napp = Array.length cl in
 			if napp > 0 then
-			  let x', l' = whrec' (array_last cl, empty_stack) in
-                          match kind_of_term x', decomp_stack l' with
-                            | Rel 1, None ->
+			  let x', l' = whrec' (Array.last cl, empty_stack) in
+                          match kind_of_term x' with
+                            | Rel 1 when l' = empty_stack ->
 				let lc = Array.sub cl 0 (napp-1) in
 				let u = if napp=1 then f else appvect (f,lc) in
 				if noccurn 1 u then (pop u,empty_stack) else s
@@ -339,19 +326,32 @@ let rec whd_state_gen flags ts env sigma =
 		    | _ -> s)
 	     | _ -> s)
 
-      | Case (ci,p,d,lf) when red_iota flags ->
-          let (c,cargs) = whrec (d, empty_stack) in
-          if reducible_mind_case c then
-            whrec (reduce_mind_case
-                     {mP=p; mconstr=c; mcargs=list_of_stack cargs;
-		      mci=ci; mlf=lf}, stack)
-          else
-	    (mkCase (ci, p, app_stack (c,cargs), lf), stack)
+      | Case (ci,p,d,lf) ->
+	whrec (d, Zcase (ci,p,lf) :: stack)
 
-      | Fix fix when red_iota flags ->
-	  (match reduce_fix (fun _ -> whrec) sigma fix stack with
-             | Reduced s' -> whrec s'
-	     | NotReducible -> s)
+      | Fix ((ri,n),_ as f) ->
+	(match strip_n_app ri.(n) stack with
+	  |None -> s
+	  |Some (bef,arg,s') -> whrec (arg, Zfix(f,bef)::s'))
+
+      | Construct (ind,c) ->
+	if red_iota flags then
+	  match strip_app stack with
+	  |args, (Zcase(ci, _, lf)::s') ->
+	    whrec (lf.(c-1), append_stack_app_list (List.skipn ci.ci_npar args) s')
+	  |args, (Zfix (f,s')::s'') ->
+	    let x' = applist(x,args) in
+	    whrec (contract_fix f,append_stack_app_list s' (append_stack_app_list [x'] s''))
+	  |_ -> s
+	else s
+
+      | CoFix cofix ->
+	if red_iota flags then
+	  match strip_app stack with
+	  |args, (Zcase(ci, _, lf)::s') ->
+	    whrec (contract_cofix cofix, stack)
+	  |_ -> s
+	else s
 
       | x -> s
   in
@@ -362,18 +362,18 @@ let local_whd_state_gen flags sigma =
     match kind_of_term x with
       | LetIn (_,b,_,c) when red_zeta flags -> stacklam whrec [b] c stack
       | Cast (c,_,_) -> whrec (c, stack)
-      | App (f,cl)  -> whrec (f, append_stack cl stack)
+      | App (f,cl)  -> whrec (f, append_stack_app cl stack)
       | Lambda (_,_,c) ->
           (match decomp_stack stack with
              | Some (a,m) when red_beta flags -> stacklam whrec [a] c m
              | None when red_eta flags ->
-                 (match kind_of_term (app_stack (whrec (c, empty_stack))) with
+                 (match kind_of_term (zip (whrec (c, empty_stack))) with
                     | App (f,cl) ->
 			let napp = Array.length cl in
 			if napp > 0 then
-			  let x', l' = whrec (array_last cl, empty_stack) in
-                          match kind_of_term x', decomp_stack l' with
-                            | Rel 1, None ->
+			  let x', l' = whrec (Array.last cl, empty_stack) in
+                          match kind_of_term x' with
+                            | Rel 1 when l' = empty_stack ->
 				let lc = Array.sub cl 0 (napp-1) in
 				let u = if napp=1 then f else appvect (f,lc) in
 				if noccurn 1 u then (pop u,empty_stack) else s
@@ -382,19 +382,13 @@ let local_whd_state_gen flags sigma =
 		    | _ -> s)
 	     | _ -> s)
 
-      | Case (ci,p,d,lf) when red_iota flags ->
-          let (c,cargs) = whrec (d, empty_stack) in
-          if reducible_mind_case c then
-            whrec (reduce_mind_case
-                     {mP=p; mconstr=c; mcargs=list_of_stack cargs;
-		      mci=ci; mlf=lf}, stack)
-          else
-	    (mkCase (ci, p, app_stack (c,cargs), lf), stack)
+      | Case (ci,p,d,lf) ->
+	whrec (d, Zcase (ci,p,lf) :: stack)
 
-      | Fix fix when red_iota flags ->
-	  (match reduce_fix (fun _ ->whrec) sigma fix stack with
-             | Reduced s' -> whrec s'
-	     | NotReducible -> s)
+      | Fix ((ri,n),_ as f) ->
+	(match strip_n_app ri.(n) stack with
+	  |None -> s
+	  |Some (bef,arg,s') -> whrec (arg, Zfix(f,bef)::s'))
 
       | Evar ev ->
           (match safe_evar_value sigma ev with
@@ -406,6 +400,25 @@ let local_whd_state_gen flags sigma =
               Some c -> whrec (c,stack)
             | None -> s)
 
+      | Construct (ind,c) ->
+	if red_iota flags then
+	  match strip_app stack with
+	  |args, (Zcase(ci, _, lf)::s') ->
+	    whrec (lf.(c-1), append_stack_app_list (List.skipn ci.ci_npar args) s')
+	  |args, (Zfix (f,s')::s'') ->
+	    let x' = applist(x,args) in
+	    whrec (contract_fix f,append_stack_app_list s' (append_stack_app_list [x'] s''))
+	  |_ -> s
+	else s
+
+      | CoFix cofix ->
+	if red_iota flags then
+	  match strip_app stack with
+	  |args, (Zcase(ci, _, lf)::s') when red_iota flags ->
+	    whrec (contract_cofix cofix, stack)
+	  |_ -> s
+	else s
+
       | x -> s
   in
   whrec
@@ -415,7 +428,12 @@ let stack_red_of_state_red f sigma x =
   appterm_of_stack (f sigma (x, empty_stack))
 
 let red_of_state_red f sigma x =
-  app_stack (f sigma (x,empty_stack))
+  zip (f sigma (x,empty_stack))
+
+(* 0. No Reduction Functions *)
+
+let whd_nored_state = local_whd_state_gen nored
+let whd_nored_stack = stack_red_of_state_red whd_nored_state
 
 (* 1. Beta Reduction Functions *)
 
@@ -492,11 +510,11 @@ let whd_betadeltaiota_nolet env =
 
 (* 4. Eta reduction Functions *)
 
-let whd_eta c = app_stack (local_whd_state_gen eta Evd.empty (c,empty_stack))
+let whd_eta c = zip (local_whd_state_gen eta Evd.empty (c,empty_stack))
 
 (* 5. Zeta Reduction Functions *)
 
-let whd_zeta c = app_stack (local_whd_state_gen zeta Evd.empty (c,empty_stack))
+let whd_zeta c = zip (local_whd_state_gen zeta Evd.empty (c,empty_stack))
 
 (****************************************************************************)
 (*                   Reduction Functions                                    *)
@@ -537,7 +555,7 @@ let nf_betadeltaiota env sigma =
    du type checking :
      (fun x => x + x) M
 *)
-let rec whd_betaiota_preserving_vm_cast env sigma t =
+let whd_betaiota_preserving_vm_cast env sigma t =
    let rec stacklam_var subst t stack =
      match (decomp_stack stack,kind_of_term t) with
      | Some (h,stacktl), Lambda (_,_,c) ->
@@ -556,27 +574,39 @@ let rec whd_betaiota_preserving_vm_cast env sigma t =
               | Some body -> whrec (body, stack)
               | None -> s)
        | Cast (c,VMcast,t) ->
-           let c = app_stack (whrec (c,empty_stack)) in
-           let t = app_stack (whrec (t,empty_stack)) in
+           let c = zip (whrec (c,empty_stack)) in
+           let t = zip (whrec (t,empty_stack)) in
            (mkCast(c,VMcast,t),stack)
        | Cast (c,DEFAULTcast,_) ->
            whrec (c, stack)
-       | App (f,cl)  -> whrec (f, append_stack cl stack)
+       | App (f,cl)  -> whrec (f, append_stack_app cl stack)
        | Lambda (na,t,c) ->
            (match decomp_stack stack with
             | Some (a,m) -> stacklam_var [a] c m
             | _ -> s)
        | Case (ci,p,d,lf) ->
-           let (c,cargs) = whrec (d, empty_stack) in
-           if reducible_mind_case c then
-             whrec (reduce_mind_case
-                      {mP=p; mconstr=c; mcargs=list_of_stack cargs;
-                       mci=ci; mlf=lf}, stack)
-           else
-             (mkCase (ci, p, app_stack (c,cargs), lf), stack)
+	 whrec (d, Zcase (ci,p,lf) :: stack)
+
+       | Construct (ind,c) -> begin
+	 match strip_app stack with
+	   |args, (Zcase(ci, _, lf)::s') ->
+	     whrec (lf.(c-1), append_stack_app_list (List.skipn ci.ci_npar args) s')
+	   |args, (Zfix (f,s')::s'') ->
+	     let x' = applist(x,args) in
+	     whrec (contract_fix f,append_stack_app_list s' (append_stack_app_list [x'] s''))
+	   |_ -> s
+       end
+
+       | CoFix cofix -> begin
+	 match strip_app stack with
+	   |args, (Zcase(ci, _, lf)::s') ->
+	     whrec (contract_cofix cofix, stack)
+	   |_ -> s
+       end
+
        | x -> s
    in
-   app_stack (whrec (t,empty_stack))
+   zip (whrec (t,empty_stack))
 
 let nf_betaiota_preserving_vm_cast =
   strong whd_betaiota_preserving_vm_cast
@@ -810,21 +840,16 @@ let is_sort env sigma arity =
 let whd_betaiota_deltazeta_for_iota_state ts env sigma s =
   let rec whrec s =
     let (t, stack as s) = whd_betaiota_state sigma s in
-    match kind_of_term t with
-    | Case (ci,p,d,lf) ->
-        let (cr,crargs) = whd_betadeltaiota_stack_using ts env sigma d in
-        let rslt = mkCase (ci, p, applist (cr,crargs), lf) in
-        if reducible_mind_case cr then
-	  whrec (rslt, stack)
-        else
-	  s
-    | Fix fix ->
-	  (match
-              reduce_fix (whd_betadeltaiota_state_using ts env) sigma fix stack
-           with
-             | Reduced s -> whrec s
-	     | NotReducible -> s)
-    | _ -> s
+    match strip_app stack with
+      |args, (Zcase _ :: _ as stack') ->
+	let seq = (t,append_stack_app_list args empty_stack) in
+	let t_o,stack_o = whd_betadeltaiota_state_using ts env sigma seq in
+	if reducible_mind_case t_o then whrec (t_o, stack_o@stack') else s
+      |args, (Zfix _ :: _ as stack') ->
+	let seq = (t,append_stack_app_list args empty_stack) in
+	let t_o,stack_o = whd_betadeltaiota_state_using ts env sigma seq in
+	if isConstruct t_o then whrec (t_o, stack_o@stack') else s
+      |_ -> s
   in whrec s
 
 (* A reduction function like whd_betaiota but which keeps casts
@@ -841,7 +866,7 @@ let whd_programs_stack env sigma =
 	  if occur_existential c then
 	    s
 	  else
-	    whrec (mkApp (f, Array.sub cl 0 n), append_stack [|c|] stack)
+	    whrec (mkApp (f, Array.sub cl 0 n), append_stack_app [|c|] stack)
       | LetIn (_,b,_,c) ->
 	  if occur_existential b then
 	    s
@@ -855,25 +880,32 @@ let whd_programs_stack env sigma =
 	  if occur_existential d then
 	    s
 	  else
-            let (c,cargs) = whrec (d, empty_stack) in
-            if reducible_mind_case c then
-	      whrec (reduce_mind_case
-		       {mP=p; mconstr=c; mcargs=list_of_stack cargs;
-			mci=ci; mlf=lf}, stack)
-	    else
-	      (mkCase (ci, p, app_stack(c,cargs), lf), stack)
-      | Fix fix ->
-	  (match reduce_fix (fun _ ->whrec) sigma  fix stack with
-             | Reduced s' -> whrec s'
-	     | NotReducible -> s)
+	    whrec (d, Zcase (ci,p,lf) :: stack)
+      | Fix ((ri,n),_ as f) ->
+	(match strip_n_app ri.(n) stack with
+	  |None -> s
+	  |Some (bef,arg,s') -> whrec (arg, Zfix(f,bef)::s'))
+      | Construct (ind,c) -> begin
+	match strip_app stack with
+	  |args, (Zcase(ci, _, lf)::s') ->
+	    whrec (lf.(c-1), append_stack_app_list (List.skipn ci.ci_npar args) s')
+	  |args, (Zfix (f,s')::s'') ->
+	    let x' = applist(x,args) in
+	    whrec (contract_fix f,append_stack_app_list s' (append_stack_app_list [x'] s''))
+	  |_ -> s
+      end
+      | CoFix cofix -> begin
+	match strip_app stack with
+	  |args, (Zcase(ci, _, lf)::s') ->
+	     whrec (contract_cofix cofix, stack)
+	  |_ -> s
+      end
       | _ -> s
   in
   whrec
 
 let whd_programs env sigma x =
-  app_stack (whd_programs_stack env sigma (x, empty_stack))
-
-exception IsType
+  zip (whd_programs_stack env sigma (x, empty_stack))
 
 let find_conclusion env sigma =
   let rec decrec env c =

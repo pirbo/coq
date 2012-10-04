@@ -1,13 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 (*i*)
-open Util
+open Pp
 open Names
 open Term
 open Sign
@@ -24,6 +24,8 @@ open Termops
 open Glob_term
 open Genarg
 open Ind_tables
+open Locus
+open Misctypes
 (*i*)
 
 type dep_proof_flag = bool (* true = support rewriting dependent proofs *)
@@ -89,9 +91,9 @@ val discrHyp     : identifier -> tactic
 val discrEverywhere : evars_flag -> tactic
 val discr_tac    : evars_flag ->
   constr with_bindings induction_arg option -> tactic
-val inj          : intro_pattern_expr located list -> evars_flag ->
+val inj          : intro_pattern_expr Loc.located list -> evars_flag ->
   constr with_bindings -> tactic
-val injClause    : intro_pattern_expr located list -> evars_flag ->
+val injClause    : intro_pattern_expr Loc.located list -> evars_flag ->
   constr with_bindings induction_arg option -> tactic
 val injHyp       : identifier -> tactic
 val injConcl     : tactic

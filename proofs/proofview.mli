@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -24,6 +24,16 @@ open Term
 
 type proofview 
 
+
+(* Returns a stylised view of a proofview for use by, for instance,
+   ide-s. *)
+(* spiwack: the type of [proofview] will change as we push more
+   refined functions to ide-s. This would be better than spawning a
+   new nearly identical function everytime. Hence the generic name. *)
+(* In this version: returns the list of focused goals together with
+   the [evar_map] context. *)
+val proofview : proofview -> Goal.goal list * Evd.evar_map
+
 (* Initialises a proofview, the argument is a list of environement, 
    conclusion types, creating that many initial goals. *)
 val init : (Environ.env * Term.types) list -> proofview
@@ -45,6 +55,14 @@ exception IndexOutOfRange
 
 (* Type of the object which allow to unfocus a view.*)
 type focus_context
+
+(* Returns a stylised view of a focus_context for use by, for
+   instance, ide-s. *)
+(* spiwack: the type of [focus_context] will change as we push more
+   refined functions to ide-s. This would be better than spawning a
+   new nearly identical function everytime. Hence the generic name. *)
+(* In this version: returns the number of goals that are held *)
+val focus_context : focus_context -> Goal.goal list * Goal.goal list
 
 (* [focus i j] focuses a proofview on the goals from index [i] to index [j] 
    (inclusive). (i.e. goals number [i] to [j] become the only goals of the
@@ -116,12 +134,17 @@ val tclTHEN : unit tactic -> 'a tactic -> 'a tactic
    but drops the value at the end. *)
 val tclIGNORE : 'a tactic -> unit tactic
 
-(* [tclOR t1 t2 = t1] if t1 succeeds and [tclOR t1 t2 = t2] if t2 fails. 
-    No interleaving at this point. *)
+(* [tclOR t1 t2 = t1] as long as [t1] succeeds. Whenever the successes
+   of [t1] have been depleted, then it behaves as [t2].  No
+   interleaving at this point. *)
 val tclOR : 'a tactic -> 'a tactic -> 'a tactic
 
 (* [tclZERO] always fails *)
 val tclZERO : exn -> 'a tactic
+
+(* [tclORELSE t1 t2] behaves like [t1] if [t1] succeeds at least once
+   or [t2] if [t1] fails. *)
+val tclORELSE : 'a tactic -> 'a tactic -> 'a tactic
 
 (* Focuses a tactic at a range of subgoals, found by their indices. *)
 val tclFOCUS : int -> int -> 'a tactic -> 'a tactic
@@ -210,9 +233,5 @@ module V82 : sig
   val top_evars : proofview -> Evd.evar list
     
   (* Implements the Existential command *)
-  val instantiate_evar : int -> Topconstr.constr_expr -> proofview -> proofview
-
-  (* spiwack: [purify] might be useful while writing tactics manipulating exception 
-     explicitely or from the [V82] submodule (neither being advised, though *)
-  val purify : 'a tactic -> 'a tactic
+  val instantiate_evar : int -> Constrexpr.constr_expr -> proofview -> proofview
 end

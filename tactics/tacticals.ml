@@ -1,31 +1,23 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Term
 open Termops
 open Sign
 open Declarations
-open Inductive
-open Reduction
-open Environ
-open Libnames
-open Refiner
 open Tacmach
 open Clenv
 open Clenvtac
-open Glob_term
-open Pattern
-open Matching
-open Genarg
-open Tacexpr
+open Misctypes
 
 (************************************************************************)
 (* Tacticals re-exported from the Refiner module                        *)
@@ -53,7 +45,6 @@ let tclREPEAT_MAIN   = Refiner.tclREPEAT_MAIN
 let tclFIRST         = Refiner.tclFIRST
 let tclSOLVE         = Refiner.tclSOLVE
 let tclTRY           = Refiner.tclTRY
-let tclINFO          = Refiner.tclINFO
 let tclCOMPLETE      = Refiner.tclCOMPLETE
 let tclAT_LEAST_ONCE = Refiner.tclAT_LEAST_ONCE
 let tclFAIL          = Refiner.tclFAIL
@@ -62,6 +53,7 @@ let tclDO            = Refiner.tclDO
 let tclTIMEOUT       = Refiner.tclTIMEOUT
 let tclWEAK_PROGRESS = Refiner.tclWEAK_PROGRESS
 let tclPROGRESS      = Refiner.tclPROGRESS
+let tclSHOWHYPS      = Refiner.tclSHOWHYPS
 let tclNOTSAMEGOAL   = Refiner.tclNOTSAMEGOAL
 let tclTHENTRY       = Refiner.tclTHENTRY
 let tclIFTHENELSE    = Refiner.tclIFTHENELSE
@@ -96,7 +88,7 @@ let lastHypId gl  = nthHypId 1 gl
 let lastHyp gl    = nthHyp 1 gl
 
 let nLastDecls n gl =
-  try list_firstn n (pf_hyps gl)
+  try List.firstn n (pf_hyps gl)
   with Failure _ -> error "Not enough hypotheses in the goal."
 
 let nLastHypsId n gl = List.map pi1 (nLastDecls n gl)
@@ -117,7 +109,7 @@ let onNLastHypsId n tac = onHyps (nLastHypsId n) tac
 let onNLastHyps n tac   = onHyps (nLastHyps n) tac
 
 let afterHyp id gl =
-  fst (list_split_when (fun (hyp,_,_) -> hyp = id) (pf_hyps gl))
+  fst (List.split_when (fun (hyp,_,_) -> hyp = id) (pf_hyps gl))
 
 (***************************************)
 (*           Clause Tacticals          *)
@@ -131,43 +123,6 @@ let afterHyp id gl =
    --Eduardo (8/8/97)
 *)
 
-(* A [simple_clause] is a set of hypotheses, possibly extended with
-   the conclusion (conclusion is represented by None) *)
-
-type simple_clause = identifier option list
-
-(* An [clause] is the algebraic form of a
-   [concrete_clause]; it may refer to all hypotheses
-   independently of the effective contents of the current goal *)
-
-type clause = identifier gclause
-
-let allHypsAndConcl = { onhyps=None; concl_occs=all_occurrences_expr }
-let allHyps = { onhyps=None; concl_occs=no_occurrences_expr }
-let onConcl = { onhyps=Some[]; concl_occs=all_occurrences_expr }
-let onHyp id =
-  { onhyps=Some[((all_occurrences_expr,id),InHyp)];
-    concl_occs=no_occurrences_expr }
-
-let simple_clause_of cl gls =
-  let error_occurrences () =
-    error "This tactic does not support occurrences selection" in
-  let error_body_selection () =
-    error "This tactic does not support body selection" in
-  let hyps =
-    match cl.onhyps with
-    | None ->
-	List.map Option.make (pf_ids_of_hyps gls)
-    | Some l ->
-	List.map (fun ((occs,id),w) ->
-	  if occs <> all_occurrences_expr then error_occurrences ();
-	  if w = InHypValueOnly then error_body_selection ();
-	  Some id) l in
-  if cl.concl_occs = no_occurrences_expr then hyps
-  else
-    if cl.concl_occs <> all_occurrences_expr then error_occurrences ()
-    else None :: hyps
-
 let fullGoal gl = None :: List.map Option.make (pf_ids_of_hyps gl)
 
 let onAllHyps tac gl = tclMAP tac (pf_ids_of_hyps gl) gl
@@ -176,60 +131,18 @@ let onAllHypsAndConcl tac gl = tclMAP tac (fullGoal gl) gl
 let tryAllHyps tac gl = tclFIRST_PROGRESS_ON tac (pf_ids_of_hyps gl) gl
 let tryAllHypsAndConcl tac gl = tclFIRST_PROGRESS_ON tac (fullGoal gl) gl
 
-let onClause tac cl gls = tclMAP tac (simple_clause_of cl gls) gls
-let onClauseLR tac cl gls = tclMAP tac (List.rev (simple_clause_of cl gls)) gls
+let onClause tac cl gls =
+  let hyps () = pf_ids_of_hyps gls in
+  tclMAP tac (Locusops.simple_clause_of hyps cl) gls
+let onClauseLR tac cl gls =
+  let hyps () = pf_ids_of_hyps gls in
+  tclMAP tac (List.rev (Locusops.simple_clause_of hyps cl)) gls
 
 let ifOnHyp pred tac1 tac2 id gl =
   if pred (id,pf_get_hyp_typ gl id) then
     tac1 id gl
   else
     tac2 id gl
-
-
-(************************************************************************)
-(* An intermediate form of occurrence clause that select components     *)
-(* of a definition, hypotheses and possibly the goal                    *)
-(* (used for reduction tactics)                                         *)
-(************************************************************************)
-
-(* A [hyp_location] is an hypothesis together with a position, in
-   body if any, in type or in both *)
-
-type hyp_location = identifier * hyp_location_flag
-
-(* A [goal_location] is either an hypothesis (together with a position, in
-   body if any, in type or in both) or the goal *)
-
-type goal_location = hyp_location option
-
-(************************************************************************)
-(* An intermediate structure for dealing with occurrence clauses        *)
-(************************************************************************)
-
-(* [clause_atom] refers either to an hypothesis location (i.e. an
-   hypothesis with occurrences and a position, in body if any, in type
-   or in both) or to some occurrences of the conclusion *)
-
-type clause_atom =
-  | OnHyp of identifier * occurrences_expr * hyp_location_flag
-  | OnConcl of occurrences_expr
-
-(* A [concrete_clause] is an effective collection of
-  occurrences in the hypotheses and the conclusion *)
-
-type concrete_clause = clause_atom list
-
-let concrete_clause_of cl gls =
-  let hyps =
-    match cl.onhyps with
-    | None ->
-	let f id = OnHyp (id,all_occurrences_expr,InHyp) in
-	List.map f (pf_ids_of_hyps gls)
-    | Some l ->
-	List.map (fun ((occs,id),w) -> OnHyp (id,occs,w)) l in
-  if cl.concl_occs = no_occurrences_expr then hyps
-  else
-    OnConcl cl.concl_occs :: hyps
 
 (************************************************************************)
 (* Elimination Tacticals                                                *)
@@ -251,7 +164,7 @@ type branch_args = {
   nassums    : int;         (* the number of assumptions to be introduced *)
   branchsign : bool list;   (* the signature of the branch.
                                true=recursive argument, false=constant *)
-  branchnames : intro_pattern_expr located list}
+  branchnames : intro_pattern_expr Loc.located list}
 
 type branch_assumptions = {
   ba        : branch_args;     (* the branch args *)
@@ -262,7 +175,7 @@ let fix_empty_or_and_pattern nv l =
      names and "[ ]" for no clause at all *)
   (* 2- More generally, we admit "[ ]" for any disjunctive pattern of
      arbitrary length *)
-  if l = [[]] then list_make nv [] else l
+  if l = [[]] then List.make nv [] else l
 
 let check_or_and_pattern_size loc names n =
   if List.length names <> n then
@@ -299,7 +212,7 @@ let compute_construtor_signatures isrec (_,k as ity) =
   let lc =
     Array.map (fun c -> snd (decompose_prod_n_assum n c)) mip.mind_nf_lc in
   let lrecargs = dest_subterms mip.mind_recargs in
-  array_map2 analrec lc lrecargs
+  Array.map2 analrec lc lrecargs
 
 let elimination_sort_of_goal gl =
   pf_apply Retyping.get_sort_family_of gl (pf_concl gl)
@@ -384,8 +297,13 @@ let gl_make_case_nodep ind gl =
 let elimination_then_using tac predicate bindings c gl =
   let (ind,t) = pf_reduce_to_quantified_ind gl (pf_type_of gl c) in
   let indclause  = mk_clenv_from gl (c,t) in
-  general_elim_then_using gl_make_elim
-    true None tac predicate bindings ind indclause gl
+  let isrec,mkelim =
+    if (Global.lookup_mind (fst ind)).mind_record
+    then false,gl_make_case_dep
+    else true,gl_make_elim
+  in
+  general_elim_then_using mkelim isrec
+    None tac predicate bindings ind indclause gl
 
 let case_then_using =
   general_elim_then_using gl_make_case_dep false
@@ -418,7 +336,7 @@ let make_elim_branch_assumptions ba gl =
       | (_, _) -> anomaly "make_elim_branch_assumptions"
   in
   makerec ([],[],[],[],[]) ba.branchsign
-    (try list_firstn ba.nassums (pf_hyps gl)
+    (try List.firstn ba.nassums (pf_hyps gl)
      with Failure _ -> anomaly "make_elim_branch_assumptions")
 
 let elim_on_ba tac ba gl = tac (make_elim_branch_assumptions ba gl) gl
@@ -442,7 +360,7 @@ let make_case_branch_assumptions ba gl =
       | (_, _) -> anomaly "make_case_branch_assumptions"
   in
   makerec ([],[],[],[]) ba.branchsign
-    (try list_firstn ba.nassums (pf_hyps gl)
+    (try List.firstn ba.nassums (pf_hyps gl)
      with Failure _ -> anomaly "make_case_branch_assumptions")
 
 let case_on_ba tac ba gl = tac (make_case_branch_assumptions ba gl) gl

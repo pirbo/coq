@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,8 +12,9 @@
 (*                           by Eduardo Gimenez                        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
+open Errors
 open Util
 open Names
 open Namegen
@@ -22,12 +23,9 @@ open Declarations
 open Tactics
 open Tacticals
 open Hiddentac
-open Equality
 open Auto
-open Pattern
 open Matching
 open Hipattern
-open Proof_type
 open Tacmach
 open Coqlib
 
@@ -128,7 +126,7 @@ let solveEqBranch rectype g =
     let (eqonleft,op,lhs,rhs,_) = match_eqdec (pf_concl g) in
     let (mib,mip) = Global.lookup_inductive rectype in
     let nparams   = mib.mind_nparams in
-    let getargs l = list_skipn nparams (snd (decompose_app l)) in
+    let getargs l = List.skipn nparams (snd (decompose_app l)) in
     let rargs   = getargs rhs
     and largs   = getargs lhs in
     List.fold_right2

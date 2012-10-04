@@ -1,6 +1,6 @@
 let ui_m = GAction.ui_manager ();;
 
-let no_under = Minilib.string_map (fun x -> if x = '_' then '-' else x)
+let no_under = Util.string_map (fun x -> if x = '_' then '-' else x)
 
 let list_items menu li =
   let res_buf = Buffer.create 500 in
@@ -20,6 +20,7 @@ let list_items menu li =
 
 let init () =
   let theui = Printf.sprintf "<ui>
+<accelerator action='Close Find' />
 <menubar name='CoqIde MenuBar'>
   <menu action='File'>
     <menuitem action='New' />
@@ -42,19 +43,37 @@ let init () =
   </menu>
   <menu name='Edit' action='Edit'>
     <menuitem action='Undo' />
-    <menuitem action='Clear Undo Stack' />
+    <menuitem action='Redo' />
     <separator />
     <menuitem action='Cut' />
     <menuitem action='Copy' />
     <menuitem action='Paste' />
     <separator />
-    <menuitem action='Find in buffer' />
-    <menuitem action='Find backwards' />
+    <menuitem action='Find' />
+    <menuitem action='Find Next' />
+    <menuitem action='Find Previous' />
+    <menuitem action='Replace' />
     <menuitem action='Complete Word' />
     <separator />
     <menuitem action='External editor' />
     <separator />
     <menuitem name='Prefs' action='Preferences' />
+  </menu>
+  <menu name='View' action='View'>
+    <menuitem action='Previous tab' />
+    <menuitem action='Next tab' />
+    <separator/>
+    <menuitem action='Show Toolbar' />
+    <menuitem action='Show Query Pane' />
+    <separator/>
+    <menuitem action='Display implicit arguments' />
+    <menuitem action='Display coercions' />
+    <menuitem action='Display raw matching expressions' />
+    <menuitem action='Display notations' />
+    <menuitem action='Display all basic low-level contents' />
+    <menuitem action='Display existential variable instances' />
+    <menuitem action='Display universe levels' />
+    <menuitem action='Display all low-level contents' />
   </menu>
   <menu action='Navigation'>
     <menuitem action='Forward' />
@@ -63,7 +82,6 @@ let init () =
     <menuitem action='Start' />
     <menuitem action='End' />
     <menuitem action='Interrupt' />
-    <menuitem action='Hide' />
     <menuitem action='Previous' />
     <menuitem action='Next' />
   </menu>
@@ -98,17 +116,12 @@ let init () =
     <menuitem action='Print' />
     <menuitem action='About' />
     <menuitem action='Locate' />
+    <menuitem action='Print Assumptions' />
     <menuitem action='Whelp Locate' />
   </menu>
-  <menu action='Display'>
-    <menuitem action='Display implicit arguments' />
-    <menuitem action='Display coercions' />
-    <menuitem action='Display raw matching expressions' />
-    <menuitem action='Display notations' />
-    <menuitem action='Display all basic low-level contents' />
-    <menuitem action='Display existential variable instances' />
-    <menuitem action='Display universe levels' />
-    <menuitem action='Display all low-level contents' />
+  <menu name='Tools' action='Tools'>
+    <menuitem action='Comment' />
+    <menuitem action='Uncomment' />
   </menu>
   <menu action='Compile'>
     <menuitem action='Compile buffer' />
@@ -117,8 +130,6 @@ let init () =
     <menuitem action='Make makefile' />
   </menu>
   <menu action='Windows'>
-    <menuitem action='Show/Hide Query Pane' />
-    <menuitem action='Show/Hide Toolbar' />
     <menuitem action='Detach View' />
   </menu>
   <menu name='Help' action='Help'>
@@ -138,7 +149,6 @@ let init () =
   <toolitem action='Start' />
   <toolitem action='End' />
   <toolitem action='Interrupt' />
-  <toolitem action='Hide' />
   <toolitem action='Previous' />
   <toolitem action='Next' />
   <toolitem action='Wizard' />

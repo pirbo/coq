@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -113,12 +113,3 @@ val print_logical_stats : 'a -> unit
    This function allocates itself a lot (the same order of magnitude
    as the physical size of its argument) *)
 val print_stats : 'a -> unit
-
-(** Return logical size (first for strings, then for not strings),
-   (in words) and depth of its argument 
-   This function allocates itself a lot *)
-val obj_stats : 'a -> int * int * int
-
-(** Return physical size of its argument (string part and rest) 
-   This function allocates itself a lot *)
-val obj_shared_size : 'a -> int * int

@@ -6,8 +6,46 @@
 (*         *       GNU Lesser General Public License Version 2.1       *)
 (***********************************************************************)
 
+open Pp
+
 (** This modules implements basic manipulations of errors for use
     throughout Coq's code. *)
+
+(** {6 Generic errors.}
+
+ [Anomaly] is used for system errors and [UserError] for the
+   user's ones. *)
+
+exception Anomaly of string * std_ppcmds
+val anomaly : string -> 'a
+val anomalylabstrm : string -> std_ppcmds -> 'a
+val anomaly_loc : Loc.t * string * std_ppcmds -> 'a
+
+exception UserError of string * std_ppcmds
+val error : string -> 'a
+val errorlabstrm : string -> std_ppcmds -> 'a
+val user_err_loc : Loc.t * string * std_ppcmds -> 'a
+
+exception AlreadyDeclared of std_ppcmds
+val alreadydeclared : std_ppcmds -> 'a
+
+val invalid_arg_loc : Loc.t * string -> 'a
+
+(** [todo] is for running of an incomplete code its implementation is
+   "do nothing" (or print a message), but this function should not be
+   used in a released code *)
+
+val todo : string -> unit
+
+exception Timeout
+exception Drop
+exception Quit
+
+(** Like [Exc_located], but specifies the outermost file read, the
+   input buffer associated to the location of the error (or the module name
+   if boolean is true), and the error itself. *)
+
+exception Error_in_file of string * (bool * string * Loc.t) * exn
 
 (** [register_handler h] registers [h] as a handler.
     When an expression is printed with [print e], it

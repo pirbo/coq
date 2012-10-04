@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -117,7 +117,7 @@ Qed.
 
 *)
 
-Notation Local inhabited A := A (only parsing).
+Local Notation inhabited A := A (only parsing).
 
 Lemma prop_ext_A_eq_A_imp_A :
   prop_extensionality -> forall A:Prop, inhabited A -> (A -> A) = A.
@@ -148,7 +148,7 @@ Proof.
   case (prop_ext_retract_A_A_imp_A Ext A a); intros g1 g2 g1_o_g2.
   exists (fun f => (fun x:A => f (g1 x x)) (g2 (fun x => f (g1 x x)))).
   intro f.
-  pattern (g1 (g2 (fun x:A => f (g1 x x)))) at 1 in |- *.
+  pattern (g1 (g2 (fun x:A => f (g1 x x)))) at 1.
   rewrite (g1_o_g2 (fun x:A => f (g1 x x))).
   reflexivity.
 Qed.
@@ -191,13 +191,13 @@ Section Proof_irrelevance_gen.
     intros Ext Ind.
     case (ext_prop_fixpoint Ext bool true); intros G Gfix.
     set (neg := fun b:bool => bool_elim bool false true b).
-    generalize (refl_equal (G neg)).
-    pattern (G neg) at 1 in |- *.
+    generalize (eq_refl (G neg)).
+    pattern (G neg) at 1.
     apply Ind with (b := G neg); intro Heq.
     rewrite (bool_elim_redl bool false true).
-    change (true = neg true) in |- *; rewrite Heq; apply Gfix.
+    change (true = neg true); rewrite Heq; apply Gfix.
     rewrite (bool_elim_redr bool false true).
-    change (neg false = false) in |- *; rewrite Heq; symmetry  in |- *;
+    change (neg false = false); rewrite Heq; symmetry ;
       apply Gfix.
   Qed.
 
@@ -207,9 +207,9 @@ Section Proof_irrelevance_gen.
     intros Ext Ind A a1 a2.
     set (f := fun b:bool => bool_elim A a1 a2 b).
     rewrite (bool_elim_redl A a1 a2).
-    change (f true = a2) in |- *.
+    change (f true = a2).
     rewrite (bool_elim_redr A a1 a2).
-    change (f true = f false) in |- *.
+    change (f true = f false).
     rewrite (aux Ext Ind).
     reflexivity.
   Qed.
@@ -228,9 +228,9 @@ Section Proof_irrelevance_Prop_Ext_CC.
   Definition FalseP : BoolP := fun C c1 c2 => c2.
   Definition BoolP_elim C c1 c2 (b:BoolP) := b C c1 c2.
   Definition BoolP_elim_redl (C:Prop) (c1 c2:C) :
-    c1 = BoolP_elim C c1 c2 TrueP := refl_equal c1.
+    c1 = BoolP_elim C c1 c2 TrueP := eq_refl c1.
   Definition BoolP_elim_redr (C:Prop) (c1 c2:C) :
-    c2 = BoolP_elim C c1 c2 FalseP := refl_equal c2.
+    c2 = BoolP_elim C c1 c2 FalseP := eq_refl c2.
 
   Definition BoolP_dep_induction :=
     forall P:BoolP -> Prop, P TrueP -> P FalseP -> forall b:BoolP, P b.
@@ -263,9 +263,9 @@ Section Proof_irrelevance_CIC.
     | trueP : boolP
     | falseP : boolP.
   Definition boolP_elim_redl (C:Prop) (c1 c2:C) :
-    c1 = boolP_ind C c1 c2 trueP := refl_equal c1.
+    c1 = boolP_ind C c1 c2 trueP := eq_refl c1.
   Definition boolP_elim_redr (C:Prop) (c1 c2:C) :
-    c2 = boolP_ind C c1 c2 falseP := refl_equal c2.
+    c2 = boolP_ind C c1 c2 falseP := eq_refl c2.
   Scheme boolP_indd := Induction for boolP Sort Prop.
 
   Lemma ext_prop_dep_proof_irrel_cic : prop_extensionality -> proof_irrelevance.
@@ -344,8 +344,8 @@ Section Proof_irrelevance_EM_CC.
 
   Lemma p2p1 : forall A:Prop, A -> b2p (p2b A).
   Proof.
-    unfold p2b in |- *; intro A; apply or_dep_elim with (b := em A);
-      unfold b2p in |- *; intros.
+    unfold p2b; intro A; apply or_dep_elim with (b := em A);
+      unfold b2p; intros.
     apply (or_elim_redl A (~ A) B (fun _ => b1) (fun _ => b2)).
     destruct (b H).
   Qed.
@@ -353,8 +353,8 @@ Section Proof_irrelevance_EM_CC.
   Lemma p2p2 : b1 <> b2 -> forall A:Prop, b2p (p2b A) -> A.
   Proof.
     intro not_eq_b1_b2.
-    unfold p2b in |- *; intro A; apply or_dep_elim with (b := em A);
-      unfold b2p in |- *; intros.
+    unfold p2b; intro A; apply or_dep_elim with (b := em A);
+      unfold b2p; intros.
     assumption.
     destruct not_eq_b1_b2.
     rewrite <- (or_elim_redr A (~ A) B (fun _ => b1) (fun _ => b2)) in H.
@@ -392,9 +392,9 @@ Section Proof_irrelevance_CCI.
   Hypothesis em : forall A:Prop, A \/ ~ A.
 
   Definition or_elim_redl (A B C:Prop) (f:A -> C) (g:B -> C)
-    (a:A) : f a = or_ind f g (or_introl B a) := refl_equal (f a).
+    (a:A) : f a = or_ind f g (or_introl B a) := eq_refl (f a).
   Definition or_elim_redr (A B C:Prop) (f:A -> C) (g:B -> C)
-    (b:B) : g b = or_ind f g (or_intror A b) := refl_equal (g b).
+    (b:B) : g b = or_ind f g (or_intror A b) := eq_refl (g b).
   Scheme or_indd := Induction for or Sort Prop.
 
   Theorem proof_irrelevance_cci : forall (B:Prop) (b1 b2:B), b1 = b2.

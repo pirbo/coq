@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -8,6 +8,7 @@
 
 open Names
 open Libnames
+open Globnames
 open Miniml
 open Declarations
 
@@ -131,6 +132,14 @@ type opt_flag =
 
 val optims :  unit -> opt_flag
 
+(*s Controls whether dummy lambda are removed *)
+
+val conservative_types : unit -> bool
+
+(*s A comment to print at the beginning of the files *)
+
+val file_comment : unit -> string
+
 (*s Target language. *)
 
 type lang = Ocaml | Haskell | Scheme
@@ -176,7 +185,7 @@ val find_custom_match : ml_branch array -> string
 
 val extraction_language : lang -> unit
 val extraction_inline : bool -> reference list -> unit
-val print_extraction_inline : unit -> unit
+val print_extraction_inline : unit -> Pp.std_ppcmds
 val reset_extraction_inline : unit -> unit
 val extract_constant_inline :
   bool -> reference -> string list -> string -> unit
@@ -191,7 +200,7 @@ val extraction_implicit : reference -> int_or_id list -> unit
 
 val extraction_blacklist : identifier list -> unit
 val reset_extraction_blacklist : unit -> unit
-val print_extraction_blacklist : unit -> unit
+val print_extraction_blacklist : unit -> Pp.std_ppcmds
 
 
 

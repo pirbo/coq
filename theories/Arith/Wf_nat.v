@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -10,7 +10,7 @@
 
 Require Import Lt.
 
-Open Local Scope nat_scope.
+Local Open Scope nat_scope.
 
 Implicit Types m n p : nat.
 
@@ -24,14 +24,14 @@ Definition gtof (a b:A) := f b > f a.
 
 Theorem well_founded_ltof : well_founded ltof.
 Proof.
-  red in |- *.
+  red.
   cut (forall n (a:A), f a < n -> Acc ltof a).
   intros H a; apply (H (S (f a))); auto with arith.
   induction n.
   intros; absurd (f a < 0); auto with arith.
   intros a ltSma.
   apply Acc_intro.
-  unfold ltof in |- *; intros b ltfafb.
+  unfold ltof; intros b ltfafb.
   apply IHn.
   apply lt_le_trans with (f a); auto with arith.
 Defined.
@@ -73,7 +73,7 @@ Proof.
   intros; absurd (f a < 0); auto with arith.
   intros a ltSma.
   apply F.
-  unfold ltof in |- *; intros b ltfafb.
+  unfold ltof; intros b ltfafb.
   apply IHn.
   apply lt_le_trans with (f a); auto with arith.
 Defined.
@@ -108,7 +108,7 @@ Hypothesis H_compat : forall x y:A, R x y -> f x < f y.
 
 Theorem well_founded_lt_compat : well_founded R.
 Proof.
-  red in |- *.
+  red.
   cut (forall n (a:A), f a < n -> Acc R a).
   intros H a; apply (H (S (f a))); auto with arith.
   induction n.
@@ -161,8 +161,8 @@ Lemma lt_wf_double_rec :
      (forall p q, p < n -> P p q) ->
      (forall p, p < m -> P n p) -> P n m) -> forall n m, P n m.
 Proof.
-  intros P Hrec p; pattern p in |- *; apply lt_wf_rec.
-  intros n H q; pattern q in |- *; apply lt_wf_rec; auto with arith.
+  intros P Hrec p; pattern p; apply lt_wf_rec.
+  intros n H q; pattern q; apply lt_wf_rec; auto with arith.
 Defined.
 
 Lemma lt_wf_double_ind :
@@ -171,8 +171,8 @@ Lemma lt_wf_double_ind :
       (forall p (q:nat), p < n -> P p q) ->
       (forall p, p < m -> P n p) -> P n m) -> forall n m, P n m.
 Proof.
-  intros P Hrec p; pattern p in |- *; apply lt_wf_ind.
-  intros n H q; pattern q in |- *; apply lt_wf_ind; auto with arith.
+  intros P Hrec p; pattern p; apply lt_wf_ind.
+  intros n H q; pattern q; apply lt_wf_ind; auto with arith.
 Qed.
 
 Hint Resolve lt_wf: arith.
@@ -190,7 +190,7 @@ Section LT_WF_REL.
   Remark acc_lt_rel : forall x:A, (exists n, F x n) -> Acc R x.
   Proof.
     intros x [n fxn]; generalize dependent x.
-    pattern n in |- *; apply lt_wf_ind; intros.
+    pattern n; apply lt_wf_ind; intros.
     constructor; intros.
     destruct (F_compat y x) as (x0,H1,H2); trivial.
     apply (H x0); auto.

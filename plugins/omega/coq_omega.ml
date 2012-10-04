@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,26 +13,20 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open Errors
 open Util
-open Pp
-open Reduction
-open Proof_type
 open Names
 open Nameops
 open Term
-open Declarations
-open Environ
-open Sign
-open Inductive
 open Tacticals
 open Tacmach
-open Evar_refiner
 open Tactics
-open Clenv
 open Logic
 open Libnames
+open Globnames
 open Nametab
 open Contradiction
+open Misctypes
 
 module OmegaSolver = Omega.MakeOmegaSolver (Bigint)
 open OmegaSolver
@@ -128,12 +122,12 @@ let intern_id,unintern_id =
 
 let mk_then = tclTHENLIST
 
-let exists_tac c = constructor_tac false (Some 1) 1 (Glob_term.ImplicitBindings [c])
+let exists_tac c = constructor_tac false (Some 1) 1 (ImplicitBindings [c])
 
 let generalize_tac t = generalize_time (generalize t)
 let elim t = elim_time (simplest_elim t)
 let exact t = exact_time (Tactics.refine t)
-let unfold s = Tactics.unfold_in_concl [Termops.all_occurrences, Lazy.force s]
+let unfold s = Tactics.unfold_in_concl [Locus.AllOccurrences, Lazy.force s]
 
 let rev_assoc k =
   let rec loop = function
@@ -150,7 +144,7 @@ let tag_hypothesis,tag_of_hyp, hyp_of_tag =
 let hide_constr,find_constr,clear_tables,dump_tables =
   let l = ref ([]:(constr * (identifier * identifier * bool)) list) in
   (fun h id eg b -> l := (h,(id,eg,b)):: !l),
-  (fun h -> try list_assoc_f eq_constr h !l with Not_found -> failwith "find_contr"),
+  (fun h -> try List.assoc_f eq_constr h !l with Not_found -> failwith "find_contr"),
   (fun () -> l := []),
   (fun () -> !l)
 
@@ -170,6 +164,9 @@ let init_constant = gen_constant_in_modules "Omega" init_modules
 let constant = gen_constant_in_modules "Omega" coq_modules
 
 let z_constant = gen_constant_in_modules "Omega" [["Coq";"ZArith"]]
+let zbase_constant =
+  gen_constant_in_modules "Omega" [["Coq";"ZArith";"BinInt"]]
+
 
 (* Zarith *)
 let coq_xH = lazy (constant "xH")
@@ -181,20 +178,18 @@ let coq_Zneg = lazy (constant "Zneg")
 let coq_Z = lazy (constant "Z")
 let coq_comparison = lazy (constant "comparison")
 let coq_Gt = lazy (constant "Gt")
-let coq_Zplus = lazy (constant "Zplus")
-let coq_Zmult = lazy (constant "Zmult")
-let coq_Zopp = lazy (constant "Zopp")
-let coq_Zminus = lazy (constant "Zminus")
-let coq_Zsucc = lazy (constant "Zsucc")
-let coq_Zpred = lazy (constant "Zpred")
-let coq_Zgt = lazy (constant "Zgt")
-let coq_Zle = lazy (constant "Zle")
-let coq_Z_of_nat = lazy (constant "Z_of_nat")
-let coq_inj_plus = lazy (constant "inj_plus")
-let coq_inj_mult = lazy (constant "inj_mult")
-let coq_inj_minus1 = lazy (constant "inj_minus1")
+let coq_Zplus = lazy (zbase_constant "Z.add")
+let coq_Zmult = lazy (zbase_constant "Z.mul")
+let coq_Zopp = lazy (zbase_constant "Z.opp")
+let coq_Zminus = lazy (zbase_constant "Z.sub")
+let coq_Zsucc = lazy (zbase_constant "Z.succ")
+let coq_Zpred = lazy (zbase_constant "Z.pred")
+let coq_Z_of_nat = lazy (zbase_constant "Z.of_nat")
+let coq_inj_plus = lazy (z_constant "Nat2Z.inj_add")
+let coq_inj_mult = lazy (z_constant "Nat2Z.inj_mul")
+let coq_inj_minus1 = lazy (z_constant "Nat2Z.inj_sub")
 let coq_inj_minus2 = lazy (constant "inj_minus2")
-let coq_inj_S = lazy (z_constant "inj_S")
+let coq_inj_S = lazy (z_constant "Nat2Z.inj_succ")
 let coq_inj_le = lazy (z_constant "Znat.inj_le")
 let coq_inj_lt = lazy (z_constant "Znat.inj_lt")
 let coq_inj_ge = lazy (z_constant "Znat.inj_ge")
@@ -250,10 +245,10 @@ let coq_Zle_left = lazy (constant "Zle_left")
 let coq_new_var = lazy (constant "new_var")
 let coq_intro_Z = lazy (constant "intro_Z")
 
-let coq_dec_eq = lazy (constant "dec_eq")
+let coq_dec_eq = lazy (zbase_constant "Z.eq_decidable")
 let coq_dec_Zne = lazy (constant "dec_Zne")
-let coq_dec_Zle = lazy (constant "dec_Zle")
-let coq_dec_Zlt = lazy (constant "dec_Zlt")
+let coq_dec_Zle = lazy (zbase_constant "Z.le_decidable")
+let coq_dec_Zlt = lazy (zbase_constant "Z.lt_decidable")
 let coq_dec_Zgt = lazy (constant "dec_Zgt")
 let coq_dec_Zge = lazy (constant "dec_Zge")
 
@@ -265,10 +260,10 @@ let coq_Znot_ge_lt = lazy (constant "Znot_ge_lt")
 let coq_Znot_gt_le = lazy (constant "Znot_gt_le")
 let coq_neq = lazy (constant "neq")
 let coq_Zne = lazy (constant "Zne")
-let coq_Zle = lazy (constant "Zle")
-let coq_Zgt = lazy (constant "Zgt")
-let coq_Zge = lazy (constant "Zge")
-let coq_Zlt = lazy (constant "Zlt")
+let coq_Zle = lazy (zbase_constant "Z.le")
+let coq_Zgt = lazy (zbase_constant "Z.gt")
+let coq_Zge = lazy (zbase_constant "Z.ge")
+let coq_Zlt = lazy (zbase_constant "Z.lt")
 
 (* Peano/Datatypes *)
 let coq_le = lazy (init_constant "le")
@@ -320,19 +315,18 @@ let coq_iff = lazy (constant "iff")
 (* uses build_coq_and, build_coq_not, build_coq_or, build_coq_ex *)
 
 (* For unfold *)
-open Closure
 let evaluable_ref_of_constr s c = match kind_of_term (Lazy.force c) with
   | Const kn when Tacred.is_evaluable (Global.env()) (EvalConstRef kn) ->
       EvalConstRef kn
   | _ -> anomaly ("Coq_omega: "^s^" is not an evaluable constant")
 
-let sp_Zsucc =     lazy (evaluable_ref_of_constr "Zsucc" coq_Zsucc)
-let sp_Zpred =     lazy (evaluable_ref_of_constr "Zpred" coq_Zpred)
-let sp_Zminus = lazy (evaluable_ref_of_constr "Zminus" coq_Zminus)
-let sp_Zle = lazy (evaluable_ref_of_constr "Zle" coq_Zle)
-let sp_Zgt = lazy (evaluable_ref_of_constr "Zgt" coq_Zgt)
-let sp_Zge = lazy (evaluable_ref_of_constr "Zge" coq_Zge)
-let sp_Zlt = lazy (evaluable_ref_of_constr "Zlt" coq_Zlt)
+let sp_Zsucc =     lazy (evaluable_ref_of_constr "Z.succ" coq_Zsucc)
+let sp_Zpred =     lazy (evaluable_ref_of_constr "Z.pred" coq_Zpred)
+let sp_Zminus = lazy (evaluable_ref_of_constr "Z.sub" coq_Zminus)
+let sp_Zle = lazy (evaluable_ref_of_constr "Z.le" coq_Zle)
+let sp_Zgt = lazy (evaluable_ref_of_constr "Z.gt" coq_Zgt)
+let sp_Zge = lazy (evaluable_ref_of_constr "Z.ge" coq_Zge)
+let sp_Zlt = lazy (evaluable_ref_of_constr "Z.lt" coq_Zlt)
 let sp_not = lazy (evaluable_ref_of_constr "not" (lazy (build_coq_not ())))
 
 let mk_var v = mkVar (id_of_string v)
@@ -506,7 +500,6 @@ let context operation path (t : constr) =
       | ((P_TYPE :: p), LetIn (n,b,t,c)) ->
 	  (mkLetIn (n,b,loop i p t,c))
       | (p, _) ->
-	  ppnl (Printer.pr_lconstr t);
 	  failwith ("abstract_path " ^ string_of_int(List.length p))
   in
   loop 1 path t
@@ -527,7 +520,6 @@ let occurence path (t : constr) =
     | ((P_TYPE :: p), Lambda (n,term,c)) -> loop p term
     | ((P_TYPE :: p), LetIn (n,b,term,c)) -> loop p term
     | (p, _) ->
-	ppnl (Printer.pr_lconstr t);
 	failwith ("occurence " ^ string_of_int(List.length p))
   in
   loop path t
@@ -590,7 +582,7 @@ let compile name kind =
   in
   loop []
 
-let rec decompile af =
+let decompile af =
   let rec loop = function
     | ({v=v; c=n}::r) -> Oplus(Otimes(Oatom (unintern_id v),Oz n),loop r)
     | [] -> Oz af.constant
@@ -681,7 +673,7 @@ let rec shuffle p (t1,t2) =
 	  Oplus(t2,t1)
 	else [],Oplus(t1,t2)
 
-let rec shuffle_mult p_init k1 e1 k2 e2 =
+let shuffle_mult p_init k1 e1 k2 e2 =
   let rec loop p = function
     | (({c=c1;v=v1}::l1) as l1'),(({c=c2;v=v2}::l2) as l2') ->
 	if v1 = v2 then
@@ -738,7 +730,7 @@ let rec shuffle_mult p_init k1 e1 k2 e2 =
   in
   loop p_init (e1,e2)
 
-let rec shuffle_mult_right p_init e1 k2 e2 =
+let shuffle_mult_right p_init e1 k2 e2 =
   let rec loop p = function
     | (({c=c1;v=v1}::l1) as l1'),(({c=c2;v=v2}::l2) as l2') ->
 	if v1 = v2 then
@@ -823,7 +815,7 @@ let rec scalar p n = function
   | Oz i -> [focused_simpl p],Oz(n*i)
   | Oufo c -> [], Oufo (mkApp (Lazy.force coq_Zmult, [| mk_integer n; c |]))
 
-let rec scalar_norm p_init =
+let scalar_norm p_init =
   let rec loop p = function
     | [] -> [focused_simpl p_init]
     | (_::l) ->
@@ -834,7 +826,7 @@ let rec scalar_norm p_init =
   in
   loop p_init
 
-let rec norm_add p_init =
+let norm_add p_init =
   let rec loop p = function
     | [] -> [focused_simpl p_init]
     | _:: l ->
@@ -844,7 +836,7 @@ let rec norm_add p_init =
   in
   loop p_init
 
-let rec scalar_norm_add p_init =
+let scalar_norm_add p_init =
   let rec loop p = function
     | [] -> [focused_simpl p_init]
     | _ :: l ->

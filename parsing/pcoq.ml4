@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,16 +9,12 @@
 open Pp
 open Compat
 open Tok
+open Errors
 open Util
-open Names
 open Extend
-open Libnames
-open Glob_term
-open Topconstr
 open Genarg
 open Tacexpr
 open Extrawit
-open Ppextend
 
 (** The parser of Coq *)
 
@@ -32,6 +28,7 @@ let warning_verbose = ref true
 IFDEF CAMLP5 THEN
 open Gramext
 ELSE
+open PcamlSig.Grammar
 open G
 END
 
@@ -111,7 +108,6 @@ let weaken_entry x = Gramobj.weaken_entry x
 
 module type Gramtypes =
 sig
-  open Decl_kinds
   val inGramObj : 'a raw_abstract_argument_type -> 'a G.entry -> typed_entry
   val outGramObj : 'a raw_abstract_argument_type -> typed_entry -> 'a G.entry
 end
@@ -215,7 +211,7 @@ let rec remove_grammars n =
     (match !camlp4_state with
        | [] -> anomaly "Pcoq.remove_grammars: too many rules to remove"
        | ByGrammar(g,reinit,ext)::t ->
-           grammar_delete g reinit ext;
+           grammar_delete g (Option.map of_coq_assoc reinit) ext;
            camlp4_state := t;
            remove_grammars (n-1)
        | ByEXTEND (undo,redo)::t ->
@@ -405,6 +401,9 @@ module Tactic =
     (* Main entry for quotations *)
     let tactic_eoi = eoi_entry tactic
 
+    (* For Ltac definition *)
+    let tacdef_body = Gram.entry_create "tactic:tacdef_body"
+
   end
 
 module Vernac_ =
@@ -424,7 +423,7 @@ module Vernac_ =
 
     GEXTEND Gram
     main_entry:
-      [ [ a = vernac -> Some (loc,a) | EOI -> None ] ]
+      [ [ a = vernac -> Some (!@loc, a) | EOI -> None ] ]
     ;
     END
 
@@ -448,24 +447,23 @@ let main_entry = Vernac_.main_entry
 let constr_level = string_of_int
 
 let default_levels =
-  [200,RightA,false;
-   100,RightA,false;
-   99,RightA,true;
-   90,RightA,false;
-   10,RightA,false;
-   9,RightA,false;
-   8,RightA,true;
-   1,LeftA,false;
-   0,RightA,false]
+  [200,Extend.RightA,false;
+   100,Extend.RightA,false;
+   99,Extend.RightA,true;
+   10,Extend.RightA,false;
+   9,Extend.RightA,false;
+   8,Extend.RightA,true;
+   1,Extend.LeftA,false;
+   0,Extend.RightA,false]
 
 let default_pattern_levels =
-  [200,RightA,true;
-   100,RightA,false;
-   99,RightA,true;
-   10,LeftA,false;
-   9,RightA,false;
-   1,LeftA,false;
-   0,RightA,false]
+  [200,Extend.RightA,true;
+   100,Extend.RightA,false;
+   99,Extend.RightA,true;
+   10,Extend.LeftA,false;
+   9,Extend.RightA,false;
+   1,Extend.LeftA,false;
+   0,Extend.RightA,false]
 
 let level_stack =
   ref [(default_levels, default_pattern_levels)]
@@ -473,22 +471,21 @@ let level_stack =
 (* At a same level, LeftA takes precedence over RightA and NoneA *)
 (* In case, several associativity exists for a level, we make two levels, *)
 (* first LeftA, then RightA and NoneA together *)
-open Ppextend
 
 let admissible_assoc = function
-  | LeftA, Some (RightA | NonA) -> false
-  | RightA, Some LeftA -> false
+  | Extend.LeftA, Some (Extend.RightA | Extend.NonA) -> false
+  | Extend.RightA, Some Extend.LeftA -> false
   | _ -> true
 
 let create_assoc = function
-  | None -> RightA
+  | None -> Extend.RightA
   | Some a -> a
 
 let error_level_assoc p current expected =
   let pr_assoc = function
-    | LeftA -> str "left"
-    | RightA -> str "right"
-    | NonA -> str "non" in
+    | Extend.LeftA -> str "left"
+    | Extend.RightA -> str "right"
+    | Extend.NonA -> str "non" in
   errorlabstrm ""
     (str "Level " ++ int p ++ str " is already declared " ++
      pr_assoc current ++ str " associative while it is now expected to be " ++
@@ -522,33 +519,36 @@ let find_position_gen forpat ensure assoc lev =
 	let assoc = create_assoc assoc in
         if !init = None then
 	  (* Create the entry *)
-	  (if !after = None then Some First
-	   else Some (After (constr_level (Option.get !after)))),
+	  (if !after = None then Some Extend.First
+	   else Some (Extend.After (constr_level (Option.get !after)))),
 	   Some assoc, Some (constr_level n), None
         else
 	  (* The reinit flag has been updated *)
-	   Some (Level (constr_level n)), None, None, !init
+	   Some (Extend.Level (constr_level n)), None, None, !init
       with
 	  (* Nothing has changed *)
           Exit ->
             level_stack := current :: !level_stack;
 	    (* Just inherit the existing associativity and name (None) *)
-	    Some (Level (constr_level n)), None, None, None
+	    Some (Extend.Level (constr_level n)), None, None, None
 
 let remove_levels n =
-  level_stack := list_skipn n !level_stack
+  level_stack := List.skipn n !level_stack
 
 let rec list_mem_assoc_triple x = function
   | [] -> false
   | (a,b,c) :: l -> a = x or list_mem_assoc_triple x l
 
 let register_empty_levels forpat levels =
-  map_succeed (fun n ->
-    let levels = (if forpat then snd else fst) (List.hd !level_stack) in
-    if not (list_mem_assoc_triple n levels) then
-      find_position_gen forpat true None (Some n)
-    else
-      failwith "") levels
+  let filter n =
+    try
+      let levels = (if forpat then snd else fst) (List.hd !level_stack) in
+      if not (list_mem_assoc_triple n levels) then
+        Some (find_position_gen forpat true None (Some n))
+      else None
+    with Failure _ -> None
+  in
+  List.map_filter filter levels
 
 let find_position forpat assoc level =
   find_position_gen forpat false assoc level
@@ -562,8 +562,8 @@ let synchronize_level_positions () =
 
 (* Camlp4 levels do not treat NonA: use RightA with a NEXT on the left *)
 let camlp4_assoc = function
-  | Some NonA | Some RightA -> RightA
-  | None | Some LeftA -> LeftA
+  | Some Extend.NonA | Some Extend.RightA -> Extend.RightA
+  | None | Some Extend.LeftA -> Extend.LeftA
 
 (* [adjust_level assoc from prod] where [assoc] and [from] are the name
    and associativity of the level where to add the rule; the meaning of
@@ -578,20 +578,20 @@ let adjust_level assoc from = function
   | (NumLevel n,BorderProd (_,None)) -> Some (Some (n,true))
 (* Compute production name on the right side *)
   (* If NonA or LeftA on the right-hand side, set to NEXT *)
-  | (NumLevel n,BorderProd (Right,Some (NonA|LeftA))) ->
+  | (NumLevel n,BorderProd (Right,Some (Extend.NonA|Extend.LeftA))) ->
       Some None
   (* If RightA on the right-hand side, set to the explicit (current) level *)
-  | (NumLevel n,BorderProd (Right,Some RightA)) ->
+  | (NumLevel n,BorderProd (Right,Some Extend.RightA)) ->
       Some (Some (n,true))
 (* Compute production name on the left side *)
   (* If NonA on the left-hand side, adopt the current assoc ?? *)
-  | (NumLevel n,BorderProd (Left,Some NonA)) -> None
+  | (NumLevel n,BorderProd (Left,Some Extend.NonA)) -> None
   (* If the expected assoc is the current one, set to SELF *)
   | (NumLevel n,BorderProd (Left,Some a)) when a = camlp4_assoc assoc ->
       None
   (* Otherwise, force the level, n or n-1, according to expected assoc *)
   | (NumLevel n,BorderProd (Left,Some a)) ->
-      if a = LeftA then Some (Some (n,true)) else Some None
+      if a = Extend.LeftA then Some (Some (n,true)) else Some None
   (* None means NEXT *)
   | (NextLevel,_) -> Some None
 (* Compute production name elsewhere *)

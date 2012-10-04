@@ -1,31 +1,26 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Compat
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
-open Evd
 open Term
 open Termops
-open Sign
 open Environ
 open Reductionops
-open Inductive
 open Inductiveops
 open Typing
 open Proof_type
-open Typeops
 open Type_errors
 open Retyping
-open Evarutil
-open Tacexpr
+open Misctypes
 
 type refiner_error =
 
@@ -48,7 +43,7 @@ open Pretype_errors
 let rec catchable_exception = function
   | Loc.Exc_located(_,e) -> catchable_exception e
   | LtacLocated(_,e) -> catchable_exception e
-  | Util.UserError _ | TypeError _ | PretypeError (_,_,TypingError _)
+  | Errors.UserError _ | TypeError _ | PretypeError (_,_,TypingError _)
   | RefinerError _ | Indrec.RecursionSchemeError _
   | Nametab.GlobalizationError _ | PretypeError (_,_,VarNotFound _)
   (* reduction errors *)
@@ -146,7 +141,7 @@ let push_val y = function
 let push_item x v (m,l) =
   (Idmap.add x v m, (x,Idset.empty)::l)
 let mem_q x (m,_) = Idmap.mem x m
-let rec find_q x (m,q) =
+let find_q x (m,q) =
   let v = Idmap.find x m in
   let m' = Idmap.remove x m in
   let rec find accs acc = function
@@ -179,7 +174,7 @@ let reorder_context env sign ord =
             errorlabstrm "reorder_context"
               (str "Cannot move declaration " ++ pr_id top ++ spc() ++
               str "before " ++
-              prlist_with_sep pr_spc pr_id
+              pr_sequence pr_id
                 (Idset.elements (Idset.inter h
                   (global_vars_set_of_decl env d))));
           step ord' expected ctxt_head mh (d::ctxt_tail)
@@ -220,7 +215,7 @@ let rec get_hyp_after h = function
   | [] -> error_no_such_hypothesis h
   | (hyp,_,_) :: right ->
       if hyp = h then
-	match right with (id,_,_)::_ -> MoveBefore id | [] -> MoveToEnd false
+	match right with (id,_,_)::_ -> MoveBefore id | [] -> MoveFirst
       else
        get_hyp_after h right
 
@@ -229,7 +224,7 @@ let split_sign hfrom hto l =
     | [] -> error_no_such_hypothesis hfrom
     | (hyp,c,typ) as d :: right ->
       	if hyp = hfrom then
-	  (left,right,d, toleft or hto = MoveToEnd true)
+	  (left,right,d, toleft or hto = MoveLast)
       	else
 	  splitrec (d::left)
 	    (toleft or hto = MoveAfter hyp or hto = MoveBefore hyp)
@@ -251,7 +246,7 @@ let move_hyp with_dep toleft (left,(idfrom,_,_ as declfrom),right) hto =
   in
   let rec moverec first middle = function
     | [] ->
-	if match hto with MoveToEnd _ -> false | _ -> true then
+	if match hto with MoveFirst | MoveLast -> false | _ -> true then
 	  error_no_such_hypothesis (hyp_of_move_location hto);
 	List.rev first @ List.rev middle
     | (hyp,_,_) :: _ as right when hto = MoveBefore hyp ->
@@ -263,7 +258,7 @@ let move_hyp with_dep toleft (left,(idfrom,_,_ as declfrom),right) hto =
 	      (first, d::middle)
             else
 	      errorlabstrm "move_hyp" (str "Cannot move " ++ pr_id idfrom ++
-	        pr_move_location pr_id hto ++
+	        Miscops.pr_move_location pr_id hto ++
 	        str (if toleft then ": it occurs in " else ": it depends on ")
 	        ++ pr_id hyp ++ str ".")
           else
@@ -313,7 +308,7 @@ let collect_meta_variables c =
   List.rev (collrec false [] c)
 
 let check_meta_variables c =
-  if not (list_distinct (collect_meta_variables c)) then
+  if not (List.distinct (collect_meta_variables c)) then
     raise (RefinerError (NonLinearProof c))
 
 let check_conv_leq_goal env sigma arg ty conclty =
@@ -372,7 +367,7 @@ let rec mk_refgoals sigma goal goalacc conclty trm =
 	let (acc',lbrty,conclty',sigma,p',c') = mk_casegoals sigma goal goalacc p c in
 	check_conv_leq_goal env sigma trm conclty' conclty;
 	let (acc'',sigma, rbranches) =
-	  array_fold_left2
+	  Array.fold_left2
             (fun (lacc,sigma,bacc) ty fi ->
 	       let (r,_,s,b') = mk_refgoals sigma goal lacc ty fi in r,s,(b'::bacc))
             (acc',sigma,[]) lbrty lf
@@ -408,7 +403,7 @@ and mk_hdgoals sigma goal goalacc trm =
     | App (f,l) ->
 	let (acc',hdty,sigma,applicand) =
 	  if isInd f or isConst f
-	     & not (array_exists occur_meta l) (* we could be finer *)
+	     & not (Array.exists occur_meta l) (* we could be finer *)
 	  then
 	   (goalacc,type_of_global_reference_knowing_parameters env sigma f l,sigma,f)
 	  else mk_hdgoals sigma goal goalacc f
@@ -420,7 +415,7 @@ and mk_hdgoals sigma goal goalacc trm =
     | Case (ci,p,c,lf) ->
 	let (acc',lbrty,conclty',sigma,p',c') = mk_casegoals sigma goal goalacc p c in
 	let (acc'',sigma,rbranches) =
-	  array_fold_left2
+	  Array.fold_left2
             (fun (lacc,sigma,bacc) ty fi ->
 	       let (r,_,s,b') = mk_refgoals sigma goal lacc ty fi in r,s,(b'::bacc))
             (acc',sigma,[]) lbrty lf
@@ -541,7 +536,7 @@ let prim_refiner r sigma goal =
             | _ -> error "Not enough products."
 	in
 	let (sp,_) = check_ind env n cl in
-	let firsts,lasts = list_chop j rest in
+	let firsts,lasts = List.chop j rest in
 	let all = firsts@(f,n,cl)::lasts in
      	let rec mk_sign sign = function
 	  | (f,n,ar)::oth ->
@@ -585,7 +580,7 @@ let prim_refiner r sigma goal =
 		  error ("All methods must construct elements " ^
 			  "in coinductive types.")
 	in
-	let firsts,lasts = list_chop j others in
+	let firsts,lasts = List.chop j others in
 	let all = firsts@(f,cl)::lasts in
      	List.iter (fun (_,c) -> check_is_coind env c) all;
         let rec mk_sign sign = function
@@ -688,21 +683,3 @@ let prim_refiner r sigma goal =
 	(* Normalises evars in goals. Used by instantiate. *)
         let (goal,sigma) = Goal.V82.nf_evar sigma goal in
 	([goal],sigma)
-
-(************************************************************************)
-(************************************************************************)
-(* Extracting a proof term from the proof tree *)
-
-(* Util *)
-
-type variable_proof_status = ProofVar | SectionVar of identifier
-
-type proof_variable = name * variable_proof_status
-
-let proof_variable_index x =
-  let rec aux n = function
-    | (Name id,ProofVar)::l when x = id -> n
-    | _::l ->  aux (n+1) l
-    | [] -> raise Not_found
-  in
-  aux 1

@@ -1,13 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
-open Names
 open Term
 open Environ
 open Reductionops
@@ -16,7 +16,6 @@ open Pretype_errors
 open Inductive
 open Inductiveops
 open Typeops
-open Evd
 open Arguments_renaming
 
 let meta_type evd mv =
@@ -72,7 +71,7 @@ let e_check_branch_types env evdref ind cj (lfj,explft) =
       error_ill_formed_branch env cj.uj_val (ind,i+1) lfj.(i).uj_type explft.(i)
   done
 
-let rec max_sort l =
+let max_sort l =
   if List.mem InType l then InType else
   if List.mem InSet l then InSet else InProp
 
@@ -101,7 +100,7 @@ let e_is_correct_arity env evdref c pj ind specif params =
 let e_type_case_branches env evdref (ind,largs) pj c =
   let specif = lookup_mind_specif env ind in
   let nparams = inductive_params specif in
-  let (params,realargs) = list_chop nparams largs in
+  let (params,realargs) = List.chop nparams largs in
   let p = pj.uj_val in
   let univ = e_is_correct_arity env evdref c pj ind specif params in
   let lc = build_branches_type ind specif params p in

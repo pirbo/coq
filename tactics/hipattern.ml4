@@ -1,26 +1,20 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma parsing/q_constr.cmo" i*)
+(*i camlp4deps: "grammar/grammar.cma grammar/q_constr.cmo" i*)
 
 open Pp
+open Errors
 open Util
 open Names
-open Nameops
 open Term
-open Sign
 open Termops
-open Reductionops
 open Inductiveops
-open Evd
-open Environ
-open Clenv
-open Pattern
 open Matching
 open Coqlib
 open Declarations
@@ -80,9 +74,9 @@ let has_nodep_prod = has_nodep_prod_after 0
 
 (* style: None = record; Some false = conjunction; Some true = strict conj *)
 
-let match_with_one_constructor style allow_rec t =
+let match_with_one_constructor style onlybinary allow_rec t =
   let (hdapp,args) = decompose_app t in
-  match kind_of_term hdapp with
+  let res = match kind_of_term hdapp with
   | Ind ind ->
       let (mib,mip) = Global.lookup_inductive ind in
       if (Array.length mip.mind_consnames = 1)
@@ -109,22 +103,25 @@ let match_with_one_constructor style allow_rec t =
 	      None
       else
 	None
+  | _ -> None in
+  match res with
+  | Some (hdapp,args) when not onlybinary || List.length args = 2 -> res
   | _ -> None
 
-let match_with_conjunction ?(strict=false) t =
-  match_with_one_constructor (Some strict) false t
+let match_with_conjunction ?(strict=false) ?(onlybinary=false) t =
+  match_with_one_constructor (Some strict) onlybinary false t
 
 let match_with_record t =
-  match_with_one_constructor None false t
+  match_with_one_constructor None false false t
 
-let is_conjunction ?(strict=false) t =
-  op2bool (match_with_conjunction ~strict t)
+let is_conjunction ?(strict=false) ?(onlybinary=false) t =
+  op2bool (match_with_conjunction ~strict ~onlybinary t)
 
 let is_record t =
   op2bool (match_with_record t)
 
 let match_with_tuple t =
-  let t = match_with_one_constructor None true t in
+  let t = match_with_one_constructor None false true t in
   Option.map (fun (hd,l) ->
     let ind = destInd hd in
     let (mib,mip) = Global.lookup_inductive ind in
@@ -140,19 +137,20 @@ let is_tuple t =
    "Inductive I A1 ... An := C1 (_:A1) | ... | Cn : (_:An)" *)
 
 let test_strict_disjunction n lc =
-  array_for_all_i (fun i c ->
+  Array.for_all_i (fun i c ->
     match (prod_assum (snd (decompose_prod_n_assum n c))) with
     | [_,None,c] -> isRel c && destRel c = (n - i)
     | _ -> false) 0 lc
 
-let match_with_disjunction ?(strict=false) t =
+let match_with_disjunction ?(strict=false) ?(onlybinary=false) t =
   let (hdapp,args) = decompose_app t in
-  match kind_of_term hdapp with
+  let res = match kind_of_term hdapp with
   | Ind ind  ->
       let car = mis_constr_nargs ind in
       let (mib,mip) = Global.lookup_inductive ind in
-      if array_for_all (fun ar -> ar = 1) car &&
-	not (mis_is_recursive (ind,mib,mip))
+      if Array.for_all (fun ar -> ar = 1) car
+	&& not (mis_is_recursive (ind,mib,mip))
+        && (mip.mind_nrealargs = 0)
       then
 	if strict then
 	  if test_strict_disjunction mib.mind_nparams mip.mind_nf_lc then
@@ -166,10 +164,13 @@ let match_with_disjunction ?(strict=false) t =
 	  Some (hdapp,Array.to_list cargs)
       else
 	None
+  | _ -> None in
+  match res with
+  | Some (hdapp,args) when not onlybinary || List.length args = 2 -> res
   | _ -> None
 
-let is_disjunction ?(strict=false) t =
-  op2bool (match_with_disjunction ~strict t)
+let is_disjunction ?(strict=false) ?(onlybinary=false) t =
+  op2bool (match_with_disjunction ~strict ~onlybinary t)
 
 (* An empty type is an inductive type, possible with indices, that has no
    constructors *)
@@ -228,7 +229,7 @@ let coq_refl_leibniz1_pattern = PATTERN [ forall x:_, _ x x ]
 let coq_refl_leibniz2_pattern = PATTERN [ forall A:_, forall x:A, _ A x x ]
 let coq_refl_jm_pattern       = PATTERN [ forall A:_, forall x:A, _ A x A x ]
 
-open Libnames
+open Globnames
 
 let match_with_equation t =
   if not (isApp t) then raise NoEquationFound;
@@ -308,10 +309,10 @@ let match_with_nodep_ind t =
           let (mib,mip) = Global.lookup_inductive ind in
 	    if Array.length (mib.mind_packets)>1 then None else
 	      let nodep_constr = has_nodep_prod_after mib.mind_nparams in
-		if array_for_all nodep_constr mip.mind_nf_lc then
+		if Array.for_all nodep_constr mip.mind_nf_lc then
 		  let params=
 		    if mip.mind_nrealargs=0 then args else
-		      fst (list_chop mib.mind_nparams args) in
+		      fst (List.chop mib.mind_nparams args) in
 		    Some (hdapp,params,mip.mind_nrealargs)
 		else
 		  None
@@ -351,7 +352,6 @@ let coq_eq_pattern_gen eq = lazy PATTERN [ %eq ?X1 ?X2 ?X3 ]
 let coq_eq_pattern = coq_eq_pattern_gen coq_eq_ref
 let coq_identity_pattern = coq_eq_pattern_gen coq_identity_ref
 let coq_jmeq_pattern = lazy PATTERN [ %coq_jmeq_ref ?X1 ?X2 ?X3 ?X4 ]
-let coq_eq_true_pattern = lazy PATTERN [ %coq_eq_true_ref ?X1 ]
 
 let match_eq eqn eq_pat =
   let pat = try Lazy.force eq_pat with _ -> raise PatternMatchingFailure in
@@ -384,12 +384,6 @@ let find_eq_data_decompose gl eqn =
   let (lbeq,eq_args) = find_eq_data eqn in
   (lbeq,extract_eq_args gl eq_args)
 
-let inversible_equalities =
-  [coq_eq_pattern, build_coq_inversion_eq_data;
-   coq_jmeq_pattern, build_coq_inversion_jmeq_data;
-   coq_identity_pattern, build_coq_inversion_identity_data;
-   coq_eq_true_pattern, build_coq_inversion_eq_true_data]
-
 let find_this_eq_data_decompose gl eqn =
   let (lbeq,eq_args) =
     try (*first_match (match_eq eqn) inversible_equalities*)
@@ -403,7 +397,6 @@ let find_this_eq_data_decompose gl eqn =
   (lbeq,eq_args)
 
 open Tacmach
-open Tacticals
 
 let match_eq_nf gls eqn eq_pat =
   match pf_matches gls (Lazy.force eq_pat) eqn with
@@ -481,7 +474,7 @@ let match_eqdec t =
         false,op_or,matches (Lazy.force coq_eqdec_rev_pattern) t in
   match subst with
   | [(_,typ);(_,c1);(_,c2)] ->
-      eqonleft, Libnames.constr_of_global (Lazy.force op), c1, c2, typ
+      eqonleft, Globnames.constr_of_global (Lazy.force op), c1, c2, typ
   | _ -> anomaly "Unexpected pattern"
 
 (* Patterns "~ ?" and "? -> False" *)

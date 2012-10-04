@@ -1,26 +1,22 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Term
-open Proof_type
-open Tacmach
-
-open Glob_term
 open Refiner
-open Genarg
 open Tacexpr
 open Tactics
 open Util
+open Locus
+open Misctypes
 
 (* Basic tactics *)
 let h_intro_move x y =
   abstract_tactic (TacIntroMove (x, y)) (intro_move x y)
-let h_intro x        = h_intro_move (Some x) no_move
+let h_intro x        = h_intro_move (Some x) MoveLast
 let h_intros_until x = abstract_tactic (TacIntrosUntil x) (intros_until x)
 let h_assumption     = abstract_tactic TacAssumption assumption
 let h_exact c        = abstract_tactic (TacExact c) (exact_check c)
@@ -57,16 +53,19 @@ let h_generalize_gen cl =
   abstract_tactic (TacGeneralize cl)
     (generalize_gen (List.map (on_fst Redexpr.out_with_occurrences) cl))
 let h_generalize cl =
-  h_generalize_gen (List.map (fun c -> ((all_occurrences_expr,c),Names.Anonymous))
+  h_generalize_gen (List.map (fun c -> ((AllOccurrences,c),Names.Anonymous))
     cl)
 let h_generalize_dep c =
   abstract_tactic (TacGeneralizeDep c) (generalize_dep c)
-let h_let_tac b na c cl =
-  let with_eq = if b then None else Some (true,(dummy_loc,IntroAnonymous)) in
-  abstract_tactic (TacLetTac (na,c,cl,b)) (letin_tac with_eq na c None cl)
-let h_let_pat_tac b na c cl =
-  let with_eq = if b then None else Some (true,(dummy_loc,IntroAnonymous)) in
-  abstract_tactic (TacLetTac (na,snd c,cl,b))
+let h_let_tac b na c cl eqpat =
+  let id = Option.default (Loc.ghost,IntroAnonymous) eqpat in
+  let with_eq = if b then None else Some (true,id) in
+  abstract_tactic (TacLetTac (na,c,cl,b,eqpat))
+    (letin_tac with_eq na c None cl)
+let h_let_pat_tac b na c cl eqpat =
+  let id = Option.default (Loc.ghost,IntroAnonymous) eqpat in
+  let with_eq = if b then None else Some (true,id) in
+  abstract_tactic (TacLetTac (na,snd c,cl,b,eqpat))
     (letin_pat_tac with_eq na c None cl)
 
 (* Derived basic tactics *)
@@ -82,12 +81,12 @@ let out_indarg = function
   | ElimOnAnonHyp n -> ElimOnAnonHyp n
 
 let h_induction_destruct isrec ev lcl =
-  let lcl' = on_fst (List.map (fun (a,b,c) ->(List.map out_indarg a,b,c))) lcl in
+  let lcl' = on_pi1 (List.map (fun (a,b) ->(out_indarg a,b))) lcl in
   abstract_tactic (TacInductionDestruct (isrec,ev,lcl'))
     (induction_destruct isrec ev lcl)
-let h_new_induction ev c e idl cl =
-  h_induction_destruct true ev ([c,e,idl],cl)
-let h_new_destruct ev c e idl cl = h_induction_destruct false ev ([c,e,idl],cl)
+let h_new_induction ev c idl e cl =
+  h_induction_destruct true ev ([c,idl],e,cl)
+let h_new_destruct ev c idl e cl = h_induction_destruct false ev ([c,idl],e,cl)
 
 let h_specialize n d = abstract_tactic (TacSpecialize (n,d)) (specialize n d)
 let h_lapply c = abstract_tactic (TacLApply c) (cut_and_apply c)
@@ -130,8 +129,8 @@ let h_transitivity c =
   abstract_tactic (TacTransitivity c)
     (intros_transitivity c)
 
-let h_simplest_apply c = h_apply false false [dummy_loc,(c,NoBindings)]
-let h_simplest_eapply c = h_apply false true [dummy_loc,(c,NoBindings)]
+let h_simplest_apply c = h_apply false false [Loc.ghost,(c,NoBindings)]
+let h_simplest_eapply c = h_apply false true [Loc.ghost,(c,NoBindings)]
 let h_simplest_elim c   = h_elim false (c,NoBindings) None
 let h_simplest_case   c = h_case false (c,NoBindings)
 

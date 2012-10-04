@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -169,13 +169,13 @@ struct
   (* Sets with a neutral element for inter *)
   module OSet (S:Set.S) = struct
     type t = S.t option
-    let union s1 s2 = match s1,s2 with
+    let union s1 s2 : t = match s1,s2 with
       | (None, _ | _, None) -> None
       | Some a, Some b -> Some (S.union a b)
-    let inter s1 s2 = match s1,s2 with
+    let inter s1 s2 : t = match s1,s2 with
       | (None, a | a, None) -> a
       | Some a, Some b -> Some (S.inter a b)
-    let is_empty = function 
+    let is_empty : t -> bool = function 
       | None -> false
       | Some s -> S.is_empty s
     (* optimization hack: Not_found is catched in fold_pattern *)

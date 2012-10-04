@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -60,6 +60,7 @@ val rule : unit -> unit
 
 val nbsp : unit -> unit
 val char : char -> unit
+val keyword : string -> loc -> unit
 val ident : string -> loc -> unit
 val sublexer : char -> loc -> unit
 val initialize : unit -> unit
@@ -70,13 +71,17 @@ val latex_char : char -> unit
 val latex_string : string -> unit
 val html_char : char -> unit
 val html_string : string -> unit
-val verbatim_char : char -> unit
+val verbatim_char : bool -> char -> unit
 val hard_verbatim_char : char -> unit
 
 val start_latex_math : unit -> unit
 val stop_latex_math : unit -> unit
-val start_verbatim : unit -> unit
-val stop_verbatim : unit -> unit
+val start_verbatim : bool -> unit
+val stop_verbatim : bool -> unit
+val start_quote : unit -> unit
+val stop_quote : unit -> unit
+
+val url : string -> string option -> unit
 
 (* this outputs an inference rule in one go.  You pass it the list of
    assumptions, then the middle line info, then the conclusion (which

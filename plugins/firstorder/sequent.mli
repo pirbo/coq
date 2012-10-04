@@ -1,17 +1,16 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Term
-open Util
 open Formula
 open Tacmach
 open Names
-open Libnames
+open Globnames
 
 module OrderedConstr: Set.OrderedType with type t=constr
 
@@ -61,4 +60,4 @@ val extend_with_ref_list : global_reference list ->
 val extend_with_auto_hints : Auto.hint_db_name list ->
   t -> Proof_type.goal sigma -> t
 
-val print_cmap: global_reference list CM.t -> unit
+val print_cmap: global_reference list CM.t -> Pp.std_ppcmds

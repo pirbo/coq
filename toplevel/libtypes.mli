@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,7 +13,7 @@ open Term
 
 (** results are the reference of the object, together with a context
 (constr+evar) and a substitution under this context *)
-type result = Libnames.global_reference * (constr*existential_key) * Termops.subst
+type result = Globnames.global_reference * (constr*existential_key) * Termops.subst
 
 (** this is the reduction function used in the indexing process *)
 val reduce : types -> types

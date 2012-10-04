@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -18,6 +18,8 @@ open Redexpr
 open Tacexpr
 open Glob_term
 open Pattern
+open Locus
+open Misctypes
 
 (** Operations for handling terms under a local typing context. *)
 
@@ -48,9 +50,6 @@ val pf_type_of            : goal sigma -> constr -> types
 val pf_check_type         : goal sigma -> constr -> types -> unit
 val pf_hnf_type_of        : goal sigma -> constr -> types
 
-val pf_interp_constr      : goal sigma -> Topconstr.constr_expr -> constr
-val pf_interp_type        : goal sigma -> Topconstr.constr_expr -> types
-
 val pf_get_hyp            : goal sigma -> identifier -> named_declaration
 val pf_get_hyp_typ        : goal sigma -> identifier -> types
 
@@ -74,7 +73,7 @@ val pf_nf_betaiota             : goal sigma -> constr -> constr
 val pf_reduce_to_quantified_ind : goal sigma -> types -> inductive * types
 val pf_reduce_to_atomic_ind     : goal sigma -> types -> inductive * types
 val pf_compute                 : goal sigma -> constr -> constr
-val pf_unfoldn    : (Termops.occurrences * evaluable_global_reference) list
+val pf_unfoldn    : (occurrences * evaluable_global_reference) list
         -> goal sigma -> constr -> constr
 
 val pf_const_value : goal sigma -> constant -> constr

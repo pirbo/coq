@@ -1,21 +1,18 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Term
-open Util
+open Errors
 open Evar_refiner
 open Tacmach
 open Tacexpr
 open Refiner
-open Proof_type
 open Evd
-open Sign
-open Termops
+open Locus
 
 (* The instantiate tactic *)
 
@@ -51,7 +48,7 @@ let instantiate n (ist,rawc) ido gl =
         gl
 
 let let_evar name typ gls =
-  let src = (dummy_loc,GoalEvar) in
+  let src = (Loc.ghost,Evar_kinds.GoalEvar) in
   let sigma',evar = Evarutil.new_evar gls.sigma (pf_env gls) ~src typ in
   Refiner.tclTHEN (Refiner.tclEVARS sigma')
-    (Tactics.letin_tac None name evar None nowhere) gls
+    (Tactics.letin_tac None name evar None Locusops.nowhere) gls

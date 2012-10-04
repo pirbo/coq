@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -107,9 +107,10 @@ type instruction =
   | Kisconst of Label.t                 (** conditional jump *)
   | Kareconst of int*Label.t            (** conditional jump *)
   | Kcompint31                          (** dynamic compilation of int31 *)
-  | Kdecompint31                        (** dynamix decompilation of int31 
-   /spiwack *)
-
+  | Kdecompint31                        (** dynamix decompilation of int31 *)
+  | Klorint31                           (** bitwise operations: or and xor *)
+  | Klandint31
+  | Klxorint31
 
 and bytecodes = instruction list
 

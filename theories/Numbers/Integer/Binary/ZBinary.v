@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -36,7 +36,7 @@ End TestOrder.
 
 (** Z forms a ring *)
 
-(*Lemma Zring : ring_theory 0 1 NZadd NZmul NZsub Zopp NZeq.
+(*Lemma Zring : ring_theory 0 1 NZadd NZmul NZsub Z.opp NZeq.
 Proof.
 constructor.
 exact Zadd_0_l.

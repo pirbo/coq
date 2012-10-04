@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -94,8 +94,8 @@ let lookup_rel_val n env =
 
 let env_of_rel n env =
   { env with
-    env_rel_context = Util.list_skipn n env.env_rel_context;
-    env_rel_val = Util.list_skipn n env.env_rel_val;
+    env_rel_context = Util.List.skipn n env.env_rel_context;
+    env_rel_val = Util.List.skipn n env.env_rel_val;
     env_nb_rel = env.env_nb_rel - n
   }
 
@@ -105,8 +105,6 @@ let push_named_context_val d (ctxt,vals) =
   let id,_,_ = d in
   let rval = ref VKnone in
     Sign.add_named_decl d ctxt, (id,rval)::vals
-
-exception ASSERT of rel_context
 
 let push_named d env =
 (*  if not (env.env_rel_context = []) then raise (ASSERT env.env_rel_context);

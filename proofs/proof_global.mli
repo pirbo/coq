@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -35,7 +35,7 @@ val check_no_pending_proof : unit -> unit
 val get_current_proof_name : unit -> Names.identifier
 val get_all_proof_names : unit -> Names.identifier list
 
-val discard : Names.identifier Util.located -> unit
+val discard : Names.identifier Loc.located -> unit
 val discard_current : unit -> unit
 val discard_all : unit -> unit
 
@@ -57,7 +57,7 @@ val start_proof : Names.identifier ->
                           Decl_kinds.goal_kind ->
                           (Environ.env * Term.types) list  ->
                           ?compute_guard:lemma_possible_guards -> 
-                          Tacexpr.declaration_hook -> 
+                          unit Tacexpr.declaration_hook -> 
                           unit
 
 val close_proof : unit -> 
@@ -65,15 +65,9 @@ val close_proof : unit ->
                           (Entries.definition_entry list * 
 			    lemma_possible_guards * 
 			    Decl_kinds.goal_kind * 
-			    Tacexpr.declaration_hook)
+			    unit Tacexpr.declaration_hook)
 
 exception NoSuchProof
-
-val suspend : unit -> unit
-val resume_last : unit -> unit
-
-val resume : Names.identifier -> unit
-(** @raise NoSuchProof if it doesn't find one. *)
 
 (** Runs a tactic on the current proof. Raises [NoCurrentProof] is there is 
    no current proof. *)
@@ -133,5 +127,5 @@ module Bullet : sig
 end
 
 module V82 : sig
-  val get_current_initial_conclusions : unit -> Names.identifier *(Term.types list * Decl_kinds.goal_kind * Tacexpr.declaration_hook)
+  val get_current_initial_conclusions : unit -> Names.identifier *(Term.types list * Decl_kinds.goal_kind * unit Tacexpr.declaration_hook)
 end

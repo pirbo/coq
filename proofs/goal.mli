@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -55,7 +55,7 @@ val return : 'a -> 'a sensitive
 (* spiwack: it is a wrapper around [Constrintern.interp_open_constr]. 
     In an ideal world, this could/should be the other way round.
     As of now, though, it seems at least quite useful to build tactics. *)
-val interp_constr : Topconstr.constr_expr -> Term.constr sensitive
+val interp_constr : Constrexpr.constr_expr -> Term.constr sensitive
 
 (* Type of constr with holes used by refine. *)
 type refinable
@@ -72,7 +72,7 @@ module Refinable : sig
   (* [with_type c typ] constrains term [c] to have type [typ].  *)
   val with_type : Term.constr -> Term.types -> Term.constr sensitive
 
-  val resolve_typeclasses : ?onlyargs:bool -> ?split:bool -> ?fail:bool -> unit -> unit sensitive
+  val resolve_typeclasses : ?filter:Typeclasses.evar_filter -> ?split:bool -> ?fail:bool -> unit -> unit sensitive
 
 
   (* [constr_of_raw h check_type resolve_classes] is a pretyping function.

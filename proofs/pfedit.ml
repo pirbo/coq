@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,19 +9,10 @@
 open Pp
 open Util
 open Names
-open Nameops
-open Sign
-open Term
-open Declarations
 open Entries
 open Environ
 open Evd
-open Typing
 open Refiner
-open Tacexpr
-open Proof_type
-open Lib
-open Safe_typing
 
 let refining = Proof_global.there_are_pending_proofs
 let check_no_pending_proofs = Proof_global.check_no_pending_proof
@@ -35,9 +26,11 @@ let delete_proof = Proof_global.discard
 let delete_current_proof = Proof_global.discard_current
 let delete_all_proofs = Proof_global.discard_all
 
-let undo n = 
+let undo n =
   let p = Proof_global.give_me_the_proof () in
-  for i = 1 to n do
+  let d = Proof.V82.depth p in
+  if n >= d then raise Proof.EmptyUndoStack;
+  for _i = 1 to n do
     Proof.undo p
   done
 
@@ -54,32 +47,21 @@ let undo_todepth n =
     undo ((current_proof_depth ()) - n )
   with Proof_global.NoCurrentProof  when n=0 -> ()
 
-let set_undo _ = ()
-let get_undo _ = None
-
-
 let start_proof id str hyps c ?init_tac ?compute_guard hook = 
   let goals = [ (Global.env_of_context hyps , c) ] in
   let init_tac = Option.map Proofview.V82.tactic init_tac in
   Proof_global.start_proof id str goals ?compute_guard hook;
-  Option.iter Proof_global.run_tactic init_tac
+  try Option.iter Proof_global.run_tactic init_tac
+  with e -> Proof_global.discard_current (); raise e
 
-let restart_proof () =
-  let p = Proof_global.give_me_the_proof () in
-  try while true do
-    Proof.undo p
-  done with Proof.EmptyUndoStack -> ()
-
-let resume_last_proof () = Proof_global.resume_last ()
-let resume_proof (_,id) = Proof_global.resume id
-let suspend_proof ()  =  Proof_global.suspend ()
+let restart_proof () = undo_todepth 1
 
 let cook_proof hook =
   let prf = Proof_global.give_me_the_proof () in
   hook prf;
   match Proof_global.close_proof () with
   | (i,([e],cg,str,h)) -> (i,(e,cg,str,h))
-  | _ -> Util.anomaly "Pfedit.cook_proof: more than one proof term."
+  | _ -> Errors.anomaly "Pfedit.cook_proof: more than one proof term."
 
 let xml_cook_proof = ref (fun _ -> ())
 let set_xml_cook_proof f = xml_cook_proof := f
@@ -98,7 +80,7 @@ let get_used_variables () =
 
 exception NoSuchGoal
 let _ = Errors.register_handler begin function
-  | NoSuchGoal -> Util.error "No such goal."
+  | NoSuchGoal -> Errors.error "No such goal."
   | _ -> raise Errors.Unhandled
 end
 let get_nth_V82_goal i =
@@ -112,11 +94,11 @@ let get_goal_context_gen i =
   try
     let { it=goal ; sigma=sigma } =  get_nth_V82_goal i in
     (sigma, Refiner.pf_env { it=goal ; sigma=sigma })
-  with Proof_global.NoCurrentProof -> Util.error "No focused proof."
+  with Proof_global.NoCurrentProof -> Errors.error "No focused proof."
 
 let get_goal_context i =
   try get_goal_context_gen i
-  with NoSuchGoal -> Util.error "No such goal."
+  with NoSuchGoal -> Errors.error "No such goal."
 
 let get_current_goal_context () =
   try get_goal_context_gen 1
@@ -128,7 +110,7 @@ let get_current_goal_context () =
 let current_proof_statement () =
   match Proof_global.V82.get_current_initial_conclusions () with
     | (id,([concl],strength,hook)) -> id,strength,concl,hook
-    | _ -> Util.anomaly "Pfedit.current_proof_statement: more than one statement"
+    | _ -> Errors.anomaly "Pfedit.current_proof_statement: more than one statement"
 
 let solve_nth ?(with_end_tac=false) gi tac = 
   try 
@@ -140,10 +122,10 @@ let solve_nth ?(with_end_tac=false) gi tac =
     in
     Proof_global.run_tactic (Proofview.tclFOCUS gi gi tac) 
   with 
-    | Proof_global.NoCurrentProof  -> Util.error "No focused proof"
-    | Proofview.IndexOutOfRange | Failure "list_chop" -> 
+    | Proof_global.NoCurrentProof  -> Errors.error "No focused proof"
+    | Proofview.IndexOutOfRange | Failure "List.chop" -> 
 	let msg = str "No such goal: " ++ int gi ++ str "." in
-	Util.errorlabstrm "" msg
+	Errors.errorlabstrm "" msg
 
 let by = solve_nth 1
 
@@ -186,7 +168,7 @@ let declare_implicit_tactic tac = implicit_tactic := Some tac
 let solve_by_implicit_tactic env sigma (evk,args) =
   let evi = Evd.find_undefined sigma evk in
   match (!implicit_tactic, snd (evar_source evk sigma)) with
-  | Some tac, (ImplicitArg _ | QuestionMark _)
+  | Some tac, (Evar_kinds.ImplicitArg _ | Evar_kinds.QuestionMark _)
       when
 	Sign.named_context_equal (Environ.named_context_of_val evi.evar_hyps)
 	(Environ.named_context env) ->

@@ -1,13 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Names
-open Libnames
+open Globnames
 open Decl_kinds
 open Term
 open Sign
@@ -16,7 +16,6 @@ open Environ
 open Nametab
 open Mod_subst
 open Topconstr
-open Util
 
 type direction = Forward | Backward
 
@@ -71,7 +70,7 @@ val instance_impl : instance -> global_reference
 val is_class : global_reference -> bool
 val is_instance : global_reference -> bool
 
-val is_implicit_arg : hole_kind -> bool
+val is_implicit_arg : Evar_kinds.t -> bool
 
 (** Returns the term and type for the given instance of the parameters and fields
    of the type class. *)
@@ -79,15 +78,22 @@ val is_implicit_arg : hole_kind -> bool
 val instance_constructor : typeclass -> constr list -> constr option * types
 
 (** Resolvability.
-    Only undefined evars could be marked or checked for resolvability. *)
+    Only undefined evars can be marked or checked for resolvability. *)
 
 val is_resolvable : evar_info -> bool
 val mark_unresolvable : evar_info -> evar_info
 val mark_unresolvables : evar_map -> evar_map
+val mark_resolvable : evar_info -> evar_info
 val mark_resolvables : evar_map -> evar_map
 val is_class_evar : evar_map -> evar_info -> bool
 
-val resolve_typeclasses : ?onlyargs:bool -> ?split:bool -> ?fail:bool ->
+(** Filter which evars to consider for resolution. *)
+type evar_filter = Evar_kinds.t -> bool
+val all_evars : evar_filter
+val no_goals : evar_filter
+val no_goals_or_obligations : evar_filter
+
+val resolve_typeclasses : ?filter:evar_filter -> ?split:bool -> ?fail:bool ->
   env -> evar_map -> evar_map
 val resolve_one_typeclass : env -> evar_map -> types -> open_constr
 
@@ -102,7 +108,7 @@ val register_remove_instance_hint : (global_reference -> unit) -> unit
 val add_instance_hint : constr -> bool -> int option -> unit
 val remove_instance_hint : global_reference -> unit
 
-val solve_instanciations_problem : (env -> evar_map -> bool -> bool -> bool -> evar_map) ref
+val solve_instanciations_problem : (env -> evar_map -> evar_filter -> bool -> bool -> evar_map) ref
 val solve_instanciation_problem : (env -> evar_map -> types -> open_constr) ref
 
 val declare_instance : int option -> bool -> global_reference -> unit

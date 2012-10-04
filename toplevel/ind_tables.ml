@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -18,6 +18,7 @@ open Libobject
 open Nameops
 open Declarations
 open Term
+open Errors
 open Util
 open Declare
 open Entries
@@ -156,7 +157,7 @@ let define_mutual_scheme_base kind suff f internal names mind =
   let ids = Array.init (Array.length mib.mind_packets) (fun i ->
       try List.assoc i names
       with Not_found -> add_suffix mib.mind_packets.(i).mind_typename suff) in
-  let consts = array_map2 (define internal) ids cl in
+  let consts = Array.map2 (define internal) ids cl in
   declare_scheme kind (Array.mapi (fun i cst -> ((mind,i),cst)) consts);
   consts
 

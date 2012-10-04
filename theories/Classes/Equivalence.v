@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -26,7 +26,7 @@ Unset Strict Implicit.
 Generalizable Variables A R eqA B S eqB.
 Local Obligation Tactic := simpl_relation.
 
-Open Local Scope signature_scope.
+Local Open Scope signature_scope.
 
 Definition equiv `{Equivalence A R} : relation A := R.
 
@@ -37,7 +37,7 @@ Notation " x === y " := (equiv x y) (at level 70, no associativity) : equiv_scop
 
 Notation " x =/= y " := (complement equiv x y) (at level 70, no associativity) : equiv_scope.
 
-Open Local Scope equiv_scope.
+Local Open Scope equiv_scope.
 
 (** Overloading for [PER]. *)
 
@@ -105,13 +105,15 @@ Section Respecting.
   (** Here we build an equivalence instance for functions which relates respectful ones only,
      we do not export it. *)
 
-  Definition respecting `(eqa : Equivalence A (R : relation A), eqb : Equivalence B (R' : relation B)) : Type :=
+  Definition respecting `(eqa : Equivalence A (R : relation A), 
+                          eqb : Equivalence B (R' : relation B)) : Type :=
     { morph : A -> B | respectful R R' morph morph }.
 
   Program Instance respecting_equiv `(eqa : Equivalence A R, eqb : Equivalence B R') :
-    Equivalence (fun (f g : respecting eqa eqb) => forall (x y : A), R x y -> R' (proj1_sig f x) (proj1_sig g y)).
+    Equivalence (fun (f g : respecting eqa eqb) => 
+                   forall (x y : A), R x y -> R' (proj1_sig f x) (proj1_sig g y)).
 
-  Solve Obligations using unfold respecting in * ; simpl_relation ; program_simpl.
+  Solve Obligations with unfold respecting in * ; simpl_relation ; program_simpl.
 
   Next Obligation.
   Proof.
@@ -122,10 +124,15 @@ End Respecting.
 
 (** The default equivalence on function spaces, with higher-priority than [eq]. *)
 
-Program Instance pointwise_equivalence {A} `(eqb : Equivalence B eqB) :
+Instance pointwise_reflexive {A} `(reflb : Reflexive B eqB) :
+  Reflexive (pointwise_relation A eqB) | 9.
+Proof. firstorder. Qed.
+Instance pointwise_symmetric {A} `(symb : Symmetric B eqB) :
+  Symmetric (pointwise_relation A eqB) | 9.
+Proof. firstorder. Qed.
+Instance pointwise_transitive {A} `(transb : Transitive B eqB) :
+  Transitive (pointwise_relation A eqB) | 9.
+Proof. firstorder. Qed.
+Instance pointwise_equivalence {A} `(eqb : Equivalence B eqB) :
   Equivalence (pointwise_relation A eqB) | 9.
-
-  Next Obligation.
-  Proof.
-    transitivity (y a) ; auto.
-  Qed.
+Proof. split; apply _. Qed.

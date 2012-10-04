@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -10,7 +10,7 @@ open Names
 open Term
 open Classops
 open Declare
-open Libnames
+open Globnames
 open Decl_kinds
 open Nametab
 
@@ -42,8 +42,8 @@ val try_add_new_coercion_with_source : global_reference -> locality ->
 val try_add_new_identity_coercion : identifier -> locality ->
   source:cl_typ -> target:cl_typ -> unit
 
-val add_coercion_hook : Tacexpr.declaration_hook
+val add_coercion_hook : unit Tacexpr.declaration_hook
 
-val add_subclass_hook : Tacexpr.declaration_hook
+val add_subclass_hook : unit Tacexpr.declaration_hook
 
 val class_of_global : global_reference -> cl_typ

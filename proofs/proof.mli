@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -34,6 +34,15 @@ open Term
 (* Type of a proof. *)
 type proof
 
+(* Returns a stylised view of a proof for use by, for instance,
+   ide-s. *)
+(* spiwack: the type of [proof] will change as we push more refined
+   functions to ide-s. This would be better than spawning a new nearly
+   identical function everytime. Hence the generic name. *)
+(* In this version: returns the focused goals, a representation of the
+   focus stack (the number of goals at each level) and the underlying
+   evar_map *)
+val proof : proof -> Goal.goal list * (Goal.goal list * Goal.goal list) list * Evd.evar_map
 
 (*** General proof functions ***)
 
@@ -114,20 +123,20 @@ exception CannotUnfocusThisWay
      is not met. *)
 val unfocus : 'a focus_kind -> proof -> unit
 
+(* [unfocused p] returns [true] when [p] is fully unfocused. *)
+val unfocused : proof -> bool
+
 (* [get_at_focus k] gets the information stored at the closest focus point
     of kind [k].
     Raises [NoSuchFocus] if there is no focus point of kind [k]. *)
 exception NoSuchFocus
 val get_at_focus : 'a focus_kind -> proof -> 'a
 
+(* [is_last_focus k] check if the most recent focus is of kind [k] *)
+val is_last_focus : 'a focus_kind -> proof -> bool
+
 (* returns [true] if there is no goal under focus. *)
 val no_focused_goal : proof -> bool
-
-(*** Function manipulation proof extra informations ***)
-
-val get_proof_info : proof -> Store.t
-
-val set_proof_info : Store.t -> proof -> unit
 
 (* Sets the section variables assumed by the proof *)
 val set_used_variables : Sign.section_context -> proof -> unit
@@ -183,5 +192,5 @@ module V82 : sig
   val grab_evars : proof -> unit
 
   (* Implements the Existential command *)
-  val instantiate_evar : int -> Topconstr.constr_expr -> proof -> unit
+  val instantiate_evar : int -> Constrexpr.constr_expr -> proof -> unit
 end

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -146,7 +146,7 @@ Tactic Notation "setoid_replace" constr(x) "with" constr(y)
 
 Require Import Coq.Program.Tactics.
 
-Open Local Scope signature_scope.
+Local Open Scope signature_scope.
 
 Ltac red_subst_eq_morphism concl :=
   match concl with

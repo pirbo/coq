@@ -1,25 +1,29 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open System
 open Flags
 open Names
 open Libnames
-open Nameops
 open States
-open Toplevel
 open Coqinit
+
+let () = at_exit flush_all
+
+let fatal_error info =
+  pperrnl info; flush_all (); exit 1
 
 let get_version_date () =
   try
-    let coqlib = Envars.coqlib () in
+    let coqlib = Envars.coqlib Errors.error in
     let ch = open_in (Filename.concat coqlib "revision") in
     let ver = input_line ch in
     let rev = input_line ch in
@@ -28,7 +32,7 @@ let get_version_date () =
 
 let print_header () =
   let (ver,rev) = (get_version_date ()) in
-    Printf.printf "Welcome to Coq %s (%s)\n" ver rev;
+    pp (str "Welcome to Coq "++ str ver ++ str " (" ++ str rev ++ str ")\n");
     flush stdout
 
 let output_context = ref false
@@ -37,7 +41,7 @@ let memory_stat = ref false
 
 let print_memory_stat () =
   if !memory_stat then
-    Format.printf "total heap size = %d kbytes\n" (heap_size_kb ())
+    pp (str "total heap size = " ++ int (CObj.heap_size_kb ()) ++ str " kbytes" ++ fnl ())
 
 let _ = at_exit print_memory_stat
 
@@ -57,13 +61,9 @@ let unset_toplevel_name () = toplevel_name := None
 
 let remove_top_ml () = Mltop.remove ()
 
-let inputstate = ref None
-let set_inputstate s = inputstate:= Some s
-let inputstate () =
-  match !inputstate with
-    | Some "" -> ()
-    | Some s -> intern_state s
-    | None -> intern_state "initial.coq"
+let inputstate = ref ""
+let set_inputstate s = inputstate:=s
+let inputstate () = if !inputstate <> "" then intern_state !inputstate
 
 let outputstate = ref ""
 let set_outputstate s = outputstate:=s
@@ -79,7 +79,7 @@ let set_rec_include d p =
 
 let load_vernacular_list = ref ([] : (string * bool) list)
 let add_load_vernacular verb s =
-  load_vernacular_list := ((make_suffix s ".v"),verb) :: !load_vernacular_list
+  load_vernacular_list := ((CUnix.make_suffix s ".v"),verb) :: !load_vernacular_list
 let load_vernacular () =
   List.iter
     (fun (s,b) ->
@@ -95,9 +95,16 @@ let load_vernac_obj () =
   List.iter (fun f -> Library.require_library_from_file None f None)
     (List.rev !load_vernacular_obj)
 
+let load_init = ref true
+
+let require_prelude () =
+  let q = qualid_of_string "Coq.Init.Prelude" in
+  Library.require_library [Loc.ghost,q] (Some true)
+
 let require_list = ref ([] : string list)
 let add_require s = require_list := s :: !require_list
 let require () =
+  if !load_init then silently require_prelude ();
   List.iter (fun s -> Library.require_library_from_file None s (Some false))
     (List.rev !require_list)
 
@@ -108,23 +115,16 @@ let add_compile verbose s =
   compile_list := (verbose,s) :: !compile_list
 let compile_files () =
   let init_state = States.freeze() in
-  let coqdoc_init_state = Dumpglob.coqdoc_freeze () in
+  let coqdoc_init_state = Lexer.location_table () in
     List.iter
       (fun (v,f) ->
 	 States.unfreeze init_state;
-	 Dumpglob.coqdoc_unfreeze coqdoc_init_state;
+	 Lexer.restore_location_table coqdoc_init_state;
 	 if Flags.do_beautify () then
 	   with_option beautify_file (Vernac.compile v) f
 	 else
 	   Vernac.compile v f)
       (List.rev !compile_list)
-
-let set_compat_version = function
-  | "8.3" -> compat_version := Some V8_3
-  | "8.2" -> compat_version := Some V8_2
-  | "8.1" -> warning "Compatibility with version 8.1 not supported."
-  | "8.0" -> warning "Compatibility with version 8.0 not supported."
-  | s -> error ("Unknown compatibility version \""^s^"\".")
 
 (*s options for the virtual machine *)
 
@@ -147,10 +147,13 @@ let usage () =
   flush stderr ;
   exit 1
 
-let warning s = msg_warning (str s)
+let warning s = msg_warning (strbrk s)
 
 let ide_slave = ref false
 let filter_opts = ref false
+
+let verb_compat_ntn = ref false
+let no_compat_ntn = ref false
 
 let parse_args arglist =
   let glob_opt = ref false in
@@ -194,7 +197,7 @@ let parse_args arglist =
       Flags.load_proofs := Flags.Force; set_outputstate s; parse rem
     | "-outputstate" :: []       -> usage ()
 
-    | "-nois" :: rem -> set_inputstate ""; parse rem
+    | ("-noinit"|"-nois") :: rem -> load_init := false; parse rem
 
     | ("-inputstate"|"-is") :: s :: rem -> set_inputstate s; parse rem
     | ("-inputstate"|"-is") :: []       -> usage ()
@@ -243,21 +246,30 @@ let parse_args arglist =
 
     | "-debug" :: rem -> set_debug (); parse rem
 
-    | "-compat" :: v :: rem -> set_compat_version v; parse rem
+    | "-compat" :: v :: rem ->
+        Flags.compat_version := get_compat_version v; parse rem
     | "-compat" :: []       -> usage ()
 
+    | "-verbose-compat-notations" :: rem -> verb_compat_ntn := true; parse rem
+    | "-no-compat-notations" :: rem -> no_compat_ntn := true; parse rem
+
     | "-vm" :: rem -> use_vm := true; parse rem
-    | "-emacs" :: rem -> Flags.print_emacs := true; Pp.make_pp_emacs(); parse rem
+    | "-emacs" :: rem ->
+	Flags.print_emacs := true; Pp.make_pp_emacs();
+	Vernacentries.qed_display_script := false;
+        Flags.make_term_color false;
+	parse rem
     | "-emacs-U" :: rem ->
 	warning "Obsolete option \"-emacs-U\", use -emacs instead.";	
-	Flags.print_emacs := true; Pp.make_pp_emacs(); parse rem
+        Flags.make_term_color false;
+	parse ("-emacs" :: rem)
 
     | "-unicode" :: rem -> add_require "Utf8_core"; parse rem
 
     | "-coqlib" :: d :: rem -> Flags.coqlib_spec:=true; Flags.coqlib:=d; parse rem
     | "-coqlib" :: [] -> usage ()
 
-    | "-where" :: _ -> print_endline (Envars.coqlib ()); exit (if !filter_opts then 2 else 0)
+    | "-where" :: _ -> print_endline (Envars.coqlib Errors.error); exit (if !filter_opts then 2 else 0)
 
     | ("-config"|"--config") :: _ -> Usage.print_config (); exit (if !filter_opts then 2 else 0)
 
@@ -292,6 +304,8 @@ let parse_args arglist =
 
     | "-filteropts" :: rem -> filter_opts := true; parse rem
 
+    | "-color" :: rem -> Flags.make_term_color true; parse rem
+
     | s :: rem ->
       if !filter_opts then
        s :: (parse rem)
@@ -301,13 +315,10 @@ let parse_args arglist =
   try
     parse arglist
   with
-    | UserError(_,s) as e -> begin
-	try
-	  Stream.empty s; exit 1
-	with Stream.Failure ->
-	  msgnl (Errors.print e); exit 1
-      end
-    | e -> begin msgnl (Errors.print e); exit 1 end
+    | UserError(_, s) as e ->
+      if is_empty s then exit 1
+      else fatal_error (Errors.print e)
+    | e -> fatal_error (Errors.print e)
 
 let init arglist =
   Sys.catch_break false; (* Ctrl-C is fatal during the initialisation *)
@@ -329,6 +340,9 @@ let init arglist =
       Mltop.init_known_plugins ();
       set_vm_opt ();
       engage ();
+      (* Be careful to set these variables after the inputstate *)
+      Syntax_def.set_verbose_compat_notations !verb_compat_ntn;
+      Syntax_def.set_compat_notations (not !no_compat_ntn);
       if (not !batch_mode|| !compile_list=[]) && Global.env_is_empty() then
         Option.iter Declaremods.start_library !toplevel_name;
       init_library_roots ();
@@ -340,9 +354,10 @@ let init arglist =
       outputstate ()
     with e ->
       flush_all();
-      if not !batch_mode then message "Error during initialization:";
-      msgnl (Toplevel.print_toplevel_error e);
-      exit 1
+      if not !batch_mode then
+        fatal_error (str "Error during initialization:" ++ fnl () ++ Toplevel.print_toplevel_error e)
+      else
+        fatal_error (Toplevel.print_toplevel_error e)
   end;
   if !batch_mode then
     (flush_all();
@@ -350,7 +365,8 @@ let init arglist =
        Pp.ppnl (with_option raw_print Prettyp.print_full_pure_context ());
      Profile.print_profile ();
      exit 0);
-  Lib.declare_initial_state ()
+  (* We initialize the command history stack with a first entry *)
+  Backtrack.mark_command Vernacexpr.VernacNop
 
 let init_toplevel = init
 

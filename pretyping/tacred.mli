@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,7 +15,8 @@ open Closure
 open Glob_term
 open Termops
 open Pattern
-open Libnames
+open Globnames
+open Locus
 
 type reduction_tactic_error =
     InvalidAbstraction of env * constr * (env * Type_errors.type_error)
@@ -28,13 +29,13 @@ exception ReductionTacticError of reduction_tactic_error
 
 val is_evaluable : Environ.env -> evaluable_global_reference -> bool
 
-val error_not_evaluable : Libnames.global_reference -> 'a
+val error_not_evaluable : Globnames.global_reference -> 'a
 
 val evaluable_of_global_reference :
-  Environ.env -> Libnames.global_reference -> evaluable_global_reference
+  Environ.env -> Globnames.global_reference -> evaluable_global_reference
 
 val global_of_evaluable_reference :
-  evaluable_global_reference -> Libnames.global_reference
+  evaluable_global_reference -> Globnames.global_reference
 
 exception Redelimination
 

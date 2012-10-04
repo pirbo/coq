@@ -1,42 +1,39 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
 open Namegen
 open Term
 open Termops
-open Sign
 open Reduction
-open Proof_type
-open Declarations
 open Tacticals
 open Tacmach
-open Evar_refiner
 open Tactics
-open Pattern
+open Patternops
 open Clenv
-open Auto
 open Glob_term
-open Hiddentac
 open Typeclasses
 open Typeclasses_errors
 open Classes
-open Topconstr
-open Pfedit
-open Command
+open Constrexpr
 open Libnames
+open Globnames
 open Evd
-open Compat
+open Misctypes
+open Locus
+open Locusops
+open Decl_kinds
 
 (** Typeclass-based generalized rewriting. *)
 
@@ -48,10 +45,10 @@ let init_setoid () =
   else Coqlib.check_required_library ["Coq";"Setoids";"Setoid"]
 
 let proper_class =
-  lazy (class_info (Nametab.global (Qualid (dummy_loc, qualid_of_string "Coq.Classes.Morphisms.Proper"))))
+  lazy (class_info (Nametab.global (Qualid (Loc.ghost, qualid_of_string "Coq.Classes.Morphisms.Proper"))))
 
 let proper_proxy_class =
-  lazy (class_info (Nametab.global (Qualid (dummy_loc, qualid_of_string "Coq.Classes.Morphisms.ProperProxy"))))
+  lazy (class_info (Nametab.global (Qualid (Loc.ghost, qualid_of_string "Coq.Classes.Morphisms.ProperProxy"))))
 
 let proper_proj = lazy (mkConst (Option.get (pi3 (List.hd (Lazy.force proper_class).cl_projs))))
 
@@ -104,11 +101,6 @@ let mk_relation a = mkApp (Lazy.force coq_relation, [| a |])
 
 let rewrite_relation_class = lazy (gen_constant ["Classes"; "RelationClasses"] "RewriteRelation")
 
-let arrow_morphism a b =
-  if isprop a && isprop b then
-    Lazy.force impl
-  else Lazy.force arrow
-
 let proper_type = lazy (constr_of_global (Lazy.force proper_class).cl_impl)
 
 let proper_proxy_type = lazy (constr_of_global (Lazy.force proper_proxy_class).cl_impl)
@@ -120,7 +112,7 @@ let is_applied_rewrite_relation env sigma rels t =
 	if eq_constr (Lazy.force coq_eq) head then None
 	else
 	  (try
-	      let params, args = array_chop (Array.length args - 2) args in
+	      let params, args = Array.chop (Array.length args - 2) args in
 	      let env' = Environ.push_rel_context rels env in
 	      let evd, evar = Evarutil.new_evar sigma env' (new_Type ()) in
 	      let inst = mkApp (Lazy.force rewrite_relation_class, [| evar; mkApp (c, params) |]) in
@@ -148,7 +140,7 @@ let build_signature evars env m (cstrs : (types * types option) option list)
     (finalcstr : (types * types option) option) =
   let new_evar evars env t =
     new_cstr_evar evars env
-      (* ~src:(dummy_loc, ImplicitArg (ConstRef (Lazy.force respectful), (n, Some na))) *) t
+      (* ~src:(Loc.ghost, ImplicitArg (ConstRef (Lazy.force respectful), (n, Some na))) *) t
   in
   let mk_relty evars env ty obj =
     match obj with
@@ -208,12 +200,6 @@ let get_transitive_proof env = find_class_proof transitive_type transitive_proof
 
 exception FoundInt of int
 
-let array_find (arr: 'a array) (pred: int -> 'a -> bool): int =
-  try
-    for i=0 to Array.length arr - 1 do if pred i (arr.(i)) then raise (FoundInt i) done;
-    raise Not_found
-  with FoundInt i -> i
-
 type hypinfo = {
   cl : clausenv;
   prf : constr;
@@ -238,7 +224,7 @@ let rec decompose_app_rel env evd t =
   match kind_of_term t with
   | App (f, args) -> 
       if Array.length args > 1 then 
-	let fargs, args = array_chop (Array.length args - 2) args in
+	let fargs, args = Array.chop (Array.length args - 2) args in
 	  mkApp (f, fargs), args
       else 
 	let (f', args) = decompose_app_rel env evd args.(0) in
@@ -464,6 +450,16 @@ let unfold_forall t =
 	  | _ -> assert false)
     | _ -> assert false
 
+let arrow_morphism ta tb a b =
+  let ap = is_Prop ta and bp = is_Prop tb in
+    if ap && bp then mkApp (Lazy.force impl, [| a; b |]), unfold_impl
+    else if ap then (* Domain in Prop, CoDomain in Type *)
+      mkProd (Anonymous, a, b), (fun x -> x)
+    else if bp then (* Dummy forall *)
+      mkApp (Lazy.force coq_all, [| a; mkLambda (Anonymous, a, b) |]), unfold_forall
+    else (* None in Prop, use arrow *)
+      mkApp (Lazy.force arrow, [| a; b |]), unfold_impl
+
 let rec decomp_pointwise n c =
   if n = 0 then c
   else
@@ -576,10 +572,11 @@ let resolve_subrelation env avoid car rel prf rel' res =
 
 let resolve_morphism env avoid oldt m ?(fnewt=fun x -> x) args args' cstr evars =
   let evars, morph_instance, proj, sigargs, m', args, args' =
-    let first = try (array_find args' (fun i b -> b <> None)) 
-      with Not_found -> raise (Invalid_argument "resolve_morphism") in
-    let morphargs, morphobjs = array_chop first args in
-    let morphargs', morphobjs' = array_chop first args' in
+    let first = match (Array.findi (fun _ b -> b <> None) args') with
+    | Some i -> i
+    | None -> raise (Invalid_argument "resolve_morphism") in
+    let morphargs, morphobjs = Array.chop first args in
+    let morphargs', morphobjs' = Array.chop first args' in
     let appm = mkApp(m, morphargs) in
     let appmtype = Typing.type_of env (goalevars evars) appm in
     let cstrs = List.map (Option.map (fun r -> r.rew_car, get_opt_rew_rel r.rew_prf)) (Array.to_list morphobjs') in
@@ -598,7 +595,7 @@ let resolve_morphism env avoid oldt m ?(fnewt=fun x -> x) args args' cstr evars 
       evars, morph, morph, sigargs, appm, morphobjs, morphobjs'
   in
   let projargs, subst, evars, respars, typeargs =
-    array_fold_left2
+    Array.fold_left2
       (fun (acc, subst, evars, sigargs, typeargs') x y ->
 	let (carrier, relation), sigargs = split_head sigargs in
 	  match relation with
@@ -630,7 +627,7 @@ let apply_constraint env avoid car rel prf cstr res =
 let eq_env x y = x == y
 
 let apply_rule hypinfo loccs : strategy =
-  let (nowhere_except_in,occs) = loccs in
+  let (nowhere_except_in,occs) = convert_occs loccs in
   let is_occ occ =
     if nowhere_except_in then List.mem occ occs else not (List.mem occ occs) in
   let occ = ref 0 in
@@ -714,7 +711,7 @@ let fold_match ?(force=false) env sigma c =
   in
   let app =
     let ind, args = Inductive.find_rectype env cty in
-    let pars, args = list_chop ci.ci_npar args in
+    let pars, args = List.chop ci.ci_npar args in
     let meths = List.map (fun br -> br) (Array.to_list brs) in
       applist (mkConst sk, pars @ [pred] @ meths @ args @ [c])
   in 
@@ -756,7 +753,7 @@ let subterm all flags (s : strategy) : strategy =
 	      | Some false -> Some None
 	      | Some true ->
 		  let args' = Array.of_list (List.rev args') in
-		    if array_exists
+		    if Array.exists
 		      (function 
 			 | None -> false 
 			 | Some r -> not (is_rew_cast r.rew_prf)) args'
@@ -767,7 +764,7 @@ let subterm all flags (s : strategy) : strategy =
 				  rew_evars = evars' } 
 		      in Some (Some res)
 		    else 
-		      let args' = array_map2
+		      let args' = Array.map2
 			(fun aorig anew ->
 			   match anew with None -> aorig
 			   | Some r -> r.rew_to) args args' 
@@ -814,9 +811,10 @@ let subterm all flags (s : strategy) : strategy =
       | Prod (n, x, b) when noccurn 1 b ->
 	  let b = subst1 mkProp b in
 	  let tx = Typing.type_of env (goalevars evars) x and tb = Typing.type_of env (goalevars evars) b in
-	  let res = aux env avoid (mkApp (arrow_morphism tx tb, [| x; b |])) ty cstr evars in
+	  let mor, unfold = arrow_morphism tx tb x b in
+	  let res = aux env avoid mor ty cstr evars in
 	    (match res with
-	    | Some (Some r) -> Some (Some { r with rew_to = unfold_impl r.rew_to })
+	    | Some (Some r) -> Some (Some { r with rew_to = unfold r.rew_to })
 	    | _ -> res)
 
       (* 		if x' = None && flags.under_lambdas then *)
@@ -875,7 +873,7 @@ let subterm all flags (s : strategy) : strategy =
 		let res = make_leibniz_proof (mkCase (ci, lift 1 p, mkRel 1, Array.map (lift 1) brs)) ty r in
 		  Some (Some (coerce env avoid cstr res))
 	    | x ->
-	      if array_for_all ((=) 0) ci.ci_cstr_ndecls then
+	      if Array.for_all ((=) 0) ci.ci_cstr_ndecls then
 		let cstr = Some (mkApp (Lazy.force coq_eq, [| ty |])) in
 		let found, brs' = Array.fold_left 
 		  (fun (found, acc) br ->
@@ -1006,7 +1004,7 @@ module Strategies =
 
     let lemmas flags cs : strategy =
       List.fold_left (fun tac (l,l2r) ->
-	choice tac (apply_lemma flags l l2r (false,[])))
+	choice tac (apply_lemma flags l l2r AllOccurrences))
 	fail cs
 
     let inj_open c = (Evd.empty,c)
@@ -1037,6 +1035,22 @@ module Strategies =
       fun env avoid t ty cstr evars ->
 (* 	let sigma, (c,_) = Tacinterp.interp_open_constr_with_bindings is env (goalevars evars) c in *)
 	let sigma, c = Constrintern.interp_open_constr (goalevars evars) env c in
+	let unfolded =
+	  try Tacred.try_red_product env sigma c
+	  with _ -> error "fold: the term is not unfoldable !"
+	in
+	  try
+	    let sigma = Unification.w_unify env sigma CONV ~flags:Unification.elim_flags unfolded t in
+	    let c' = Evarutil.nf_evar sigma c in
+	      Some (Some { rew_car = ty; rew_from = t; rew_to = c';
+			   rew_prf = RewCast DEFAULTcast; 
+			   rew_evars = sigma, cstrevars evars })
+	  with _ -> None
+
+    let fold_glob c : strategy =
+      fun env avoid t ty cstr evars ->
+(* 	let sigma, (c,_) = Tacinterp.interp_open_constr_with_bindings is env (goalevars evars) c in *)
+	let sigma, c = Pretyping.understand_tcc (goalevars evars) env c in
 	let unfolded =
 	  try Tacred.try_red_product env sigma c
 	  with _ -> error "fold: the term is not unfoldable !"
@@ -1096,7 +1110,7 @@ let map_rewprf f = function
   | RewPrf (rel, prf) -> RewPrf (f rel, f prf)
   | RewCast c -> RewCast c
 
-exception RewriteFailure
+exception RewriteFailure of std_ppcmds
 
 type result = (evar_map * constr option * types) option option
 
@@ -1162,9 +1176,9 @@ let cl_rewrite_clause_tac ?abs strat meta clause gl =
   let evartac evd = Refiner.tclEVARS evd in
   let treat res =
     match res with
-    | None -> raise RewriteFailure
+    | None -> tclFAIL 0 (str "Nothing to rewrite")
     | Some None ->
-	tclFAIL 0 (str"setoid rewrite failed: no progress made")
+	tclFAIL 0 (str"No progress made")
     | Some (Some (undef, p, newt)) ->
 	let tac = 
 	  match clause, p with
@@ -1194,9 +1208,9 @@ let cl_rewrite_clause_tac ?abs strat meta clause gl =
     with
     | Loc.Exc_located (_, TypeClassError (env, (UnsatisfiableConstraints _ as e)))
     | TypeClassError (env, (UnsatisfiableConstraints _ as e)) ->
-	Refiner.tclFAIL_lazy 0
-	  (lazy (str"setoid rewrite failed: unable to satisfy the rewriting constraints."
-		 ++ fnl () ++ Himsg.explain_typeclass_error env e))
+	Refiner.tclFAIL 0
+	  (str"Unable to satisfy the rewriting constraints."
+	   ++ fnl () ++ Himsg.explain_typeclass_error env e)
   in tac gl
 
 open Goal
@@ -1205,8 +1219,7 @@ open Environ
 let bind_gl_info f =
   bind concl (fun c -> bind env (fun v -> bind defs (fun ev -> f c v ev))) 
 
-let fail l s =
-  raise (Refiner.FailError (l, lazy s))
+let fail l s = Refiner.tclFAIL l s
 
 let new_refine c : Goal.subgoals Goal.sensitive =
   let refable = Goal.Refinable.make
@@ -1243,12 +1256,15 @@ let assert_replacing id newt tac =
   in Proofview.tclTHEN (Proofview.tclSENSITIVE sens) 
        (Proofview.tclFOCUS 2 2 tac)
 
+let newfail n s = 
+  Proofview.tclZERO (Refiner.FailError (n, lazy s))
+
 let cl_rewrite_clause_newtac ?abs strat clause =
   let treat (res, is_hyp) = 
     match res with
-    | None -> raise RewriteFailure
+    | None -> newfail 0 (str "Nothing to rewrite")
     | Some None ->
-	fail 0 (str"setoid rewrite failed: no progress made")
+	newfail 0 (str"No progress made")
     | Some (Some res) ->
 	match is_hyp, res with
 	| Some id, (undef, Some p, newt) ->
@@ -1276,42 +1292,51 @@ let cl_rewrite_clause_newtac ?abs strat clause =
 	   | Some id -> Environ.named_type id env, Some id
 	   | None -> concl, None
 	 in
-	 let res = 
-	   try cl_rewrite_clause_aux ?abs strat env [] sigma ty is_hyp 
+	   try 
+	     let res = 
+	       cl_rewrite_clause_aux ?abs strat env [] sigma ty is_hyp 
+	     in return (res, is_hyp)
 	   with
 	   | Loc.Exc_located (_, TypeClassError (env, (UnsatisfiableConstraints _ as e)))
 	   | TypeClassError (env, (UnsatisfiableConstraints _ as e)) ->
-	       fail 0 (str"setoid rewrite failed: unable to satisfy the rewriting constraints."
-		       ++ fnl () ++ Himsg.explain_typeclass_error env e)
-	 in return (res, is_hyp))
+	     raise (RewriteFailure (str"Unable to satisfy the rewriting constraints."
+			++ fnl () ++ Himsg.explain_typeclass_error env e)))
   in Proofview.tclGOALBINDU info (fun i -> treat i)
   
+let newtactic_init_setoid () = 
+  try init_setoid (); Proofview.tclUNIT ()
+  with e -> Proofview.tclZERO e
+
+let tactic_init_setoid () = 
+  init_setoid (); tclIDTAC
+  
 let cl_rewrite_clause_new_strat ?abs strat clause =
-  init_setoid ();
-    try cl_rewrite_clause_newtac ?abs strat clause
-    with RewriteFailure ->
-      fail 0 (str"setoid rewrite failed: strategy failed")
+  Proofview.tclTHEN (newtactic_init_setoid ())
+  (try cl_rewrite_clause_newtac ?abs strat clause
+   with RewriteFailure s ->
+   newfail 0 (str"setoid rewrite failed: " ++ s))
 
 let cl_rewrite_clause_newtac' l left2right occs clause =
   Proof_global.run_tactic 
     (Proofview.tclFOCUS 1 1 
        (cl_rewrite_clause_new_strat (rewrite_with rewrite_unif_flags l left2right occs) clause))
 
-let cl_rewrite_clause_strat strat clause gl =
-    init_setoid ();
-    let meta = Evarutil.new_meta() in
-(*     let gl = { gl with sigma = Typeclasses.mark_unresolvables gl.sigma } in *)
+let cl_rewrite_clause_strat strat clause =
+  tclTHEN (tactic_init_setoid ())
+  (fun gl -> 
+   let meta = Evarutil.new_meta() in
+     (*     let gl = { gl with sigma = Typeclasses.mark_unresolvables gl.sigma } in *)
      try cl_rewrite_clause_tac strat (mkMeta meta) clause gl
-      with RewriteFailure ->
-        tclFAIL 0 (str"setoid rewrite failed: strategy failed") gl
+     with RewriteFailure e ->
+       tclFAIL 0 (str"setoid rewrite failed: " ++ e) gl
+     | Refiner.FailError (n, pp) -> 
+       tclFAIL n (str"setoid rewrite failed: " ++ Lazy.force pp) gl)
 
 let cl_rewrite_clause l left2right occs clause gl =
   cl_rewrite_clause_strat (rewrite_with (general_rewrite_unif_flags ()) l left2right occs) clause gl
 
 open Pp
-open Pcoq
 open Names
-open Tacexpr
 open Tacinterp
 open Termops
 open Genarg
@@ -1329,12 +1354,22 @@ let apply_constr_expr c l2r occs = fun env avoid t ty cstr evars ->
     apply_lemma (general_rewrite_unif_flags ()) (evd, (c, NoBindings)) 
       l2r occs env avoid t ty cstr (evd, cstrevars evars)
 
+let apply_glob_constr c l2r occs = fun env avoid t ty cstr evars ->
+  let evd, c = (Pretyping.understand_tcc (goalevars evars) env c) in
+    apply_lemma (general_rewrite_unif_flags ()) (evd, (c, NoBindings)) 
+      l2r occs env avoid t ty cstr (evd, cstrevars evars)
+
 let interp_constr_list env sigma =
   List.map (fun c -> 
 	      let evd, c = Constrintern.interp_open_constr sigma env c in
 		(evd, (c, NoBindings)), true)
 
-open Pcoq
+let interp_glob_constr_list env sigma =
+  List.map (fun c -> 
+	      let evd, c = Pretyping.understand_tcc sigma env c in
+		(evd, (c, NoBindings)), true)
+
+(* Syntax for rewriting with strategies *)
 
 type constr_expr_with_bindings = constr_expr with_bindings
 type glob_constr_with_bindings = glob_constr_and_expr with_bindings
@@ -1343,7 +1378,7 @@ type glob_constr_with_bindings_sign = interp_sign * glob_constr_and_expr with_bi
 let pr_glob_constr_with_bindings_sign _ _ _ (ge : glob_constr_with_bindings_sign) = Printer.pr_glob_constr (fst (fst (snd ge)))
 let pr_glob_constr_with_bindings _ _ _ (ge : glob_constr_with_bindings) = Printer.pr_glob_constr (fst (fst ge))
 let pr_constr_expr_with_bindings prc _ _ (ge : constr_expr_with_bindings) = prc (fst ge)
-let interp_glob_constr_with_bindings ist gl c = (ist, c)
+let interp_glob_constr_with_bindings ist gl c = Tacmach.project gl , (ist, c)
 let glob_glob_constr_with_bindings ist l = Tacinterp.intern_constr_with_bindings ist l
 let subst_glob_constr_with_bindings s c = subst_glob_with_bindings s c
 
@@ -1364,57 +1399,127 @@ ARGUMENT EXTEND glob_constr_with_bindings
    [ constr_with_bindings(bl) ] -> [ bl ]
 END
 
-let _ =
-  (Genarg.create_arg "strategy" :
-      ((strategy, Genarg.tlevel) Genarg.abstract_argument_type *
-	  (strategy, Genarg.glevel) Genarg.abstract_argument_type *
-	  (strategy, Genarg.rlevel) Genarg.abstract_argument_type))
+type ('constr,'redexpr) strategy_ast = 
+  | StratId | StratFail | StratRefl
+  | StratUnary of string * ('constr,'redexpr) strategy_ast
+  | StratBinary of string * ('constr,'redexpr) strategy_ast * ('constr,'redexpr) strategy_ast
+  | StratConstr of 'constr * bool
+  | StratTerms of 'constr list
+  | StratHints of bool * string
+  | StratEval of 'redexpr 
+  | StratFold of 'constr
+
+let rec map_strategy (f : 'a -> 'a2) (g : 'b -> 'b2) : ('a,'b) strategy_ast -> ('a2,'b2) strategy_ast = function
+  | StratId | StratFail | StratRefl as s -> s
+  | StratUnary (s, str) -> StratUnary (s, map_strategy f g str)
+  | StratBinary (s, str, str') -> StratBinary (s, map_strategy f g str, map_strategy f g str')
+  | StratConstr (c, b) -> StratConstr (f c, b)
+  | StratTerms l -> StratTerms (List.map f l)
+  | StratHints (b, id) -> StratHints (b, id)
+  | StratEval r -> StratEval (g r)
+  | StratFold c -> StratFold (f c)
+
+let rec strategy_of_ast = function
+  | StratId -> Strategies.id
+  | StratFail -> Strategies.fail
+  | StratRefl -> Strategies.refl
+  | StratUnary (f, s) -> 
+    let s' = strategy_of_ast s in
+    let f' = match f with
+      | "subterms" -> all_subterms
+      | "subterm" -> one_subterm
+      | "innermost" -> Strategies.innermost
+      | "outermost" -> Strategies.outermost
+      | "bottomup" -> Strategies.bu
+      | "topdown" -> Strategies.td
+      | "progress" -> Strategies.progress
+      | "try" -> Strategies.try_
+      | "any" -> Strategies.any
+      | "repeat" -> Strategies.repeat
+      | _ -> anomalylabstrm "strategy_of_ast" (str"Unkwnon strategy: " ++ str f)
+    in f' s'
+  | StratBinary (f, s, t) ->
+    let s' = strategy_of_ast s in
+    let t' = strategy_of_ast t in
+    let f' = match f with
+      | "compose" -> Strategies.seq
+      | "choice" -> Strategies.choice
+      | _ -> anomalylabstrm "strategy_of_ast" (str"Unkwnon strategy: " ++ str f)
+    in f' s' t'
+  | StratConstr (c, b) -> apply_glob_constr (fst c) b AllOccurrences
+  | StratHints (old, id) -> if old then Strategies.old_hints id else Strategies.hints id
+  | StratTerms l -> 
+    (fun env avoid t ty cstr evars ->
+     let l' = interp_glob_constr_list env (goalevars evars) (List.map fst l) in
+       Strategies.lemmas rewrite_unif_flags l' env avoid t ty cstr evars)
+  | StratEval r -> 
+    (fun env avoid t ty cstr evars ->
+     let (sigma,r_interp) = Tacinterp.interp_redexp env (goalevars evars) r in
+       Strategies.reduce r_interp env avoid t ty cstr (sigma,cstrevars evars))
+  | StratFold c -> Strategies.fold_glob (fst c)
 
 
+type raw_strategy = (constr_expr, Tacexpr.raw_red_expr) strategy_ast
+type glob_strategy = (glob_constr_and_expr, Tacexpr.raw_red_expr) strategy_ast
+
+let interp_strategy ist gl s = 
+  let sigma = project gl in
+    sigma, strategy_of_ast s
+let glob_strategy ist s = map_strategy (Tacinterp.intern_constr ist) (fun c -> c) s
+let subst_strategy s str = str
 
 let pr_strategy _ _ _ (s : strategy) = Pp.str "<strategy>"
+let pr_raw_strategy _ _ _ (s : raw_strategy) = Pp.str "<strategy>"
+let pr_glob_strategy _ _ _ (s : glob_strategy) = Pp.str "<strategy>"
 
-let interp_strategy ist gl c = c
-let glob_strategy ist l = l
-let subst_strategy evm l = l
-
-
-ARGUMENT EXTEND rewstrategy TYPED AS strategy
+ARGUMENT EXTEND rewstrategy
     PRINTED BY pr_strategy
+
     INTERPRETED BY interp_strategy
     GLOBALIZED BY glob_strategy
     SUBSTITUTED BY subst_strategy
 
-    [ constr(c) ] -> [ apply_constr_expr c true all_occurrences ]
-  | [ "<-" constr(c) ] -> [ apply_constr_expr c false all_occurrences ]
-  | [ "subterms" rewstrategy(h) ] -> [ all_subterms h ]
-  | [ "subterm" rewstrategy(h) ] -> [ one_subterm h ]
-  | [ "innermost" rewstrategy(h) ] -> [ Strategies.innermost h ]
-  | [ "outermost" rewstrategy(h) ] -> [ Strategies.outermost h ]
-  | [ "bottomup" rewstrategy(h) ] -> [ Strategies.bu h ]
-  | [ "topdown" rewstrategy(h) ] -> [ Strategies.td h ]
-  | [ "id" ] -> [ Strategies.id ]
-  | [ "refl" ] -> [ Strategies.refl ]
-  | [ "progress" rewstrategy(h) ] -> [ Strategies.progress h ]
-  | [ "fail" ] -> [ Strategies.fail ]
-  | [ "try" rewstrategy(h) ] -> [ Strategies.try_ h ]
-  | [ "any" rewstrategy(h) ] -> [ Strategies.any h ]
-  | [ "repeat" rewstrategy(h) ] -> [ Strategies.repeat h ]
-  | [ rewstrategy(h) ";" rewstrategy(h') ] -> [ Strategies.seq h h' ]
+    RAW_TYPED AS raw_strategy
+    RAW_PRINTED BY pr_raw_strategy
+
+    GLOB_TYPED AS glob_strategy
+    GLOB_PRINTED BY pr_glob_strategy
+
+    [ glob(c) ] -> [ StratConstr (c, true) ]
+  | [ "<-" constr(c) ] -> [ StratConstr (c, false) ]
+  | [ "subterms" rewstrategy(h) ] -> [ StratUnary ("all_subterms", h) ]
+  | [ "subterm" rewstrategy(h) ] -> [ StratUnary ("one_subterm", h) ]
+  | [ "innermost" rewstrategy(h) ] -> [ StratUnary("innermost", h) ]
+  | [ "outermost" rewstrategy(h) ] -> [ StratUnary("outermost", h) ]
+  | [ "bottomup" rewstrategy(h) ] -> [ StratUnary("bottomup", h) ]
+  | [ "topdown" rewstrategy(h) ] -> [ StratUnary("topdown", h) ]
+  | [ "id" ] -> [ StratId ]
+  | [ "fail" ] -> [ StratFail ]
+  | [ "refl" ] -> [ StratRefl ]
+  | [ "progress" rewstrategy(h) ] -> [ StratUnary ("progress", h) ]
+  | [ "try" rewstrategy(h) ] -> [ StratUnary ("try", h) ]
+  | [ "any" rewstrategy(h) ] -> [ StratUnary ("any", h) ]
+  | [ "repeat" rewstrategy(h) ] -> [ StratUnary ("repeat", h) ]
+  | [ rewstrategy(h) ";" rewstrategy(h') ] -> [ StratBinary ("compose", h, h') ]
   | [ "(" rewstrategy(h) ")" ] -> [ h ]
-  | [ "choice" rewstrategy(h) rewstrategy(h') ] -> [ Strategies.choice h h' ]
-  | [ "old_hints" preident(h) ] -> [ Strategies.old_hints h ]
-  | [ "hints" preident(h) ] -> [ Strategies.hints h ]
-  | [ "terms" constr_list(h) ] -> [ fun env avoid t ty cstr evars -> 
-      Strategies.lemmas rewrite_unif_flags (interp_constr_list env (goalevars evars) h) env avoid t ty cstr evars ]
-  | [ "eval" red_expr(r) ] -> [ fun env avoid t ty cstr evars -> 
-      Strategies.reduce (Tacinterp.interp_redexp env (goalevars evars) r) env avoid t ty cstr evars ]
-  | [ "fold" constr(c) ] -> [ Strategies.fold c ]
+  | [ "choice" rewstrategy(h) rewstrategy(h') ] -> [ StratBinary ("choice", h, h') ]
+  | [ "old_hints" preident(h) ] -> [ StratHints (true, h) ]
+  | [ "hints" preident(h) ] -> [ StratHints (false, h) ]
+  | [ "terms" constr_list(h) ] -> [ StratTerms h ]
+  | [ "eval" red_expr(r) ] -> [ StratEval r ]
+  | [ "fold" constr(c) ] -> [ StratFold c ]
 END
+
+(* By default the strategy for "rewrite_db" is top-down *)
+
+let db_strat db = Strategies.td (Strategies.hints db)
+let cl_rewrite_clause_db db cl = cl_rewrite_clause_strat (db_strat db) cl
 
 TACTIC EXTEND rewrite_strat
 | [ "rewrite_strat" rewstrategy(s) "in" hyp(id) ] -> [ cl_rewrite_clause_strat s (Some id) ]
 | [ "rewrite_strat" rewstrategy(s) ] -> [ cl_rewrite_clause_strat s None ]
+| [ "rewrite_db" preident(db) "in" hyp(id) ] -> [ cl_rewrite_clause_db db (Some id) ]
+| [ "rewrite_db" preident(db) ] -> [ cl_rewrite_clause_db db None ]
 END
 
 let clsubstitute o c =
@@ -1423,7 +1528,9 @@ let clsubstitute o c =
       (fun cl ->
 	match cl with
 	  | Some id when is_tac id -> tclIDTAC
-	  | _ -> cl_rewrite_clause c o all_occurrences cl)
+	  | _ -> cl_rewrite_clause c o AllOccurrences cl)
+
+open Extraargs
 
 TACTIC EXTEND substitute
 | [ "substitute" orient(o) glob_constr_with_bindings(c) ] -> [ clsubstitute o c ]
@@ -1434,9 +1541,9 @@ END
 
 TACTIC EXTEND setoid_rewrite
    [ "setoid_rewrite" orient(o) glob_constr_with_bindings(c) ]
-   -> [ cl_rewrite_clause c o all_occurrences None ]
+   -> [ cl_rewrite_clause c o AllOccurrences None ]
  | [ "setoid_rewrite" orient(o) glob_constr_with_bindings(c) "in" hyp(id) ] ->
-      [ cl_rewrite_clause c o all_occurrences (Some id)]
+      [ cl_rewrite_clause c o AllOccurrences (Some id)]
  | [ "setoid_rewrite" orient(o) glob_constr_with_bindings(c) "at" occurrences(occ) ] ->
       [ cl_rewrite_clause c o (occurrences_of occ) None]
  | [ "setoid_rewrite" orient(o) glob_constr_with_bindings(c) "at" occurrences(occ) "in" hyp(id)] ->
@@ -1455,44 +1562,44 @@ TACTIC EXTEND GenRew
 | [ "rew" orient(o) glob_constr_with_bindings(c) "at" occurrences(occ) "in" hyp(id) ] ->
     [ cl_rewrite_clause_newtac_tac c o (occurrences_of occ) (Some id) ]
 | [ "rew" orient(o) glob_constr_with_bindings(c) "in" hyp(id) ] ->
-    [ cl_rewrite_clause_newtac_tac c o all_occurrences (Some id) ]
+    [ cl_rewrite_clause_newtac_tac c o AllOccurrences (Some id) ]
 | [ "rew" orient(o) glob_constr_with_bindings(c) "at" occurrences(occ) ] ->
     [ cl_rewrite_clause_newtac_tac c o (occurrences_of occ) None ]
 | [ "rew" orient(o) glob_constr_with_bindings(c) ] ->
-    [ cl_rewrite_clause_newtac_tac c o all_occurrences None ]
+    [ cl_rewrite_clause_newtac_tac c o AllOccurrences None ]
 END
 
-let mkappc s l = CAppExpl (dummy_loc,(None,(Libnames.Ident (dummy_loc,id_of_string s))),l)
+let mkappc s l = CAppExpl (Loc.ghost,(None,(Libnames.Ident (Loc.ghost,id_of_string s))),l)
 
 let declare_an_instance n s args =
-  ((dummy_loc,Name n), Explicit,
-  CAppExpl (dummy_loc, (None, Qualid (dummy_loc, qualid_of_string s)),
+  ((Loc.ghost,Name n), Explicit,
+  CAppExpl (Loc.ghost, (None, Qualid (Loc.ghost, qualid_of_string s)),
 	   args))
 
 let declare_instance a aeq n s = declare_an_instance n s [a;aeq]
 
 let anew_instance global binders instance fields =
-  new_instance binders instance (Some (CRecord (dummy_loc,None,fields)))
-    ~global:(not (Vernacexpr.use_section_locality ())) ~generalize:false None
+  new_instance binders instance (Some (CRecord (Loc.ghost,None,fields)))
+    ~global:(not (Locality.use_section_locality ())) ~generalize:false None
 
 let declare_instance_refl global binders a aeq n lemma =
   let instance = declare_instance a aeq (add_suffix n "_Reflexive") "Coq.Classes.RelationClasses.Reflexive"
   in anew_instance global binders instance
-       [(Ident (dummy_loc,id_of_string "reflexivity"),lemma)]
+       [(Ident (Loc.ghost,id_of_string "reflexivity"),lemma)]
 
 let declare_instance_sym global binders a aeq n lemma =
   let instance = declare_instance a aeq (add_suffix n "_Symmetric") "Coq.Classes.RelationClasses.Symmetric"
   in anew_instance global binders instance
-       [(Ident (dummy_loc,id_of_string "symmetry"),lemma)]
+       [(Ident (Loc.ghost,id_of_string "symmetry"),lemma)]
 
 let declare_instance_trans global binders a aeq n lemma =
   let instance = declare_instance a aeq (add_suffix n "_Transitive") "Coq.Classes.RelationClasses.Transitive"
   in anew_instance global binders instance
-       [(Ident (dummy_loc,id_of_string "transitivity"),lemma)]
+       [(Ident (Loc.ghost,id_of_string "transitivity"),lemma)]
 
 let declare_relation ?(binders=[]) a aeq n refl symm trans =
   init_setoid ();
-  let global = not (Vernacexpr.use_section_locality ()) in
+  let global = not (Locality.use_section_locality ()) in
   let instance = declare_instance a aeq (add_suffix n "_relation") "Coq.Classes.RelationClasses.RewriteRelation"
   in ignore(anew_instance global binders instance []);
   match (refl,symm,trans) with
@@ -1512,16 +1619,16 @@ let declare_relation ?(binders=[]) a aeq n refl symm trans =
 	let instance = declare_instance a aeq n "Coq.Classes.RelationClasses.PreOrder"
 	in ignore(
 	    anew_instance global binders instance
-	      [(Ident (dummy_loc,id_of_string "PreOrder_Reflexive"), lemma1);
-	       (Ident (dummy_loc,id_of_string "PreOrder_Transitive"),lemma3)])
+	      [(Ident (Loc.ghost,id_of_string "PreOrder_Reflexive"), lemma1);
+	       (Ident (Loc.ghost,id_of_string "PreOrder_Transitive"),lemma3)])
     | (None, Some lemma2, Some lemma3) ->
 	let _lemma_sym = declare_instance_sym global binders a aeq n lemma2 in
 	let _lemma_trans = declare_instance_trans global binders a aeq n lemma3 in
 	let instance = declare_instance a aeq n "Coq.Classes.RelationClasses.PER"
 	in ignore(
 	    anew_instance global binders instance
-	      [(Ident (dummy_loc,id_of_string "PER_Symmetric"), lemma2);
-	       (Ident (dummy_loc,id_of_string "PER_Transitive"),lemma3)])
+	      [(Ident (Loc.ghost,id_of_string "PER_Symmetric"), lemma2);
+	       (Ident (Loc.ghost,id_of_string "PER_Transitive"),lemma3)])
      | (Some lemma1, Some lemma2, Some lemma3) ->
 	let _lemma_refl = declare_instance_refl global binders a aeq n lemma1 in
 	let _lemma_sym = declare_instance_sym global binders a aeq n lemma2 in
@@ -1529,14 +1636,14 @@ let declare_relation ?(binders=[]) a aeq n refl symm trans =
 	let instance = declare_instance a aeq n "Coq.Classes.RelationClasses.Equivalence"
 	in ignore(
 	  anew_instance global binders instance
-	    [(Ident (dummy_loc,id_of_string "Equivalence_Reflexive"), lemma1);
-	     (Ident (dummy_loc,id_of_string "Equivalence_Symmetric"), lemma2);
-	     (Ident (dummy_loc,id_of_string "Equivalence_Transitive"), lemma3)])
+	    [(Ident (Loc.ghost,id_of_string "Equivalence_Reflexive"), lemma1);
+	     (Ident (Loc.ghost,id_of_string "Equivalence_Symmetric"), lemma2);
+	     (Ident (Loc.ghost,id_of_string "Equivalence_Transitive"), lemma3)])
 
 type 'a binders_argtype = (local_binder list, 'a) Genarg.abstract_argument_type
 
 let _, _, rawwit_binders =
- (Genarg.create_arg "binders" :
+ (Genarg.create_arg None "binders" :
     Genarg.tlevel binders_argtype *
     Genarg.glevel binders_argtype *
     Genarg.rlevel binders_argtype)
@@ -1610,7 +1717,7 @@ VERNAC COMMAND EXTEND AddParametricRelation3
       [ declare_relation ~binders:b a aeq n None None (Some lemma3) ]
 END
 
-let cHole = CHole (dummy_loc, None)
+let cHole = CHole (Loc.ghost, None)
 
 open Entries
 open Libnames
@@ -1640,7 +1747,7 @@ let declare_projection n instance_id r =
       let init =
 	match kind_of_term typ with
 	    App (f, args) when eq_constr f (Lazy.force respectful) ->
-	      mkApp (f, fst (array_chop (Array.length args - 2) args))
+	      mkApp (f, fst (Array.chop (Array.length args - 2) args))
 	  | _ -> typ
       in aux init
     in
@@ -1707,9 +1814,9 @@ let add_setoid global binders a aeq t n =
   let instance = declare_instance a aeq n "Coq.Classes.RelationClasses.Equivalence"
   in ignore(
     anew_instance global binders instance
-      [(Ident (dummy_loc,id_of_string "Equivalence_Reflexive"), mkappc "Seq_refl" [a;aeq;t]);
-       (Ident (dummy_loc,id_of_string "Equivalence_Symmetric"), mkappc "Seq_sym" [a;aeq;t]);
-       (Ident (dummy_loc,id_of_string "Equivalence_Transitive"), mkappc "Seq_trans" [a;aeq;t])])
+      [(Ident (Loc.ghost,id_of_string "Equivalence_Reflexive"), mkappc "Seq_refl" [a;aeq;t]);
+       (Ident (Loc.ghost,id_of_string "Equivalence_Symmetric"), mkappc "Seq_sym" [a;aeq;t]);
+       (Ident (Loc.ghost,id_of_string "Equivalence_Transitive"), mkappc "Seq_trans" [a;aeq;t])])
 
 let add_morphism_infer glob m n =
   init_setoid ();
@@ -1727,39 +1834,38 @@ let add_morphism_infer glob m n =
 	  (fun () ->
 	    Lemmas.start_proof instance_id kind instance
 	      (fun _ -> function
-		Libnames.ConstRef cst ->
+		Globnames.ConstRef cst ->
 		  add_instance (Typeclasses.new_instance (Lazy.force proper_class) None
 				   glob (ConstRef cst));
 		  declare_projection n instance_id (ConstRef cst)
 		| _ -> assert false);
-	    Pfedit.by (Tacinterp.interp <:tactic< Coq.Classes.SetoidTactics.add_morphism_tactic>>)) ();
-	Flags.if_verbose (fun x -> msg (Printer.pr_open_subgoals x)) ()
+	    Pfedit.by (Tacinterp.interp <:tactic< Coq.Classes.SetoidTactics.add_morphism_tactic>>)) ()
 
 let add_morphism glob binders m s n =
   init_setoid ();
   let instance_id = add_suffix n "_Proper" in
   let instance =
-    ((dummy_loc,Name instance_id), Explicit,
-    CAppExpl (dummy_loc,
-	     (None, Qualid (dummy_loc, Libnames.qualid_of_string "Coq.Classes.Morphisms.Proper")),
+    ((Loc.ghost,Name instance_id), Explicit,
+    CAppExpl (Loc.ghost,
+	     (None, Qualid (Loc.ghost, Libnames.qualid_of_string "Coq.Classes.Morphisms.Proper")),
 	     [cHole; s; m]))
   in
   let tac = Tacinterp.interp <:tactic<add_morphism_tactic>> in
-    ignore(new_instance ~global:glob binders instance (Some (CRecord (dummy_loc,None,[])))
+    ignore(new_instance ~global:glob binders instance (Some (CRecord (Loc.ghost,None,[])))
 	      ~generalize:false ~tac ~hook:(declare_projection n instance_id) None)
 
 VERNAC COMMAND EXTEND AddSetoid1
    [ "Add" "Setoid" constr(a) constr(aeq) constr(t) "as" ident(n) ] ->
-     [ add_setoid (not (Vernacexpr.use_section_locality ())) [] a aeq t n ]
+     [ add_setoid (not (Locality.use_section_locality ())) [] a aeq t n ]
   | [ "Add" "Parametric" "Setoid" binders(binders) ":" constr(a) constr(aeq) constr(t) "as" ident(n) ] ->
-     [	add_setoid (not (Vernacexpr.use_section_locality ())) binders a aeq t n ]
+     [	add_setoid (not (Locality.use_section_locality ())) binders a aeq t n ]
   | [ "Add" "Morphism" constr(m) ":" ident(n) ] ->
-      [ add_morphism_infer (not (Vernacexpr.use_section_locality ())) m n ]
+      [ add_morphism_infer (not (Locality.use_section_locality ())) m n ]
   | [ "Add" "Morphism" constr(m) "with" "signature" lconstr(s) "as" ident(n) ] ->
-      [ add_morphism (not (Vernacexpr.use_section_locality ())) [] m s n ]
+      [ add_morphism (not (Locality.use_section_locality ())) [] m s n ]
   | [ "Add" "Parametric" "Morphism" binders(binders) ":" constr(m)
 	"with" "signature" lconstr(s) "as" ident(n) ] ->
-      [ add_morphism (not (Vernacexpr.use_section_locality ())) binders m s n ]
+      [ add_morphism (not (Locality.use_section_locality ())) binders m s n ]
 END
 
 (** Bind to "rewrite" too *)
@@ -1843,7 +1949,7 @@ let general_s_rewrite cl l2r occs (c,l) ~new_goals gl =
 	(tclTHEN
            (Refiner.tclEVARS hypinfo.cl.evd)
 	   (cl_rewrite_clause_tac ~abs:hypinfo.abs strat (mkMeta meta) cl)) gl
-    with RewriteFailure ->
+    with RewriteFailure e ->
       let {l2r=l2r; c1=x; c2=y} = hypinfo in
 	raise (Pretype_errors.PretypeError
 		  (pf_env gl,project gl,
@@ -1895,7 +2001,7 @@ let setoid_transitivity c gl =
       let proof = get_transitive_proof env evm car rel in
       match c with
       | None -> eapply proof
-      | Some c -> apply_with_bindings (proof,Glob_term.ImplicitBindings [ c ]))
+      | Some c -> apply_with_bindings (proof,ImplicitBindings [ c ]))
     (transitivity_red true c)
 
 let setoid_symmetry_in id gl =
@@ -1945,7 +2051,7 @@ let implify id gl =
 	let sigma = project gl in
 	let tyhd = Typing.type_of env sigma ty
 	and tyconcl = Typing.type_of (Environ.push_rel hd env) sigma concl in
-	let app = mkApp (arrow_morphism tyhd (subst1 mkProp tyconcl), [| ty; (subst1 mkProp concl) |]) in
+	let app, unfold = arrow_morphism tyhd (subst1 mkProp tyconcl) ty (subst1 mkProp concl) in
 	  it_mkProd_or_LetIn app tl
     | _ -> ctype
   in convert_hyp_no_check (id, b, ctype') gl

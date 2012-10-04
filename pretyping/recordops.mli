@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,7 +9,7 @@
 open Names
 open Nametab
 open Term
-open Libnames
+open Globnames
 open Libobject
 open Library
 
@@ -80,6 +80,6 @@ val pr_cs_pattern : cs_pattern -> Pp.std_ppcmds
 val lookup_canonical_conversion : (global_reference * cs_pattern) -> obj_typ
 val declare_canonical_structure : global_reference -> unit
 val is_open_canonical_projection :
-  Environ.env -> Evd.evar_map -> (constr * constr list) -> bool
+  Environ.env -> Evd.evar_map -> (constr * constr Reductionops.stack) -> bool
 val canonical_projections : unit ->
   ((global_reference * cs_pattern) * obj_typ) list

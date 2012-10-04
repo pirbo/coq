@@ -1,14 +1,16 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Libnames
+open Globnames
 open Nameops
 open Libobject
 open Summary
@@ -46,7 +48,7 @@ let subst_objects subst seg =
       if obj' == obj then node else
 	(id, obj')
   in
-    list_smartmap subst_one seg
+    List.smartmap subst_one seg
 
 (*let load_and_subst_objects i prefix subst seg =
   List.rev (List.fold_left (fun seg (id,obj as node) ->
@@ -161,13 +163,6 @@ let find_entry_p p =
   let rec find = function
     | [] -> raise Not_found
     | ent::l -> if p ent then ent else find l
-  in
-  find !lib_stk
-
-let find_split_p p =
-  let rec find = function
-    | [] -> raise Not_found
-    | ent::l -> if p ent then ent,l else find l
   in
   find !lib_stk
 
@@ -363,18 +358,21 @@ let end_compilation dir =
 
 (* Returns true if we are inside an opened module or module type *)
 
-let is_module_gen which =
+let is_module_gen which check =
   let test = function
     | _, OpenedModule (ty,_,_,_) -> which ty
     | _ -> false
   in
   try
-    let _ = find_entry_p test in true
+    match find_entry_p test with
+    | _, OpenedModule (ty,_,_,_) -> check ty
+    | _ -> assert false
   with Not_found -> false
 
-let is_module_or_modtype () = is_module_gen (fun _ -> true)
-let is_modtype () = is_module_gen (fun b -> b)
-let is_module () = is_module_gen (fun b -> not b)
+let is_module_or_modtype () = is_module_gen (fun _ -> true) (fun _ -> true)
+let is_modtype () = is_module_gen (fun b -> b) (fun _ -> true)
+let is_modtype_strict () = is_module_gen (fun _ -> true) (fun b -> b)
+let is_module () = is_module_gen (fun b -> not b) (fun _ -> true)
 
 (* Returns the opening node of a given name *)
 let find_opening_node id =
@@ -394,14 +392,14 @@ let find_opening_node id =
    - the list of variables on which each inductive depends in this section
    - the list of substitution to do at section closing
 *)
-type binding_kind = Explicit | Implicit
 
-type variable_info = Names.identifier * binding_kind * Term.constr option * Term.types
+type variable_info = Names.identifier * Decl_kinds.binding_kind * Term.constr option * Term.types
 type variable_context = variable_info list
 type abstr_list = variable_context Names.Cmap.t * variable_context Names.Mindmap.t
 
 let sectab =
-  ref ([] : ((Names.identifier * binding_kind) list * Cooking.work_list * abstr_list) list)
+  ref ([] : ((Names.identifier * Decl_kinds.binding_kind) list *
+		Cooking.work_list * abstr_list) list)
 
 let add_section () =
   sectab := ([],(Names.Cmap.empty,Names.Mindmap.empty),(Names.Cmap.empty,Names.Mindmap.empty)) :: !sectab
@@ -566,78 +564,20 @@ let set_lib_stk new_lib_stk =
   with
     | Not_found -> error "Tried to set environment to an incoherent state."
 
-let reset_to_gen test =
+let reset_to test =
   let (_,_,before) = split_lib_gen test in
   set_lib_stk before
 
-let reset_to sp = reset_to_gen (fun x -> fst x = sp)
+let first_command_label = 1
 
-(* LEM: TODO
- * We will need to muck with frozen states in after, too!
- * Not only FrozenState, but also those embedded in Opened(Section|Module)
- *)
-let delete_gen test =
-  let (after,equal,before) = split_lib_gen test in
-  let rec chop_at_dot = function
-    | [] as l -> l
-    | (_, Leaf o)::t when object_tag o = "DOT" -> t
-    | _::t -> chop_at_dot t
-  and chop_before_dot = function
-    | [] as l -> l
-    | (_, Leaf o)::t as l when object_tag o = "DOT" -> l
-    | _::t -> chop_before_dot t
- in
-  set_lib_stk (List.rev_append (chop_at_dot after) (chop_before_dot before))
-
-let delete sp = delete_gen (fun x -> fst x = sp)
-
-let reset_name (loc,id) =
-  let (sp,_) =
-    try
-      find_entry_p (fun (sp,_) -> let (_,spi) = repr_path (fst sp) in id = spi)
-    with Not_found ->
-      user_err_loc (loc,"reset_name",pr_id id ++ str ": no such entry")
-  in
-  reset_to sp
-
-let remove_name (loc,id) =
-  let (sp,_) =
-    try
-      find_entry_p (fun (sp,_) -> let (_,spi) = repr_path (fst sp) in id = spi)
-    with Not_found ->
-      user_err_loc (loc,"remove_name",pr_id id ++ str ": no such entry")
-  in
-    delete sp
-
-let is_mod_node = function
-  | OpenedModule _ | OpenedSection _
-  | ClosedModule _ | ClosedSection _  -> true
-  | Leaf o -> let t = object_tag o in t = "MODULE" || t = "MODULE TYPE"
-	|| t = "MODULE ALIAS"
-  | _ -> false
-
-(* Reset on a module or section name in order to bypass constants with
-   the same name *)
-
-let reset_mod (loc,id) =
-  let (_,before) =
-    try
-      find_split_p (fun (sp,node) ->
-                    let (_,spi) = repr_path (fst sp) in id = spi
-                    && is_mod_node node)
-    with Not_found ->
-      user_err_loc (loc,"reset_mod",pr_id id ++ str ": no such entry")
-  in
-  set_lib_stk before
-
-let mark_end_of_command, current_command_label, set_command_label =
-  let n = ref 0 in
+let mark_end_of_command, current_command_label, reset_command_label =
+  let n = ref (first_command_label-1) in
   (fun () ->
     match !lib_stk with
         (_,Leaf o)::_ when object_tag o = "DOT" -> ()
       | _ -> incr n;add_anonymous_leaf (inLabel !n)),
   (fun () -> !n),
-  (fun x -> n:=x)
+  (fun x -> n:=x;add_anonymous_leaf (inLabel x))
 
 let is_label_n n x =
   match x with
@@ -650,21 +590,21 @@ let is_label_n n x =
 let reset_label n =
   if n >= current_command_label () then
     error "Cannot backtrack to the current label or a future one";
-  let res = reset_to_gen (is_label_n n) in
+  reset_to (is_label_n n);
   (* forget state numbers after n only if reset succeeded *)
-  set_command_label (n-1);
-  res
+  reset_command_label n
 
-let rec back_stk n stk =
-  match stk with
-      (sp,Leaf o)::tail when object_tag o = "DOT" ->
-        if n=0 then sp else back_stk (n-1) tail
-    | _::tail -> back_stk n tail
-    | [] -> error "Reached begin of command history"
+(** Search the last label registered before defining [id] *)
 
-let back n =
-  reset_to (back_stk n !lib_stk);
-  set_command_label (current_command_label () - n - 1)
+let label_before_name (loc,id) =
+  let found = ref false in
+  let search = function
+    | (_,Leaf o) when !found && object_tag o = "DOT" -> true
+    | (sp,_) -> (if id = snd (repr_path (fst sp)) then found := true); false
+  in
+  match find_entry_p search with
+    | (_,Leaf o) -> outLabel o
+    | _ -> raise Not_found
 
 (* State and initialization. *)
 
@@ -683,29 +623,6 @@ let init () =
   comp_name := None;
   path_prefix := initial_prefix;
   init_summaries()
-
-(* Initial state. *)
-
-let initial_state = ref None
-
-let declare_initial_state () =
-  let name = add_anonymous_entry (FrozenState (freeze_summaries())) in
-  initial_state := Some name
-
-let reset_initial () =
-  match !initial_state with
-    | None ->
-        error "Resetting to the initial state is possible only interactively"
-    | Some sp ->
-  	begin match split_lib sp with
-	  | (_,[_,FrozenState fs as hd],before) ->
-	      lib_stk := hd::before;
-	      recalc_path_prefix ();
-			set_command_label 0;
-	      unfreeze_summaries fs
-	  | _ -> assert false
-	end
-
 
 (* Misc *)
 

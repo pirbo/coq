@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -61,7 +61,7 @@ Variable pred_extensionality : PredicateExtensionality.
 Lemma prop_ext : forall A B:Prop, (A <-> B) -> A = B.
 Proof.
   intros A B H.
-  change ((fun _ => A) true = (fun _ => B) true) in |- *.
+  change ((fun _ => A) true = (fun _ => B) true).
   rewrite
    pred_extensionality with (P := fun _:bool => A) (Q := fun _:bool => B).
     reflexivity.
@@ -134,8 +134,8 @@ right.
 intro HP.
 assert (Hequiv : forall b:bool, class_of_true b <-> class_of_false b).
 intro b; split.
-unfold class_of_false in |- *; right; assumption.
-unfold class_of_true in |- *; right; assumption.
+unfold class_of_false; right; assumption.
+unfold class_of_true; right; assumption.
 assert (Heq : class_of_true = class_of_false).
 apply pred_extensionality with (1 := Hequiv).
 apply diff_true_false.
@@ -188,8 +188,8 @@ Lemma projT1_injective : a1=a2 -> a1'=a2'.
 Proof.
   intro Heq ; unfold a1', a2', A'.
   rewrite Heq.
-  replace (or_introl (a2=a2) (refl_equal a2))
-     with (or_intror (a2=a2) (refl_equal a2)).
+  replace (or_introl (a2=a2) (eq_refl a2))
+     with (or_intror (a2=a2) (eq_refl a2)).
   reflexivity.
   apply proof_irrelevance.
 Qed.
@@ -265,7 +265,7 @@ End ProofIrrel_RelChoice_imp_EqEM.
 
 (** Proof sketch from Bell [Bell93] (with thanks to P. Castéran) *)
 
-Notation Local inhabited A := A (only parsing).
+Local Notation inhabited A := A (only parsing).
 
 Section ExtensionalEpsilon_imp_EM.
 
@@ -279,7 +279,7 @@ Hypothesis epsilon_extensionality :
   forall (A:Type) (i:inhabited A) (P Q:A->Prop),
   (forall a, P a <-> Q a) -> epsilon A i P = epsilon A i Q.
 
-Notation Local eps := (epsilon bool true) (only parsing).
+Local Notation eps := (epsilon bool true) (only parsing).
 
 Theorem extensional_epsilon_imp_EM : forall P:Prop, P \/ ~ P.
 Proof.

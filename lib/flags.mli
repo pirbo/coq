@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -26,10 +26,11 @@ val load_proofs : load_proofs ref
 val raw_print : bool ref
 val record_print : bool ref
 
-type compat_version = V8_2 | V8_3
-val compat_version : compat_version option ref
+type compat_version = V8_2 | V8_3 | Current
+val compat_version : compat_version ref
 val version_strictly_greater : compat_version -> bool
 val version_less_or_equal : compat_version -> bool
+val pr_version : compat_version -> string
 
 val beautify : bool ref
 val make_beautify : bool -> unit
@@ -46,6 +47,18 @@ val if_verbose : ('a -> unit) -> 'a -> unit
 
 val make_auto_intros : bool -> unit
 val is_auto_intros : unit -> bool
+
+(** Terminal colouring *)
+val make_term_color : bool -> unit
+val is_term_color : unit -> bool
+
+(** [program_cmd] indicates that the current command is a Program one.
+    [program_mode] tells that Program mode has been activated, either
+    globally via [Set Program] or locally via the Program command prefix. *)
+
+val program_cmd : bool ref
+val program_mode : bool ref
+val is_program_mode : unit -> bool
 
 val make_warn : bool -> unit
 val if_warn : ('a -> unit) -> 'a -> unit
@@ -72,9 +85,6 @@ val is_unsafe : string -> bool
 val browser_cmd_fmt : string
 
 val is_standard_doc_url : string -> bool
-
-(** Substitute %s in the first chain by the second chain *)
-val subst_command_placeholder : string -> string -> string
 
 (** Options for specifying where coq librairies reside *)
 val coqlib_spec : bool ref

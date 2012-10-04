@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -8,14 +8,12 @@
 
 (*i*)
 open Names
-open Libnames
+open Globnames
 open Decl_kinds
 open Term
 open Sign
 open Evd
 open Environ
-open Nametab
-open Mod_subst
 open Util
 open Typeclasses_errors
 open Libobject
@@ -46,7 +44,6 @@ let solve_instanciation_problem = ref (fun _ _ _ -> assert false)
 let resolve_one_typeclass env evm t =
   !solve_instanciation_problem env evm t
 
-type rels = constr list
 type direction = Forward | Backward
 
 (* This module defines type-classes *)
@@ -156,13 +153,13 @@ let subst_class (subst,cl) =
   let do_subst_con c = fst (Mod_subst.subst_con subst c)
   and do_subst c = Mod_subst.subst_mps subst c
   and do_subst_gr gr = fst (subst_global subst gr) in
-  let do_subst_ctx ctx = list_smartmap
+  let do_subst_ctx ctx = List.smartmap
     (fun (na, b, t) -> (na, Option.smartmap do_subst b, do_subst t))
     ctx in
   let do_subst_context (grs,ctx) =
-    list_smartmap (Option.smartmap (fun (gr,b) -> do_subst_gr gr, b)) grs,
+    List.smartmap (Option.smartmap (fun (gr,b) -> do_subst_gr gr, b)) grs,
     do_subst_ctx ctx in
-  let do_subst_projs projs = list_smartmap (fun (x, y, z) -> (x, y, Option.smartmap do_subst_con z)) projs in
+  let do_subst_projs projs = List.smartmap (fun (x, y, z) -> (x, y, Option.smartmap do_subst_con z)) projs in
   { cl_impl = do_subst_gr cl.cl_impl;
     cl_context = do_subst_context cl.cl_context;
     cl_props = do_subst_ctx cl.cl_props;
@@ -197,7 +194,7 @@ let discharge_class (_,cl) =
 	| Some (_, (tc, _)) -> Some (tc.cl_impl, true))
 	ctx' 
       in
-	list_smartmap (Option.smartmap (fun (gr, b) -> Lib.discharge_global gr, b)) grs
+	List.smartmap (Option.smartmap (fun (gr, b) -> Lib.discharge_global gr, b)) grs
 	  @ newgrs
     in grs', discharge_rel_context subst 1 ctx @ ctx' in
   let cl_impl' = Lib.discharge_global cl.cl_impl in
@@ -209,7 +206,7 @@ let discharge_class (_,cl) =
     { cl_impl = cl_impl';
       cl_context = context;
       cl_props = props;
-      cl_projs = list_smartmap (fun (x, y, z) -> x, y, Option.smartmap Lib.discharge_con z) cl.cl_projs }
+      cl_projs = List.smartmap (fun (x, y, z) -> x, y, Option.smartmap Lib.discharge_con z) cl.cl_projs }
 
 let rebuild_class cl = 
   try 
@@ -248,7 +245,7 @@ let build_subclasses ~check env sigma glob pri =
       | Some (rels, (tc, args)) ->
 	let instapp = Reductionops.whd_beta sigma (appvectc c (Termops.extended_rel_vect 0 rels)) in
 	let projargs = Array.of_list (args @ [instapp]) in
-	let projs = list_map_filter 
+	let projs = List.map_filter 
 	  (fun (n, b, proj) ->
 	   match b with 
 	   | None -> None
@@ -329,11 +326,6 @@ let classify_instance (action, inst) =
   if is_local inst then Dispose
   else Substitute (action, inst)
 
-let load_instance (_, (action, inst) as ai) =
-  cache_instance ai;
-  if action = AddInstance then
-    add_instance_hint (constr_of_global inst.is_impl) (is_local inst) inst.is_pri
-
 let instance_input : instance_action * instance -> obj =
   declare_object
     { (default_object "type classes instances state") with
@@ -410,12 +402,12 @@ let add_inductive_class ind =
 
 let instance_constructor cl args =
   let lenpars = List.length (List.filter (fun (na, b, t) -> b = None) (snd cl.cl_context)) in
-  let pars = fst (list_chop lenpars args) in
+  let pars = fst (List.chop lenpars args) in
     match cl.cl_impl with
       | IndRef ind -> Some (applistc (mkConstruct (ind, 1)) args),
 	  applistc (mkInd ind) pars
       | ConstRef cst -> 
-	let term = if args = [] then None else Some (list_last args) in
+	let term = if args = [] then None else Some (List.last args) in
 	  term, applistc (mkConst cst) pars
       | _ -> assert false
 
@@ -450,11 +442,11 @@ let is_instance = function
       is_class (IndRef ind)
   | _ -> false
 
-let is_implicit_arg k =
-  match k with
-      ImplicitArg (ref, (n, id), b) -> true
-    | InternalHole -> true
-    | _ -> false
+let is_implicit_arg k = k <> Evar_kinds.GoalEvar
+  (* match k with *)
+  (*     ImplicitArg (ref, (n, id), b) -> true *)
+  (*   | InternalHole -> true *)
+  (*   | _ -> false *)
 
 
 (* To embed a boolean for resolvability status.
@@ -479,9 +471,10 @@ let mark_resolvability_undef b evi =
 
 let mark_resolvability b evi =
   assert (evi.evar_body = Evar_empty);
-  mark_resolvability_undef false evi
+  mark_resolvability_undef b evi
 
 let mark_unresolvable evi = mark_resolvability false evi
+let mark_resolvable evi = mark_resolvability true evi
 
 let mark_resolvability b sigma =
   Evd.fold_undefined (fun ev evi evs ->
@@ -498,6 +491,15 @@ let has_typeclasses evd =
 
 let solve_instanciations_problem = ref (fun _ _ _ _ _ -> assert false)
 
-let resolve_typeclasses ?(onlyargs=false) ?(split=true) ?(fail=true) env evd =
+open Evar_kinds
+type evar_filter = Evar_kinds.t -> bool
+
+let all_evars _ = true
+let no_goals = function GoalEvar -> false | _ -> true
+let no_goals_or_obligations = function
+  | GoalEvar | QuestionMark _ -> false
+  | _ -> true
+
+let resolve_typeclasses ?(filter=no_goals) ?(split=true) ?(fail=true) env evd =
   if not (has_typeclasses evd) then evd
-  else !solve_instanciations_problem env evd onlyargs split fail
+  else !solve_instanciations_problem env evd filter split fail

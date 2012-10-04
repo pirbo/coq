@@ -1,20 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
-
 (* This file is the interface between the c-c algorithm and Coq *)
 
 open Evd
-open Proof_type
 open Names
-open Libnames
-open Nameops
 open Inductiveops
 open Declarations
 open Term
@@ -23,11 +18,10 @@ open Tactics
 open Tacticals
 open Typing
 open Ccalgo
-open Tacinterp
 open Ccproof
 open Pp
+open Errors
 open Util
-open Format
 
 let constant dir s = lazy (Coqlib.gen_constant "CC" dir s)
 
@@ -35,11 +29,11 @@ let _f_equal = constant ["Init";"Logic"] "f_equal"
 
 let _eq_rect = constant ["Init";"Logic"] "eq_rect"
 
-let _refl_equal = constant ["Init";"Logic"] "refl_equal"
+let _refl_equal = constant ["Init";"Logic"] "eq_refl"
 
-let _sym_eq = constant ["Init";"Logic"] "sym_eq"
+let _sym_eq = constant ["Init";"Logic"] "eq_sym"
 
-let _trans_eq = constant ["Init";"Logic"] "trans_eq"
+let _trans_eq = constant ["Init";"Logic"] "eq_trans"
 
 let _eq = constant ["Init";"Logic"] "eq"
 
@@ -107,7 +101,7 @@ let rec pattern_of_constr env sigma c =
       App (f,args)->
 	let pf = decompose_term env sigma f in
 	let pargs,lrels = List.split
-	  (array_map_to_list (pattern_of_constr env sigma) args) in
+	  (Array.map_to_list (pattern_of_constr env sigma) args) in
 	  PApp (pf,List.rev pargs),
 	List.fold_left Intset.union Intset.empty lrels
     | Prod (_,a,_b) when not (Termops.dependent (mkRel 1) _b) ->
@@ -180,7 +174,7 @@ let litteral_of_constr env sigma term=
 
 (* store all equalities from the context *)
 
-let rec make_prb gls depth additionnal_terms =
+let make_prb gls depth additionnal_terms =
   let env=pf_env gls in
   let sigma=sig_sig gls in
   let state = empty depth gls in
@@ -373,22 +367,22 @@ let discriminate_tac cstr p gls =
 let build_term_to_complete uf meta pac =
   let cinfo = get_constructor_info uf pac.cnode in
   let real_args = List.map (fun i -> constr_of_term (term uf i)) pac.args in
-  let dummy_args = List.rev (list_tabulate meta pac.arity) in
+  let dummy_args = List.rev (List.tabulate meta pac.arity) in
   let all_args = List.rev_append real_args dummy_args in
     applistc (mkConstruct cinfo.ci_constr) all_args
 
 let cc_tactic depth additionnal_terms gls=
   Coqlib.check_required_library ["Coq";"Init";"Logic"];
-  let _ = debug Pp.msgnl (Pp.str "Reading subgoal ...") in
+  let _ = debug (Pp.str "Reading subgoal ...") in
   let state = make_prb gls depth additionnal_terms in
-  let _ = debug Pp.msgnl (Pp.str "Problem built, solving ...") in
+  let _ = debug (Pp.str "Problem built, solving ...") in
   let sol = execute true state in
-  let _ = debug Pp.msgnl (Pp.str "Computation completed.") in
+  let _ = debug (Pp.str "Computation completed.") in
   let uf=forest state in
     match sol with
 	None -> tclFAIL 0 (str "congruence failed") gls
       | Some reason ->
-	  debug Pp.msgnl (Pp.str "Goal solved, generating proof ...");
+	  debug (Pp.str "Goal solved, generating proof ...");
 	  match reason with
 	      Discrimination (i,ipac,j,jpac) ->
 		let p=build_proof uf (`Discr (i,ipac,j,jpac)) in
@@ -401,22 +395,21 @@ let cc_tactic depth additionnal_terms gls=
 		  List.map
 		    (build_term_to_complete uf newmeta)
 		    (epsilons uf) in
-		  Pp.msgnl
+		  Pp.msg_info
 		    (Pp.str "Goal is solvable by congruence but \
  some arguments are missing.");
-		  Pp.msgnl
+		  Pp.msg_info
 		    (Pp.str "  Try " ++
 		     hov 8
 		       begin
 			 str "\"congruence with (" ++
 			 prlist_with_sep
-			   (fun () -> str ")" ++ pr_spc () ++ str "(")
+			   (fun () -> str ")" ++ spc () ++ str "(")
 			   (Termops.print_constr_env (pf_env gls))
 			   terms_to_complete ++
 			 str ")\","
-		       end);
-		  Pp.msgnl
-		    (Pp.str "  replacing metavariables by arbitrary terms.");
+		       end ++
+		    Pp.str "  replacing metavariables by arbitrary terms.");
 		  tclFAIL 0 (str "Incomplete") gls
 	    | Contradiction dis ->
 		let p=build_proof uf (`Prove (dis.lhs,dis.rhs)) in

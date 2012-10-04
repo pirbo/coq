@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -76,7 +76,7 @@ Defined.
 
 (** Discrimination principle *)
 
-Definition discr n : { p:positive | n = Npos p } + { n = N0 }.
+Definition discr n : { p:positive | n = pos p } + { n = 0 }.
 Proof.
  destruct n; auto.
  left; exists p; auto.
@@ -87,12 +87,12 @@ Defined.
 Definition binary_rect (P:N -> Type) (f0 : P 0)
   (f2 : forall n, P n -> P (double n))
   (fS2 : forall n, P n -> P (succ_double n)) (n : N) : P n :=
- let P' p := P (Npos p) in
- let f2' p := f2 (Npos p) in
- let fS2' p := fS2 (Npos p) in
+ let P' p := P (pos p) in
+ let f2' p := f2 (pos p) in
+ let fS2' p := fS2 (pos p) in
  match n with
  | 0 => f0
- | Npos p => positive_rect P' fS2' f2' (fS2 0 f0) p
+ | pos p => positive_rect P' fS2' f2' (fS2 0 f0) p
  end.
 
 Definition binary_rec (P:N -> Set) := binary_rect P.
@@ -103,11 +103,11 @@ Definition binary_ind (P:N -> Prop) := binary_rect P.
 Definition peano_rect
   (P : N -> Type) (f0 : P 0)
     (f : forall n : N, P n -> P (succ n)) (n : N) : P n :=
-let P' p := P (Npos p) in
-let f' p := f (Npos p) in
+let P' p := P (pos p) in
+let f' p := f (pos p) in
 match n with
 | 0 => f0
-| Npos p => Pos.peano_rect P' (f 0 f0) f' p
+| pos p => Pos.peano_rect P' (f 0 f0) f' p
 end.
 
 Theorem peano_rect_base P a f : peano_rect P a f 0 = a.
@@ -140,12 +140,12 @@ Qed.
 
 (** Properties of mixed successor and predecessor. *)
 
-Lemma pos_pred_spec p : Pos.pred_N p = pred (Npos p).
+Lemma pos_pred_spec p : Pos.pred_N p = pred (pos p).
 Proof.
  now destruct p.
 Qed.
 
-Lemma succ_pos_spec n : Npos (succ_pos n) = succ n.
+Lemma succ_pos_spec n : pos (succ_pos n) = succ n.
 Proof.
  now destruct n.
 Qed.
@@ -155,7 +155,7 @@ Proof.
  destruct n. trivial. apply Pos.pred_N_succ.
 Qed.
 
-Lemma succ_pos_pred p : succ (Pos.pred_N p) = Npos p.
+Lemma succ_pos_pred p : succ (Pos.pred_N p) = pos p.
 Proof.
  destruct p; simpl; trivial. f_equal. apply Pos.succ_pred_double.
 Qed.
@@ -472,7 +472,7 @@ Lemma log2_spec n : 0 < n ->
  2^(log2 n) <= n < 2^(succ (log2 n)).
 Proof.
  destruct n as [|[p|p|]]; discriminate || intros _; simpl; split.
- apply (size_le (Npos p)).
+ apply (size_le (pos p)).
  apply Pos.size_gt.
  apply Pos.size_le.
  apply Pos.size_gt.
@@ -494,7 +494,7 @@ Proof.
  trivial.
  destruct p; simpl; split; try easy.
  intros (m,H). now destruct m.
- now exists (Npos p).
+ now exists (pos p).
  intros (m,H). now destruct m.
 Qed.
 
@@ -504,7 +504,7 @@ Proof.
  split. discriminate.
  intros (m,H). now destruct m.
  destruct p; simpl; split; try easy.
- now exists (Npos p).
+ now exists (pos p).
  intros (m,H). now destruct m.
  now exists 0.
 Qed.
@@ -512,19 +512,19 @@ Qed.
 (** Specification of the euclidean division *)
 
 Theorem pos_div_eucl_spec (a:positive)(b:N) :
-  let (q,r) := pos_div_eucl a b in Npos a = q * b + r.
+  let (q,r) := pos_div_eucl a b in pos a = q * b + r.
 Proof.
   induction a; cbv beta iota delta [pos_div_eucl]; fold pos_div_eucl; cbv zeta.
   (* a~1 *)
   destruct pos_div_eucl as (q,r).
-  change (Npos a~1) with (succ_double (Npos a)).
+  change (pos a~1) with (succ_double (pos a)).
   rewrite IHa, succ_double_add, double_mul.
   case leb_spec; intros H; trivial.
   rewrite succ_double_mul, <- add_assoc. f_equal.
   now rewrite (add_comm b), sub_add.
   (* a~0 *)
   destruct pos_div_eucl as (q,r).
-  change (Npos a~0) with (double (Npos a)).
+  change (pos a~0) with (double (pos a)).
   rewrite IHa, double_add, double_mul.
   case leb_spec; intros H; trivial.
   rewrite succ_double_mul, <- add_assoc. f_equal.
@@ -537,7 +537,7 @@ Theorem div_eucl_spec a b :
  let (q,r) := div_eucl a b in a = b * q + r.
 Proof.
   destruct a as [|a], b as [|b]; unfold div_eucl; trivial.
-  generalize (pos_div_eucl_spec a (Npos b)).
+  generalize (pos_div_eucl_spec a (pos b)).
   destruct pos_div_eucl. now rewrite mul_comm.
 Qed.
 
@@ -664,7 +664,7 @@ Proof.
  destruct (Pos.gcd_greatest p q r) as (u,H).
  exists s. now inversion Hs.
  exists t. now inversion Ht.
- exists (Npos u). simpl; now f_equal.
+ exists (pos u). simpl; now f_equal.
 Qed.
 
 Lemma gcd_nonneg a b : 0 <= gcd a b.
@@ -862,7 +862,7 @@ Program Definition testbit_wd : Proper (eq==>eq==>Logic.eq) testbit := _.
 
 Theorem bi_induction :
   forall A : N -> Prop, Proper (Logic.eq==>iff) A ->
-    A N0 -> (forall n, A n <-> A (succ n)) -> forall n : N, A n.
+    A 0 -> (forall n, A n <-> A (succ n)) -> forall n : N, A n.
 Proof.
 intros A A_wd A0 AS. apply peano_rect. assumption. intros; now apply -> AS.
 Qed.
@@ -893,11 +893,11 @@ Qed.
 
 (** Instantiation of generic properties of natural numbers *)
 
-Include NProp
- <+ UsualMinMaxLogicalProperties <+ UsualMinMaxDecProperties.
+(** The Bind Scope prevents N to stay associated with abstract_scope.
+    (TODO FIX) *)
 
-(** Otherwise N stays associated with abstract_scope : (TODO FIX) *)
-Bind Scope N_scope with N.
+Include NProp. Bind Scope N_scope with N.
+Include UsualMinMaxLogicalProperties <+ UsualMinMaxDecProperties.
 
 (** In generic statements, the predicates [lt] and [le] have been
   favored, whereas [gt] and [ge] don't even exist in the abstract
@@ -1013,95 +1013,95 @@ Notation "( p | q )" := (N.divide p q) (at level 0) : N_scope.
 
 (** Compatibility notations *)
 
-(*Notation N := N (only parsing).*) (*hidden by module N above *)
+(*Notation N := N (compat "8.3").*) (*hidden by module N above *)
 Notation N_rect := N_rect (only parsing).
 Notation N_rec := N_rec (only parsing).
 Notation N_ind := N_ind (only parsing).
 Notation N0 := N0 (only parsing).
-Notation Npos := Npos (only parsing).
+Notation Npos := N.pos (only parsing).
 
-Notation Ndiscr := N.discr (only parsing).
-Notation Ndouble_plus_one := N.succ_double.
-Notation Ndouble := N.double (only parsing).
-Notation Nsucc := N.succ (only parsing).
-Notation Npred := N.pred (only parsing).
-Notation Nsucc_pos := N.succ_pos (only parsing).
-Notation Ppred_N := Pos.pred_N (only parsing).
-Notation Nplus := N.add (only parsing).
-Notation Nminus := N.sub (only parsing).
-Notation Nmult := N.mul (only parsing).
-Notation Neqb := N.eqb (only parsing).
-Notation Ncompare := N.compare (only parsing).
-Notation Nlt := N.lt (only parsing).
-Notation Ngt := N.gt (only parsing).
-Notation Nle := N.le (only parsing).
-Notation Nge := N.ge (only parsing).
-Notation Nmin := N.min (only parsing).
-Notation Nmax := N.max (only parsing).
-Notation Ndiv2 := N.div2 (only parsing).
-Notation Neven := N.even (only parsing).
-Notation Nodd := N.odd (only parsing).
-Notation Npow := N.pow (only parsing).
-Notation Nlog2 := N.log2 (only parsing).
+Notation Ndiscr := N.discr (compat "8.3").
+Notation Ndouble_plus_one := N.succ_double (compat "8.3").
+Notation Ndouble := N.double (compat "8.3").
+Notation Nsucc := N.succ (compat "8.3").
+Notation Npred := N.pred (compat "8.3").
+Notation Nsucc_pos := N.succ_pos (compat "8.3").
+Notation Ppred_N := Pos.pred_N (compat "8.3").
+Notation Nplus := N.add (compat "8.3").
+Notation Nminus := N.sub (compat "8.3").
+Notation Nmult := N.mul (compat "8.3").
+Notation Neqb := N.eqb (compat "8.3").
+Notation Ncompare := N.compare (compat "8.3").
+Notation Nlt := N.lt (compat "8.3").
+Notation Ngt := N.gt (compat "8.3").
+Notation Nle := N.le (compat "8.3").
+Notation Nge := N.ge (compat "8.3").
+Notation Nmin := N.min (compat "8.3").
+Notation Nmax := N.max (compat "8.3").
+Notation Ndiv2 := N.div2 (compat "8.3").
+Notation Neven := N.even (compat "8.3").
+Notation Nodd := N.odd (compat "8.3").
+Notation Npow := N.pow (compat "8.3").
+Notation Nlog2 := N.log2 (compat "8.3").
 
-Notation nat_of_N := N.to_nat (only parsing).
-Notation N_of_nat := N.of_nat (only parsing).
-Notation N_eq_dec := N.eq_dec (only parsing).
-Notation Nrect := N.peano_rect (only parsing).
-Notation Nrect_base := N.peano_rect_base (only parsing).
-Notation Nrect_step := N.peano_rect_succ (only parsing).
-Notation Nind := N.peano_ind (only parsing).
-Notation Nrec := N.peano_rec (only parsing).
-Notation Nrec_base := N.peano_rec_base (only parsing).
-Notation Nrec_succ := N.peano_rec_succ (only parsing).
+Notation nat_of_N := N.to_nat (compat "8.3").
+Notation N_of_nat := N.of_nat (compat "8.3").
+Notation N_eq_dec := N.eq_dec (compat "8.3").
+Notation Nrect := N.peano_rect (compat "8.3").
+Notation Nrect_base := N.peano_rect_base (compat "8.3").
+Notation Nrect_step := N.peano_rect_succ (compat "8.3").
+Notation Nind := N.peano_ind (compat "8.3").
+Notation Nrec := N.peano_rec (compat "8.3").
+Notation Nrec_base := N.peano_rec_base (compat "8.3").
+Notation Nrec_succ := N.peano_rec_succ (compat "8.3").
 
-Notation Npred_succ := N.pred_succ (only parsing).
-Notation Npred_minus := N.pred_sub (only parsing).
-Notation Nsucc_pred := N.succ_pred (only parsing).
-Notation Ppred_N_spec := N.pos_pred_spec (only parsing).
-Notation Nsucc_pos_spec := N.succ_pos_spec (only parsing).
-Notation Ppred_Nsucc := N.pos_pred_succ (only parsing).
-Notation Nplus_0_l := N.add_0_l (only parsing).
-Notation Nplus_0_r := N.add_0_r (only parsing).
-Notation Nplus_comm := N.add_comm (only parsing).
-Notation Nplus_assoc := N.add_assoc (only parsing).
-Notation Nplus_succ := N.add_succ_l (only parsing).
-Notation Nsucc_0 := N.succ_0_discr (only parsing).
-Notation Nsucc_inj := N.succ_inj (only parsing).
-Notation Nminus_N0_Nle := N.sub_0_le (only parsing).
-Notation Nminus_0_r := N.sub_0_r (only parsing).
-Notation Nminus_succ_r:= N.sub_succ_r (only parsing).
-Notation Nmult_0_l := N.mul_0_l (only parsing).
-Notation Nmult_1_l := N.mul_1_l (only parsing).
-Notation Nmult_1_r := N.mul_1_r (only parsing).
-Notation Nmult_comm := N.mul_comm (only parsing).
-Notation Nmult_assoc := N.mul_assoc (only parsing).
-Notation Nmult_plus_distr_r := N.mul_add_distr_r (only parsing).
-Notation Neqb_eq := N.eqb_eq (only parsing).
-Notation Nle_0 := N.le_0_l (only parsing).
-Notation Ncompare_refl := N.compare_refl (only parsing).
-Notation Ncompare_Eq_eq := N.compare_eq (only parsing).
-Notation Ncompare_eq_correct := N.compare_eq_iff (only parsing).
-Notation Nlt_irrefl := N.lt_irrefl (only parsing).
-Notation Nlt_trans := N.lt_trans (only parsing).
-Notation Nle_lteq := N.lt_eq_cases (only parsing).
-Notation Nlt_succ_r := N.lt_succ_r (only parsing).
-Notation Nle_trans := N.le_trans (only parsing).
-Notation Nle_succ_l := N.le_succ_l (only parsing).
-Notation Ncompare_spec := N.compare_spec (only parsing).
-Notation Ncompare_0 := N.compare_0_r (only parsing).
-Notation Ndouble_div2 := N.div2_double (only parsing).
-Notation Ndouble_plus_one_div2 := N.div2_succ_double (only parsing).
-Notation Ndouble_inj := N.double_inj (only parsing).
-Notation Ndouble_plus_one_inj := N.succ_double_inj (only parsing).
-Notation Npow_0_r := N.pow_0_r (only parsing).
-Notation Npow_succ_r := N.pow_succ_r (only parsing).
-Notation Nlog2_spec := N.log2_spec (only parsing).
-Notation Nlog2_nonpos := N.log2_nonpos (only parsing).
-Notation Neven_spec := N.even_spec (only parsing).
-Notation Nodd_spec := N.odd_spec (only parsing).
-Notation Nlt_not_eq := N.lt_neq (only parsing).
-Notation Ngt_Nlt := N.gt_lt (only parsing).
+Notation Npred_succ := N.pred_succ (compat "8.3").
+Notation Npred_minus := N.pred_sub (compat "8.3").
+Notation Nsucc_pred := N.succ_pred (compat "8.3").
+Notation Ppred_N_spec := N.pos_pred_spec (compat "8.3").
+Notation Nsucc_pos_spec := N.succ_pos_spec (compat "8.3").
+Notation Ppred_Nsucc := N.pos_pred_succ (compat "8.3").
+Notation Nplus_0_l := N.add_0_l (compat "8.3").
+Notation Nplus_0_r := N.add_0_r (compat "8.3").
+Notation Nplus_comm := N.add_comm (compat "8.3").
+Notation Nplus_assoc := N.add_assoc (compat "8.3").
+Notation Nplus_succ := N.add_succ_l (compat "8.3").
+Notation Nsucc_0 := N.succ_0_discr (compat "8.3").
+Notation Nsucc_inj := N.succ_inj (compat "8.3").
+Notation Nminus_N0_Nle := N.sub_0_le (compat "8.3").
+Notation Nminus_0_r := N.sub_0_r (compat "8.3").
+Notation Nminus_succ_r:= N.sub_succ_r (compat "8.3").
+Notation Nmult_0_l := N.mul_0_l (compat "8.3").
+Notation Nmult_1_l := N.mul_1_l (compat "8.3").
+Notation Nmult_1_r := N.mul_1_r (compat "8.3").
+Notation Nmult_comm := N.mul_comm (compat "8.3").
+Notation Nmult_assoc := N.mul_assoc (compat "8.3").
+Notation Nmult_plus_distr_r := N.mul_add_distr_r (compat "8.3").
+Notation Neqb_eq := N.eqb_eq (compat "8.3").
+Notation Nle_0 := N.le_0_l (compat "8.3").
+Notation Ncompare_refl := N.compare_refl (compat "8.3").
+Notation Ncompare_Eq_eq := N.compare_eq (compat "8.3").
+Notation Ncompare_eq_correct := N.compare_eq_iff (compat "8.3").
+Notation Nlt_irrefl := N.lt_irrefl (compat "8.3").
+Notation Nlt_trans := N.lt_trans (compat "8.3").
+Notation Nle_lteq := N.lt_eq_cases (compat "8.3").
+Notation Nlt_succ_r := N.lt_succ_r (compat "8.3").
+Notation Nle_trans := N.le_trans (compat "8.3").
+Notation Nle_succ_l := N.le_succ_l (compat "8.3").
+Notation Ncompare_spec := N.compare_spec (compat "8.3").
+Notation Ncompare_0 := N.compare_0_r (compat "8.3").
+Notation Ndouble_div2 := N.div2_double (compat "8.3").
+Notation Ndouble_plus_one_div2 := N.div2_succ_double (compat "8.3").
+Notation Ndouble_inj := N.double_inj (compat "8.3").
+Notation Ndouble_plus_one_inj := N.succ_double_inj (compat "8.3").
+Notation Npow_0_r := N.pow_0_r (compat "8.3").
+Notation Npow_succ_r := N.pow_succ_r (compat "8.3").
+Notation Nlog2_spec := N.log2_spec (compat "8.3").
+Notation Nlog2_nonpos := N.log2_nonpos (compat "8.3").
+Notation Neven_spec := N.even_spec (compat "8.3").
+Notation Nodd_spec := N.odd_spec (compat "8.3").
+Notation Nlt_not_eq := N.lt_neq (compat "8.3").
+Notation Ngt_Nlt := N.gt_lt (compat "8.3").
 
 (** More complex compatibility facts, expressed as lemmas
     (to preserve scopes for instance) *)

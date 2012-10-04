@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -13,7 +13,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Coq_omega
 open Refiner
@@ -25,8 +25,8 @@ let omega_tactic l =
        | "positive" -> Tacinterp.interp <:tactic<zify_positive>>
        | "N" -> Tacinterp.interp <:tactic<zify_N>>
        | "Z" -> Tacinterp.interp <:tactic<zify_op>>
-       | s -> Util.error ("No Omega knowledge base for type "^s))
-    (Util.list_uniquize (List.sort compare l))
+       | s -> Errors.error ("No Omega knowledge base for type "^s))
+    (Util.List.uniquize (List.sort compare l))
   in
   tclTHEN
     (tclREPEAT (tclPROGRESS (tclTHENLIST tacs)))

@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Names
+open Errors
 open Util
 open Sign
 open Term
@@ -37,7 +38,7 @@ let abstract_inductive hyps nparams inds =
   let ntyp = List.length inds in
   let nhyp = named_context_length hyps in
   let args = instance_from_named_context (List.rev hyps) in
-  let subs = list_tabulate (fun k -> lift nhyp (mkApp(mkRel (k+1),args))) ntyp in
+  let subs = List.tabulate (fun k -> lift nhyp (mkApp(mkRel (k+1),args))) ntyp in
   let inds' =
     List.map
       (function (tname,arity,cnames,lc) ->
@@ -76,7 +77,7 @@ let refresh_polymorphic_type_of_inductive (_,mip) =
 let process_inductive sechyps modlist mib =
   let nparams = mib.mind_nparams in
   let inds =
-    array_map_to_list
+    Array.map_to_list
       (fun mip ->
 	 let arity = expmod_constr modlist (refresh_polymorphic_type_of_inductive (mib,mip)) in
 	 let lc = Array.map (expmod_constr modlist) mip.mind_user_lc in

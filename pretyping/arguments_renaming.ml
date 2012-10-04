@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -8,18 +8,11 @@
 
 (*i*)
 open Names
-open Libnames
-open Decl_kinds
+open Globnames
 open Term
-open Sign
-open Evd
 open Environ
-open Nametab
-open Mod_subst
 open Util
-open Pp
 open Libobject
-open Nameops
 (*i*)
 
 let empty_name_table = (Refmap.empty : name list list Refmap.t)

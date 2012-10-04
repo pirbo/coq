@@ -1,11 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Pp
 open Util
 open Names
 open Glob_term
@@ -28,18 +29,18 @@ val new_untyped_evar : unit -> existential_key
 
 (** {6 Creating a fresh evar given their type and context} *)
 val new_evar :
-  evar_map -> env -> ?src:loc * hole_kind -> ?filter:bool list ->
+  evar_map -> env -> ?src:Loc.t * Evar_kinds.t -> ?filter:bool list ->
   ?candidates:constr list -> types -> evar_map * constr
 
 (** the same with side-effects *)
 val e_new_evar :
-  evar_map ref -> env -> ?src:loc * hole_kind -> ?filter:bool list ->
+  evar_map ref -> env -> ?src:Loc.t * Evar_kinds.t -> ?filter:bool list ->
   ?candidates:constr list -> types -> constr
 
 (** Create a new Type existential variable, as we keep track of 
     them during type-checking and unification. *)
 val new_type_evar :
-  ?src:loc * hole_kind -> ?filter:bool list -> evar_map -> env -> evar_map * constr
+  ?src:Loc.t * Evar_kinds.t -> ?filter:bool list -> evar_map -> env -> evar_map * constr
 
 (** Create a fresh evar in a context different from its definition context:
    [new_evar_instance sign evd ty inst] creates a new evar of context
@@ -48,7 +49,7 @@ val new_type_evar :
    of [inst] are typed in the occurrence context and their type (seen
    as a telescope) is [sign] *)
 val new_evar_instance :
- named_context_val -> evar_map -> types -> ?src:loc * hole_kind -> ?filter:bool list -> ?candidates:constr list -> constr list -> evar_map * constr
+ named_context_val -> evar_map -> types -> ?src:Loc.t * Evar_kinds.t -> ?filter:bool list -> ?candidates:constr list -> constr list -> evar_map * constr
 
 val make_pure_subst : evar_info -> constr array -> (identifier * constr) list
 
@@ -84,8 +85,12 @@ val whd_head_evar :  evar_map -> constr -> constr
 
 val is_ground_term :  evar_map -> constr -> bool
 val is_ground_env  :  evar_map -> env -> bool
-val solve_refl : conv_fun -> env ->  evar_map -> 
+val solve_refl : ?can_drop:bool -> conv_fun -> env ->  evar_map ->
   existential_key -> constr array -> constr array -> evar_map
+val solve_evar_evar : ?force:bool ->
+  (env -> evar_map -> existential -> constr -> evar_map) -> conv_fun ->
+  env ->  evar_map -> existential -> existential -> evar_map
+
 val solve_simple_eqn : conv_fun -> ?choose:bool -> env ->  evar_map ->
   bool option * existential * constr -> evar_map * bool
 val reconsider_conv_pbs : conv_fun -> evar_map -> evar_map * bool
@@ -115,21 +120,19 @@ val solve_pattern_eqn : env -> constr list -> constr -> constr
 
 val evars_of_term : constr -> Intset.t
 
-(** returns the evars contained in the term associated with
-    the evars they contain themselves in their body, if any.
-    If the evar has no body, [None] is associated to it. *)
-val evars_of_evars_of_term : evar_map -> constr -> (Intset.t option) Intmap.t
 val evars_of_named_context : named_context -> Intset.t
 val evars_of_evar_info : evar_info -> Intset.t
 
-(** returns the evars which can be found in the typing context of the argument evars,
-    in the same format as {!evars_of_evars_of_term}.
-    It explores recursively the evars in the body of the argument evars -- but does
-    not return them. *)
-(* spiwack: tongue in cheek: it should have been called
-    [evars_of_evars_in_types_of_list_and_recursively_in_bodies] *)
-val evars_of_evars_in_types_of_list : evar_map -> evar list -> (Intset.t option) Intmap.t
-
+(** [gather_dependent_evars evm seeds] classifies the evars in [evm]
+    as dependent_evars and goals (these may overlap). A goal is an
+    evar in [seeds] or an evar appearing in the (partial) definition
+    of a goal. A dependent evar is an evar appearing in the type
+    (hypotheses and conclusion) of a goal, or in the type or (partial)
+    definition of a dependent evar.  The value return is a map
+    associating to each dependent evar [None] if it has no (partial)
+    definition or [Some s] if [s] is the list of evars appearing in
+    its (partial) definition. *)
+val gather_dependent_evars : evar_map -> evar list -> (Intset.t option) Intmap.t
 
 (** The following functions return the set of undefined evars
     contained in the object, the defined evars being traversed.
@@ -144,28 +147,19 @@ val undefined_evars_of_evar_info : evar_map -> evar_info -> Intset.t
 
 val judge_of_new_Type : evar_map -> evar_map * unsafe_judgment
 
-type type_constraint_type = (int * int) option * constr
-type type_constraint = type_constraint_type option
-
+type type_constraint = types option
 type val_constraint = constr option
 
 val empty_tycon : type_constraint
-val mk_tycon_type : constr -> type_constraint_type
-val mk_abstr_tycon_type : int -> constr -> type_constraint_type
 val mk_tycon : constr -> type_constraint
-val mk_abstr_tycon : int -> constr -> type_constraint
 val empty_valcon : val_constraint
 val mk_valcon : constr -> val_constraint
 
 val split_tycon :
-  loc -> env ->  evar_map -> type_constraint ->
+  Loc.t -> env ->  evar_map -> type_constraint ->
     evar_map * (name * type_constraint * type_constraint)
 
 val valcon_of_tycon : type_constraint -> val_constraint
-
-val lift_abstr_tycon_type : int -> type_constraint_type -> type_constraint_type
-
-val lift_tycon_type : int -> type_constraint_type -> type_constraint_type
 val lift_tycon : int -> type_constraint -> type_constraint
 
 (***********************************************************)
@@ -200,7 +194,6 @@ val expand_vars_in_term : env -> constr -> constr
 
 (** {6 debug pretty-printer:} *)
 
-val pr_tycon_type : env -> type_constraint_type -> Pp.std_ppcmds
 val pr_tycon : env -> type_constraint -> Pp.std_ppcmds
 
 

@@ -35,49 +35,7 @@ let print_proof_tree, set_print_proof_tree =
 
 let print_if_verbose s = if !verbose then print_string s;;
 
-(* Next exception is used only inside print_coq_object and tag_of_string_tag *)
-exception Uninteresting;;
-
-(* NOT USED anymore, we back to the V6 point of view with global parameters
-
-(* Internally, for Coq V7, params of inductive types are associated     *)
-(* not to the whole block of mutual inductive (as it was in V6) but to  *)
-(* each member of the block; but externally, all params are required    *)
-(* to be the same; the following function checks that the parameters    *)
-(* of each inductive of a same block are all the same, then returns     *)
-(* this number; it fails otherwise                                      *)
-let extract_nparams pack =
- let module D = Declarations in
- let module U = Util in
- let module S = Sign in
-
-  let {D.mind_nparams=nparams0} = pack.(0) in
-  let arity0 = pack.(0).D.mind_user_arity in
-  let params0, _ = S.decompose_prod_n_assum nparams0 arity0 in
-  for i = 1 to Array.length pack - 1 do
-    let {D.mind_nparams=nparamsi} = pack.(i) in
-    let arityi = pack.(i).D.mind_user_arity in
-    let paramsi, _ = S.decompose_prod_n_assum nparamsi arityi in
-    if params0 <> paramsi then U.error "Cannot convert a block of inductive definitions with parameters specific to each inductive to a block of mutual inductive definitions with parameters global to the whole block"
-  done;
-  nparams0
-
-*)
-
-(* could_have_namesakes sp = true iff o is an object that could be cooked and *)
-(* than that could exists in cooked form with the same name in a super        *)
-(* section of the actual section                                              *)
-let could_have_namesakes o sp =      (* namesake = omonimo in italian *)
- let module DK = Decl_kinds in
- let module D = Declare in
-  let tag = Libobject.object_tag o in
-   print_if_verbose ("Object tag: " ^ tag ^ "\n") ;
-   match tag with
-      "CONSTANT"        -> true   (* constants/parameters are non global *)
-    | "INDUCTIVE"       -> true   (* mutual inductive types are never local   *)
-    | "VARIABLE"        -> false  (* variables are local, so no namesakes     *)
-    | _                 -> false  (* uninteresting thing that won't be printed*)
-;;
+open Decl_kinds
 
 (* filter_params pvars hyps *)
 (* filters out from pvars (which is a list of lists) all the variables *)
@@ -104,11 +62,6 @@ let filter_params pvars hyps =
   let cwdsp = Libnames.make_path cwd (Names.id_of_string "dummy") in
   let modulepath = Cic2acic.get_module_path_of_full_path cwdsp in
    aux (Names.repr_dirpath modulepath) (List.rev pvars)
-;;
-
-type variables_type =
-   Definition of string * Term.constr * Term.types
- | Assumption of string * Term.constr
 ;;
 
 (* The computation is very inefficient, but we can't do anything *)
@@ -300,54 +253,6 @@ let mk_variable_obj id body typ =
     (Names.string_of_id id, unsharedbody, Unshare.unshare typ, params)
 ;;
 
-(* Unsharing is not performed on the body, that must be already unshared. *)
-(* The evar map and the type, instead, are unshared by this function.     *)
-let mk_current_proof_obj is_a_variable id bo ty evar_map env =
- let unshared_ty = Unshare.unshare ty in
- let metasenv =
-  List.map
-   (function
-     (n, {Evd.evar_concl = evar_concl ;
-          Evd.evar_hyps = evar_hyps}
-      ) ->
-       (* We map the named context to a rel context and every Var to a Rel *)
-       let final_var_ids,context =
-        let rec aux var_ids =
-         function
-            [] -> var_ids,[]
-          | (n,None,t)::tl ->
-              let final_var_ids,tl' = aux (n::var_ids) tl in
-              let t' = Term.subst_vars var_ids t in
-               final_var_ids,(n, Acic.Decl (Unshare.unshare t'))::tl'
-          | (n,Some b,t)::tl ->
-              let final_var_ids,tl' = aux (n::var_ids) tl in
-              let b' = Term.subst_vars var_ids b in
-               (* t will not be exported to XML. Thus no unsharing performed *)
-               final_var_ids,(n, Acic.Def  (Unshare.unshare b',t))::tl'
-        in
-         aux [] (List.rev (Environ.named_context_of_val evar_hyps))
-       in
-        (* We map the named context to a rel context and every Var to a Rel *)
-        (n,context,Unshare.unshare (Term.subst_vars final_var_ids evar_concl))
-   ) (Evarutil.non_instantiated evar_map)
- in
-  let id' = Names.string_of_id id in
-   if metasenv = [] then
-    let ids =
-     Names.Idset.union
-      (Environ.global_vars_set env bo) (Environ.global_vars_set env ty) in
-    let hyps0 = Environ.keep_hyps env ids in
-    let hyps = string_list_of_named_context_list hyps0 in
-    (* Variables are the identifiers of the variables in scope *)
-    let variables = search_variables () in
-    let params = filter_params variables hyps in
-     if is_a_variable then
-      Acic.Variable (id',Some bo,unshared_ty,params)
-     else
-      Acic.Constant (id',Some bo,unshared_ty,params)
-   else
-    Acic.CurrentProof (id',metasenv,bo,unshared_ty)
-;;
 
 let mk_constant_obj id bo ty variables hyps =
  let hyps = string_list_of_named_context_list hyps in
@@ -400,11 +305,6 @@ let theory_output_string ?(do_not_quote = false) s =
    Buffer.add_string theory_buffer s
 ;;
 
-let kind_of_global_goal = function
-  | Decl_kinds.Global, Decl_kinds.DefinitionBody _ -> "DEFINITION","InteractiveDefinition"
-  | Decl_kinds.Global, (Decl_kinds.Proof k) -> "THEOREM",Decl_kinds.string_of_theorem_kind k
-  | Decl_kinds.Local, _ -> assert false
-
 let kind_of_inductive isrecord kn =
  "DEFINITION",
  if (fst (Global.lookup_inductive (kn,0))).Declarations.mind_finite
@@ -417,76 +317,73 @@ let kind_of_inductive isrecord kn =
 ;;
 
 let kind_of_variable id =
-  let module DK = Decl_kinds in
   match Decls.variable_kind id with
-    | DK.IsAssumption DK.Definitional -> "VARIABLE","Assumption"
-    | DK.IsAssumption DK.Logical -> "VARIABLE","Hypothesis"
-    | DK.IsAssumption DK.Conjectural -> "VARIABLE","Conjecture"
-    | DK.IsDefinition DK.Definition -> "VARIABLE","LocalDefinition"
-    | DK.IsProof _ -> "VARIABLE","LocalFact"
-    | _ -> Util.anomaly "Unsupported variable kind"
+    | IsAssumption Definitional -> "VARIABLE","Assumption"
+    | IsAssumption Logical -> "VARIABLE","Hypothesis"
+    | IsAssumption Conjectural -> "VARIABLE","Conjecture"
+    | IsDefinition Definition -> "VARIABLE","LocalDefinition"
+    | IsProof _ -> "VARIABLE","LocalFact"
+    | _ -> Errors.anomaly "Unsupported variable kind"
 ;;
 
 let kind_of_constant kn =
-  let module DK = Decl_kinds in
   match Decls.constant_kind kn with
-    | DK.IsAssumption DK.Definitional -> "AXIOM","Declaration"
-    | DK.IsAssumption DK.Logical -> "AXIOM","Axiom"
-    | DK.IsAssumption DK.Conjectural ->
-        Pp.warning "Conjecture not supported in dtd (used Declaration instead)";
+    | IsAssumption Definitional -> "AXIOM","Declaration"
+    | IsAssumption Logical -> "AXIOM","Axiom"
+    | IsAssumption Conjectural ->
+        Pp.msg_warning (Pp.str "Conjecture not supported in dtd (used Declaration instead)");
         "AXIOM","Declaration"
-    | DK.IsDefinition DK.Definition -> "DEFINITION","Definition"
-    | DK.IsDefinition DK.Example ->
-        Pp.warning "Example not supported in dtd (used Definition instead)";
+    | IsDefinition Definition -> "DEFINITION","Definition"
+    | IsDefinition Example ->
+        Pp.msg_warning (Pp.str "Example not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.Coercion ->
-        Pp.warning "Coercion not supported in dtd (used Definition instead)";
+    | IsDefinition Coercion ->
+        Pp.msg_warning (Pp.str "Coercion not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.SubClass ->
-        Pp.warning "SubClass not supported in dtd (used Definition instead)";
+    | IsDefinition SubClass ->
+        Pp.msg_warning (Pp.str "SubClass not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.CanonicalStructure ->
-        Pp.warning "CanonicalStructure not supported in dtd (used Definition instead)";
+    | IsDefinition CanonicalStructure ->
+        Pp.msg_warning (Pp.str "CanonicalStructure not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.Fixpoint ->
-        Pp.warning "Fixpoint not supported in dtd (used Definition instead)";
+    | IsDefinition Fixpoint ->
+        Pp.msg_warning (Pp.str "Fixpoint not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.CoFixpoint ->
-        Pp.warning "CoFixpoint not supported in dtd (used Definition instead)";
+    | IsDefinition CoFixpoint ->
+        Pp.msg_warning (Pp.str "CoFixpoint not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.Scheme ->
-        Pp.warning "Scheme not supported in dtd (used Definition instead)";
+    | IsDefinition Scheme ->
+        Pp.msg_warning (Pp.str "Scheme not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.StructureComponent ->
-        Pp.warning "StructureComponent not supported in dtd (used Definition instead)";
+    | IsDefinition StructureComponent ->
+        Pp.msg_warning (Pp.str "StructureComponent not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.IdentityCoercion ->
-        Pp.warning "IdentityCoercion not supported in dtd (used Definition instead)";
+    | IsDefinition IdentityCoercion ->
+        Pp.msg_warning (Pp.str "IdentityCoercion not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.Instance ->
-        Pp.warning "Instance not supported in dtd (used Definition instead)";
+    | IsDefinition Instance ->
+        Pp.msg_warning (Pp.str "Instance not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsDefinition DK.Method ->
-        Pp.warning "Method not supported in dtd (used Definition instead)";
+    | IsDefinition Method ->
+        Pp.msg_warning (Pp.str "Method not supported in dtd (used Definition instead)");
         "DEFINITION","Definition"
-    | DK.IsProof (DK.Theorem|DK.Lemma|DK.Corollary|DK.Fact|DK.Remark as thm) ->
-        "THEOREM",DK.string_of_theorem_kind thm
-    | DK.IsProof _ ->
-        Pp.warning "Unsupported theorem kind (used Theorem instead)";
-        "THEOREM",DK.string_of_theorem_kind DK.Theorem
+    | IsProof (Theorem|Lemma|Corollary|Fact|Remark as thm) ->
+        "THEOREM",Kindops.string_of_theorem_kind thm
+    | IsProof _ ->
+        Pp.msg_warning (Pp.str "Unsupported theorem kind (used Theorem instead)");
+        "THEOREM",Kindops.string_of_theorem_kind Theorem
 ;;
 
 let kind_of_global r =
-  let module Ln = Libnames in
-  let module DK = Decl_kinds in
+  let module Gn = Globnames in
   match r with
-  | Ln.IndRef kn | Ln.ConstructRef (kn,_) ->
+  | Gn.IndRef kn | Gn.ConstructRef (kn,_) ->
       let isrecord =
 	try let _ = Recordops.lookup_projections kn in Declare.KernelSilent
         with Not_found -> Declare.KernelVerbose in
       kind_of_inductive isrecord (fst kn)
-  | Ln.VarRef id -> kind_of_variable id
-  | Ln.ConstRef kn -> kind_of_constant kn
+  | Gn.VarRef id -> kind_of_variable id
+  | Gn.ConstRef kn -> kind_of_constant kn
 ;;
 
 let print_object_kind uri (xmltag,variation) =
@@ -512,12 +409,12 @@ let print internal glob_ref kind xml_library_root =
  let module Nt = Nametab in
  let module T = Term in
  let module X = Xml in
- let module Ln = Libnames in
+ let module Gn = Globnames in
   (* Variables are the identifiers of the variables in scope *)
   let variables = search_variables () in
   let tag,obj =
    match glob_ref with
-      Ln.VarRef id ->
+      Gn.VarRef id ->
        (* this kn is fake since it is not provided by Coq *)
        let kn =
         let (mod_path,dir_path) = Lib.current_prefix () in
@@ -525,7 +422,7 @@ let print internal glob_ref kind xml_library_root =
        in
        let (_,body,typ) = G.lookup_named id in
         Cic2acic.Variable kn,mk_variable_obj id body typ
-    | Ln.ConstRef kn ->
+    | Gn.ConstRef kn ->
        let id = N.id_of_label (N.con_label kn) in
        let cb = G.lookup_constant kn in
        let val0 = D.body_of_constant cb in
@@ -533,15 +430,15 @@ let print internal glob_ref kind xml_library_root =
        let hyps = cb.D.const_hyps in
        let typ = Typeops.type_of_constant_type (Global.env()) typ in
         Cic2acic.Constant kn,mk_constant_obj id val0 typ variables hyps
-    | Ln.IndRef (kn,_) ->
+    | Gn.IndRef (kn,_) ->
        let mib = G.lookup_mind kn in
        let {D.mind_nparams=nparams;
 	    D.mind_packets=packs ;
             D.mind_hyps=hyps;
             D.mind_finite=finite} = mib in
           Cic2acic.Inductive kn,mk_inductive_obj kn mib packs variables nparams hyps finite
-    | Ln.ConstructRef _ ->
-       Util.error ("a single constructor cannot be printed in XML")
+    | Gn.ConstructRef _ ->
+       Errors.error ("a single constructor cannot be printed in XML")
   in
   let fn = filename_of_path xml_library_root tag in
   let uri = Cic2acic.uri_of_kernel_name tag in
@@ -560,7 +457,7 @@ let print_ref qid fn =
 (* pretty prints via Xml.pp the proof in progress on dest     *)
 let show_pftreestate internal fn (kind,pftst) id =
  if true then
-   Util.anomaly "Xmlcommand.show_pftreestate is not supported in this version."
+   Errors.anomaly "Xmlcommand.show_pftreestate is not supported in this version."
 
 let show fn =
  let pftst = Pfedit.get_pftreestate () in
@@ -588,7 +485,7 @@ let _ =
   Declare.set_xml_declare_variable
    (function (sp,kn) ->
      let id = Libnames.basename sp in
-     print Declare.UserVerbose (Libnames.VarRef id) (kind_of_variable id) xml_library_root ;
+     print Declare.UserVerbose (Globnames.VarRef id) (kind_of_variable id) xml_library_root ;
      proof_to_export := None)
 ;;
 
@@ -597,7 +494,7 @@ let _ =
    (function (internal,kn) ->
      match !proof_to_export with
         None ->
-          print internal (Libnames.ConstRef kn) (kind_of_constant kn)
+          print internal (Globnames.ConstRef kn) (kind_of_constant kn)
 	    xml_library_root
       | Some pftreestate ->
          (* It is a proof. Let's export it starting from the proof-tree *)
@@ -611,7 +508,7 @@ let _ =
 let _ =
   Declare.set_xml_declare_inductive
    (function (isrecord,(sp,kn)) ->
-      print Declare.UserVerbose (Libnames.IndRef (Names.mind_of_kn kn,0))
+      print Declare.UserVerbose (Globnames.IndRef (Names.mind_of_kn kn,0))
         (kind_of_inductive isrecord (Names.mind_of_kn kn))
         xml_library_root)
 ;;
@@ -656,7 +553,7 @@ let _ =
 	  let options = " --html -s --body-only --no-index --latin1 --raw-comments" in
           let command cmd =
            if Sys.command cmd <> 0 then
-            Util.anomaly ("Error executing \"" ^ cmd ^ "\"")
+            Errors.anomaly ("Error executing \"" ^ cmd ^ "\"")
           in
            command (coqdoc^options^" -o "^fn^".xml "^fn^".v");
            command ("rm "^fn^".v "^fn^".glob");

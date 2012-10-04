@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,16 +9,16 @@
 (*s Production of Ocaml syntax. *)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
-open Libnames
+open Globnames
 open Table
 open Miniml
 open Mlutil
 open Modutil
 open Common
-open Declarations
 
 
 (*s Some utility functions. *)
@@ -61,7 +61,10 @@ let keywords =
 
 let pp_open mp = str ("open "^ string_of_modfile mp ^"\n")
 
-let preamble _ used_modules usf =
+let pp_comment s = str "(* " ++ hov 0 s ++ str " *)"
+
+let preamble _ comment used_modules usf =
+  pp_comment comment ++ fnl () ++ fnl () ++
   prlist pp_open used_modules ++
   (if used_modules = [] then mt () else fnl ()) ++
   (if usf.tdummy || usf.tunknown then str "type __ = Obj.t\n" else mt()) ++
@@ -70,7 +73,8 @@ let preamble _ used_modules usf =
    else mt ()) ++
   (if usf.tdummy || usf.tunknown || usf.mldummy then fnl () else mt ())
 
-let sig_preamble _ used_modules usf =
+let sig_preamble _ comment used_modules usf =
+  pp_comment comment ++ fnl () ++ fnl () ++
   prlist pp_open used_modules ++
   (if used_modules = [] then mt () else fnl ()) ++
   (if usf.tdummy || usf.tunknown then str "type __ = Obj.t\n\n" else mt())
@@ -110,12 +114,12 @@ let pp_one_field r i = function
 
 let pp_field r fields i = pp_one_field r i (List.nth fields i)
 
-let pp_fields r fields = list_map_i (pp_one_field r) 0 fields
+let pp_fields r fields = List.map_i (pp_one_field r) 0 fields
 
 (*s Pretty-printing of types. [par] is a boolean indicating whether parentheses
     are needed or not. *)
 
-let rec pp_type par vl t =
+let pp_type par vl t =
   let rec pp_rec par = function
     | Tmeta _ | Tvar' _ | Taxiom -> assert false
     | Tvar i -> (try pp_tvar (List.nth vl (pred i))
@@ -185,7 +189,7 @@ let rec pp_expr par env args =
 	hv 0 (apply2 (pp_letin pp_id pp_a1 pp_a2))
     | MLglob r ->
 	(try
-	   let args = list_skipn (projection_arity r) args in
+	   let args = List.skipn (projection_arity r) args in
 	   let record = List.hd args in
 	   pp_apply (record ++ str "." ++ pp_global Term r) par (List.tl args)
 	 with _ -> apply (pp_global Term r))
@@ -370,7 +374,7 @@ and pp_fix par env i (ids,bl) args =
 	  prvect_with_sep
       	    (fun () -> fnl () ++ str "and ")
 	    (fun (fi,ti) -> pr_id fi ++ pp_function env ti)
-	    (array_map2 (fun id b -> (id,b)) ids bl) ++
+	    (Array.map2 (fun id b -> (id,b)) ids bl) ++
 	  fnl () ++
 	  hov 2 (str "in " ++ pp_apply (pr_id ids.(i)) false args)))
 
@@ -412,7 +416,6 @@ let pp_equiv param_list name = function
   | RenEquiv ren, _  ->
       str " = " ++ pp_parameters param_list ++ str (ren^".") ++ name
 
-let pp_comment s = str "(* " ++ s ++ str " *)"
 
 let pp_one_ind prefix ip_equiv pl name cnames ctyps =
   let pl = rename_tvars keywords pl in
@@ -631,7 +634,7 @@ and pp_module_type params = function
       str "functor (" ++ name ++ str ":" ++ typ ++ str ") ->" ++ fnl () ++ def
   | MTsig (mp, sign) ->
       push_visible mp params;
-      let l = map_succeed pp_specif sign in
+      let l = List.map pp_specif sign in
       pop_visible ();
       str "sig " ++ fnl () ++
       v 1 (str " " ++ prlist_with_sep fnl2 identity l) ++
@@ -639,7 +642,7 @@ and pp_module_type params = function
   | MTwith(mt,ML_With_type(idl,vl,typ)) ->
       let ids = pp_parameters (rename_tvars keywords vl) in
       let mp_mt = msid_of_mt mt in
-      let l,idl' = list_sep_last idl in
+      let l,idl' = List.sep_last idl in
       let mp_w =
 	List.fold_left (fun mp l -> MPdot(mp,label_of_id l)) mp_mt idl'
       in
@@ -704,7 +707,7 @@ and pp_module_expr params = function
       str "functor (" ++ name ++ str ":" ++ typ ++ str ") ->" ++ fnl () ++ def
   | MEstruct (mp, sel) ->
       push_visible mp params;
-      let l = map_succeed pp_structure_elem sel in
+      let l = List.map pp_structure_elem sel in
       pop_visible ();
       str "struct " ++ fnl () ++
       v 1 (str " " ++ prlist_with_sep fnl2 identity l) ++

@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 
@@ -53,7 +54,7 @@ type library_disk = {
 
 type library_t = {
   library_name : compilation_unit_name;
-  library_filename : System.physical_path;
+  library_filename : CUnix.physical_path;
   library_compiled : Safe_typing.compiled_library;
   library_deps : (compilation_unit_name * Digest.t) list;
   library_digest : Digest.t }
@@ -98,14 +99,15 @@ let check_one_lib admit (dir,m) =
      also check if it carries a validation certificate (yet to
      be implemented). *)
   if LibrarySet.mem dir admit then
-    (Flags.if_verbose msgnl
+    (Flags.if_verbose ppnl
       (str "Admitting library: " ++ pr_dirpath dir);
       Safe_typing.unsafe_import file md dig)
   else
-    (Flags.if_verbose msgnl
+    (Flags.if_verbose ppnl
       (str "Checking library: " ++ pr_dirpath dir);
       Safe_typing.import file md dig);
-  Flags.if_verbose msg(fnl());
+  Flags.if_verbose pp (fnl());
+  pp_flush ();
   register_loaded_library m
 
 (*************************************************************************)
@@ -113,7 +115,7 @@ let check_one_lib admit (dir,m) =
 
 type logical_path = dir_path
 
-let load_paths = ref ([],[] : System.physical_path list * logical_path list)
+let load_paths = ref ([],[] : CUnix.physical_path list * logical_path list)
 
 let get_load_paths () = fst !load_paths
 
@@ -147,20 +149,20 @@ let canonical_path_name p =
 
 let find_logical_path phys_dir =
   let phys_dir = canonical_path_name phys_dir in
-  match list_filter2 (fun p d -> p = phys_dir) !load_paths with
+  match List.filter2 (fun p d -> p = phys_dir) !load_paths with
   | _,[dir] -> dir
   | _,[] -> default_root_prefix
   | _,l -> anomaly ("Two logical paths are associated to "^phys_dir)
 
 let remove_load_path dir =
-  load_paths := list_filter2 (fun p d -> p <> dir) !load_paths
+  load_paths := List.filter2 (fun p d -> p <> dir) !load_paths
 
 let add_load_path (phys_path,coq_path) =
   if !Flags.debug then
-    msgnl (str "path: " ++ pr_dirpath coq_path ++ str " ->" ++ spc() ++
+    ppnl (str "path: " ++ pr_dirpath coq_path ++ str " ->" ++ spc() ++
            str phys_path);
   let phys_path = canonical_path_name phys_path in
-    match list_filter2 (fun p d -> p = phys_path) !load_paths with
+    match List.filter2 (fun p d -> p = phys_path) !load_paths with
       | _,[dir] ->
 	  if coq_path <> dir
             (* If this is not the default -I . to coqtop *)
@@ -183,7 +185,7 @@ let add_load_path (phys_path,coq_path) =
       | _ -> anomaly ("Two logical paths are associated to "^phys_path)
 
 let load_paths_of_dir_path dir =
-  fst (list_filter2 (fun p d -> d = dir) !load_paths)
+  fst (List.filter2 (fun p d -> d = dir) !load_paths)
 
 (************************************************************************)
 (*s Locate absolute or partially qualified library names in the path *)
@@ -286,7 +288,7 @@ let name_clash_message dir mdir f =
 let depgraph = ref LibraryMap.empty
 
 let intern_from_file (dir, f) =
-  Flags.if_verbose msg (str"[intern "++str f++str" ...");
+  Flags.if_verbose pp (str"[intern "++str f++str" ..."); pp_flush ();
   let (md,table,digest) =
     try
       let ch = with_magic_number_check raw_intern_library f in
@@ -297,9 +299,9 @@ let intern_from_file (dir, f) =
       if dir <> md.md_name then
         errorlabstrm "load_physical_library"
           (name_clash_message dir md.md_name f);
-      Flags.if_verbose msgnl(str" done]");
+      Flags.if_verbose ppnl (str" done]");
       md,table,digest
-    with e -> Flags.if_verbose msgnl(str" failed!]"); raise e in
+    with e -> Flags.if_verbose ppnl (str" failed!]"); raise e in
   depgraph := LibraryMap.add md.md_name md.md_deps !depgraph;
   mk_library md f table digest
 
@@ -358,14 +360,14 @@ let recheck_library ~norec ~admit ~check =
   let nochk =
     List.fold_right LibrarySet.remove (List.map fst (nrl@ml)) nochk in
   (* *)
-  Flags.if_verbose msgnl (fnl()++hv 2 (str "Ordered list:" ++ fnl() ++
+  Flags.if_verbose ppnl (fnl()++hv 2 (str "Ordered list:" ++ fnl() ++
     prlist
     (fun (dir,_) -> pr_dirpath dir ++ fnl()) needed));
   List.iter (check_one_lib nochk) needed;
-  Flags.if_verbose msgnl(str"Modules were successfully checked")
+  Flags.if_verbose ppnl (str"Modules were successfully checked")
 
 open Printf
 
 let mem s =
   let m = try_find_library s in
-  h 0 (str (sprintf "%dk" (size_kb m)))
+  h 0 (str (sprintf "%dk" (CObj.size_kb m)))

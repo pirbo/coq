@@ -1,23 +1,23 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Pp
 open Evd
 
-open Refiner
-open Proof_type
 open Tacmach
 open Tacinterp
 open Decl_expr
 open Decl_mode
 open Decl_interp
 open Glob_term
+open Glob_ops
 open Names
 open Nameops
 open Declarations
@@ -28,7 +28,7 @@ open Termops
 open Namegen
 open Reductionops
 open Goptions
-
+open Misctypes
 
 (* Strictness option *)
 
@@ -128,22 +128,6 @@ let daimon_tac gls =
   set_daimon_flag ();
   {it=[];sigma=sig_sig gls}
 
-
-(* marking closed blocks *)
-
-let rec is_focussing_instr = function
-    Pthus i | Pthen i | Phence i -> is_focussing_instr i
-  | Pescape | Pper _ | Pclaim _ | Pfocus _
-  | Psuppose _ | Pcase (_,_,_)  -> true
-  | _ -> false
-
-let mark_rule_as_done = function
-    Decl_proof true -> Decl_proof false
-  | Decl_proof false ->
-      anomaly "already marked as done"
-  | _ -> anomaly "mark_rule_as_done"
-
-
 (* post-instruction focus management *)
 
 (* spiwack: This used to fail if there was no focusing command
@@ -236,7 +220,7 @@ let add_justification_hyps keep items gls =
       | _ ->
 	  let id=pf_get_new_id local_hyp_prefix gls in
 	    keep:=Idset.add id !keep;
-	    tclTHEN (letin_tac None (Names.Name id) c None Tacexpr.nowhere)
+	    tclTHEN (letin_tac None (Names.Name id) c None Locusops.nowhere)
               (thin_body [id]) gls in
     tclMAP add_aux items gls
 
@@ -503,7 +487,7 @@ let instr_cut mkstat _thus _then cut gls0 =
 
 
 (* iterated equality *)
-let _eq = Libnames.constr_of_global (Coqlib.glob_eq)
+let _eq = Globnames.constr_of_global (Coqlib.glob_eq)
 
 let decompose_eq id gls =
   let typ = pf_get_hyp_typ gls id in
@@ -749,7 +733,7 @@ let consider_tac c hyps gls =
     | _ ->
 	let id = pf_get_new_id (id_of_string "_tmp") gls in
 	tclTHEN
-	  (forward None (Some (dummy_loc, Genarg.IntroIdentifier id)) c)
+	  (forward None (Some (Loc.ghost, IntroIdentifier id)) c)
  	  (consider_match false [] [id] hyps) gls
 
 
@@ -780,7 +764,7 @@ let rec build_function args body =
 
 let define_tac id args body gls =
   let t = build_function args body in
-    letin_tac None (Name id) t None Tacexpr.nowhere gls
+    letin_tac None (Name id) t None Locusops.nowhere gls
 
 (* tactics for reconsider *)
 
@@ -856,7 +840,7 @@ let build_per_info etype casee gls =
     match etype with
 	ET_Induction -> mind.mind_nparams_rec,Some (snd ind)
       | _ -> mind.mind_nparams,None in
-  let params,real_args = list_chop nparams args in
+  let params,real_args = List.chop nparams args in
   let abstract_obj c body =
     let typ=pf_type_of gls c in
       lambda_create env (typ,subst_term c body) in
@@ -952,7 +936,7 @@ let rec tree_of_pats ((id,_) as cpl) pats =
 		    let nexti i ati =
 		      if i = pred cnum then
 			let nargs =
-			  list_map_i (fun j a -> (a,ati.(j))) 0 args in
+			  List.map_i (fun j a -> (a,ati.(j))) 0 args in
 			  Some (Idset.singleton id,
 				tree_of_pats cpl (nargs::rest_args::stack))
 		      else None
@@ -997,7 +981,7 @@ let rec add_branch ((id,_) as cpl) pats tree=
 			  let nexti i ati =
 			    if i = pred cnum then
 			      let nargs =
-				list_map_i (fun j a -> (a,ati.(j))) 0 args in
+				List.map_i (fun j a -> (a,ati.(j))) 0 args in
 				Some (Idset.add id ids,
 				      add_branch cpl (nargs::rest_args::stack)
 					(skip_args t ids (Array.length ati)))
@@ -1012,7 +996,7 @@ let rec add_branch ((id,_) as cpl) pats tree=
 			  let mapi i ati bri =
 			    if i = pred cnum then
 			      let nargs =
-				list_map_i (fun j a -> (a,ati.(j))) 0 args in
+				List.map_i (fun j a -> (a,ati.(j))) 0 args in
 				append_branch cpl 0
 				  (nargs::rest_args::stack) bri
 			    else bri in
@@ -1050,7 +1034,7 @@ let thesis_for obj typ per_info env=
     errorlabstrm "thesis_for"
       ((Printer.pr_constr_env env obj) ++ spc () ++
 	 str"cannot give an induction hypothesis (wrong inductive type).") in
-  let params,args = list_chop per_info.per_nparams all_args in
+  let params,args = List.chop per_info.per_nparams all_args in
   let _ = if not (List.for_all2 eq_constr params per_info.per_params) then
     errorlabstrm "thesis_for"
       ((Printer.pr_constr_env env obj) ++ spc () ++
@@ -1138,10 +1122,10 @@ let case_tac params pat_info hyps gls0 =
 
 (* end cases *)
 
-type instance_stack =
-    (constr option*(constr list) list) list
+type ('a, 'b) instance_stack =
+    ('b * (('a option * constr list) list)) list
 
-let initial_instance_stack ids =
+let initial_instance_stack ids : (_, _) instance_stack =
   List.map (fun id -> id,[None,[]]) ids
 
 let push_one_arg arg = function
@@ -1181,7 +1165,7 @@ let hrec_for fix_id per_info gls obj_id =
   let rc,hd1=decompose_prod typ in
   let cind,all_args=decompose_app typ in
   let ind = destInd cind in assert (ind=per_info.per_ind);
-  let params,args= list_chop per_info.per_nparams all_args in
+  let params,args= List.chop per_info.per_nparams all_args in
   assert begin
     try List.for_all2 eq_constr params per_info.per_params with
         Invalid_argument _ -> false end;
@@ -1202,8 +1186,8 @@ let rec execute_cases fix_name per_info tacnext args objs nhrec tree gls =
 	  match List.assoc id args with
 	      [None,br_args] -> 
 		let all_metas = 
-		  list_tabulate (fun n -> mkMeta (succ n)) (nparams + nhyps)  in
-		let param_metas,hyp_metas = list_chop nparams all_metas in
+		  List.tabulate (fun n -> mkMeta (succ n)) (nparams + nhyps)  in
+		let param_metas,hyp_metas = List.chop nparams all_metas in
 		  tclTHEN
 		    (tclDO nhrec introf)
 		    (tacnext 
@@ -1220,7 +1204,7 @@ let rec execute_cases fix_name per_info tacnext args objs nhrec tree gls =
 	let ctyp=pf_type_of gls casee in
 	let hd,all_args = decompose_app (special_whd gls ctyp) in
 	let _ = assert (destInd hd = ind) in (* just in case *)
-	let params,real_args = list_chop nparams all_args in
+	let params,real_args = List.chop nparams all_args in
 	let abstract_obj c body =
 	  let typ=pf_type_of gls c in
 	    lambda_create env (typ,subst_term c body) in
@@ -1287,8 +1271,11 @@ let understand_my_constr c gls =
   let env = pf_env gls in
   let nc = names_of_rel_context env in
   let rawc = Detyping.detype false [] nc c in
-  let rec frob = function GEvar _ -> GHole (dummy_loc,QuestionMark Expand) | rc ->  map_glob_constr frob rc in
-    Pretyping.Default.understand_tcc (sig_sig gls) env ~expected_type:(pf_concl gls) (frob rawc)
+  let rec frob = function
+    | GEvar _ -> GHole (Loc.ghost,Evar_kinds.QuestionMark Evar_kinds.Expand)
+    | rc ->  map_glob_constr frob rc
+  in
+  Pretyping.understand_tcc (sig_sig gls) env ~expected_type:(pf_concl gls) (frob rawc)
 
 let my_refine c gls =
   let oc = understand_my_constr c gls in

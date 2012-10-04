@@ -6,6 +6,7 @@
 
  *************************************************************************)
 
+open Pp
 open Util
 open Const_omega
 module OmegaSolver = Omega.MakeOmegaSolver (Bigint)
@@ -16,7 +17,7 @@ open OmegaSolver
 let debug = ref false
 
 let show_goal gl =
-  if !debug then Pp.ppnl (Tacmach.pr_gls gl); Tacticals.tclIDTAC gl
+  if !debug then (); Tacticals.tclIDTAC gl
 
 let pp i = print_int i; print_newline (); flush stdout
 
@@ -159,16 +160,15 @@ let indice = function Left x | Right x -> x
 (* Affichage de l'environnement de réification (termes et propositions) *)
 let print_env_reification env =
   let rec loop c i = function
-      [] -> Printf.printf "  ===============================\n\n"
+      [] ->  str "  ===============================\n\n"
     | t :: l ->
-	Printf.printf "  (%c%02d) := " c i;
-	Pp.ppnl (Printer.pr_lconstr t);
-	Pp.flush_all ();
-	loop c (succ i) l in
-  print_newline ();
-  Printf.printf "  ENVIRONMENT OF PROPOSITIONS :\n\n"; loop 'P' 0 env.props;
-  Printf.printf "  ENVIRONMENT OF TERMS :\n\n"; loop 'V' 0 env.terms
-
+      let s = Printf.sprintf "(%c%02d)" c i in
+      spc () ++ str s ++ str " := " ++ Printer.pr_lconstr t ++ fnl () ++
+      loop c (succ i) l
+  in
+  let prop_info = str "ENVIRONMENT OF PROPOSITIONS :" ++ fnl () ++ loop 'P' 0 env.props in
+  let term_info = str "ENVIRONMENT OF TERMS :" ++ fnl () ++ loop 'V' 0 env.terms in
+  msg_debug (prop_info ++ fnl () ++ term_info)
 
 (* \subsection{Gestion des environnements de variable pour Omega} *)
 (* generation d'identifiant d'equation pour Omega *)
@@ -219,7 +219,7 @@ let unintern_omega env id =
    calcul des variables utiles. *)
 
 let add_reified_atom t env =
-  try list_index0_f Term.eq_constr t env.terms
+  try List.index0_f Term.eq_constr t env.terms
   with Not_found ->
     let i = List.length env.terms in
     env.terms <- env.terms @ [t]; i
@@ -230,7 +230,7 @@ let get_reified_atom env =
 (* \subsection{Gestion de l'environnement de proposition pour Omega} *)
 (* ajout d'une proposition *)
 let add_prop env t =
-  try list_index0_f Term.eq_constr t env.props
+  try List.index0_f Term.eq_constr t env.props
   with Not_found ->
     let i = List.length env.props in  env.props <- env.props @ [t]; i
 
@@ -301,7 +301,7 @@ let omega_of_oformula env kind =
 
 (* \subsection{Omega vers Oformula} *)
 
-let rec oformula_of_omega env af =
+let oformula_of_omega env af =
   let rec loop = function
     | ({v=v; c=n}::r) ->
 	Oplus(Omult(unintern_omega env v,Oint n),loop r)
@@ -312,7 +312,7 @@ let app f v = mkApp(Lazy.force f,v)
 
 (* \subsection{Oformula vers COQ reel} *)
 
-let rec coq_of_formula env t =
+let coq_of_formula env t =
   let rec loop = function
   | Oplus (t1,t2) -> app Z.plus [| loop t1; loop t2 |]
   | Oopp t -> app Z.opp [| loop t |]
@@ -411,7 +411,7 @@ pour faire des opérations de normalisation sur les équations.  *)
 (* Extraction des variables d'une équation. *)
 (* Chaque fonction retourne une liste triée sans redondance *)
 
-let (@@) = list_merge_uniq compare
+let (@@) = List.merge_uniq compare
 
 let rec vars_of_formula = function
   | Oint _ -> []
@@ -450,7 +450,7 @@ let rec scalar n = function
  | Omult(t1,Oint x) ->
      do_list [Lazy.force coq_c_mult_assoc_reduced], Omult(t1,Oint (n*x))
  | Omult(t1,t2) ->
-     Util.error "Omega: Can't solve a goal with non-linear products"
+     Errors.error "Omega: Can't solve a goal with non-linear products"
  | (Oatom _ as t) -> do_list [], Omult(t,Oint n)
  | Oint i -> do_list [Lazy.force coq_c_reduce],Oint(n*i)
  | (Oufo _ as t)-> do_list [], Oufo (Omult(t,Oint n))
@@ -469,18 +469,18 @@ let rec negate = function
  | Omult(t1,Oint x) ->
      do_list [Lazy.force coq_c_opp_mult_r], Omult(t1,Oint (Bigint.neg x))
  | Omult(t1,t2) ->
-     Util.error "Omega: Can't solve a goal with non-linear products"
+     Errors.error "Omega: Can't solve a goal with non-linear products"
  | (Oatom _ as t) ->
      do_list [Lazy.force coq_c_opp_one], Omult(t,Oint(negone))
  | Oint i -> do_list [Lazy.force coq_c_reduce] ,Oint(Bigint.neg i)
  | Oufo c -> do_list [], Oufo (Oopp c)
  | Ominus _ -> failwith "negate minus"
 
-let rec norm l = (List.length l)
+let norm l = (List.length l)
 
 (* \subsection{Mélange (fusion) de deux équations} *)
 (* \subsubsection{Version avec coefficients} *)
-let rec shuffle_path k1 e1 k2 e2 =
+let shuffle_path k1 e1 k2 e2 =
   let rec loop = function
       (({c=c1;v=v1}::l1) as l1'),
       (({c=c2;v=v2}::l2) as l2') ->
@@ -541,7 +541,7 @@ let shrink_pair f1 f2 =
        Lazy.force coq_c_red4, Omult(Oatom v,Oplus(c1,c2))
    | t1,t2 ->
        oprint stdout t1; print_newline (); oprint stdout t2; print_newline ();
-       flush Pervasives.stdout; Util.error "shrink.1"
+       flush Pervasives.stdout; Errors.error "shrink.1"
   end
 
 (* \subsection{Calcul d'une sous formule constante} *)
@@ -555,9 +555,9 @@ let reduce_factor = function
       let rec compute = function
           Oint n -> n
 	| Oplus(t1,t2) -> compute t1 + compute t2
-	| _ -> Util.error "condense.1" in
+	| _ -> Errors.error "condense.1" in
 	[Lazy.force coq_c_reduce], Omult(Oatom v,Oint(compute c))
-  | t -> Util.error "reduce_factor.1"
+  | t -> Errors.error "reduce_factor.1"
 
 (* \subsection{Réordonnancement} *)
 
@@ -811,7 +811,7 @@ let destructurate_hyps syst =
       (i,t) :: l ->
 	let l_syst1 = destructurate_pos_hyp i []  [] t in
 	let l_syst2 = loop l in
-	list_cartesian (@) l_syst1 l_syst2
+	List.cartesian (@) l_syst1 l_syst2
     | [] -> [[]] in
   loop syst
 
@@ -911,13 +911,13 @@ let add_stated_equations env tree =
 
 (* PL: experimentally, the result order of the following function seems
    _very_ crucial for efficiency. No idea why. Do not remove the List.rev
-   or modify the current semantics of Util.list_union (some elements of first
+   or modify the current semantics of Util.List.union (some elements of first
    arg, then second arg), unless you know what you're doing. *)
 
 let rec get_eclatement env = function
     i :: r ->
       let l = try (get_equation env i).e_depends with Not_found -> [] in
-      list_union (List.rev l) (get_eclatement env r)
+      List.union (List.rev l) (get_eclatement env r)
   | [] -> []
 
 let select_smaller l =
@@ -928,10 +928,10 @@ let filter_compatible_systems required systems =
   let rec select = function
       (x::l) ->
 	if List.mem x required then select l
-	else if List.mem (barre x) required then failwith "Exit"
+	else if List.mem (barre x) required then raise Exit
 	else x :: select l
     | [] -> [] in
-  map_succeed (function (sol,splits) -> (sol,select splits)) systems
+  List.map_filter (function (sol, splits) -> try Some (sol, select splits) with Exit -> None) systems
 
 let rec equas_of_solution_tree = function
     Tree(_,t1,t2) -> (equas_of_solution_tree t1)@@(equas_of_solution_tree t2)
@@ -1030,7 +1030,7 @@ let mk_direction_list l =
 (* \section{Rejouer l'historique} *)
 
 let get_hyp env_hyp i =
-  try list_index0 (CCEqua i) env_hyp
+  try List.index0 (CCEqua i) env_hyp
   with Not_found -> failwith (Printf.sprintf "get_hyp %d" i)
 
 let replay_history env env_hyp =
@@ -1197,8 +1197,8 @@ let resolution env full_reified_goal systems_list =
   let useful_equa_id = equas_of_solution_tree solution_tree in
   (* recupere explicitement ces equations *)
   let equations = List.map (get_equation env) useful_equa_id in
-  let l_hyps' = list_uniquize (List.map (fun e -> e.e_origin.o_hyp) equations) in
-  let l_hyps = id_concl :: list_remove id_concl l_hyps' in
+  let l_hyps' = List.uniquize (List.map (fun e -> e.e_origin.o_hyp) equations) in
+  let l_hyps = id_concl :: List.remove id_concl l_hyps' in
   let useful_hyps =
     List.map (fun id -> List.assoc id full_reified_goal) l_hyps in
   let useful_vars =
@@ -1252,7 +1252,7 @@ let resolution env full_reified_goal systems_list =
       |	((O_left | O_mono) :: l) -> app coq_p_left [| loop l |]
       |	(O_right :: l) -> app coq_p_right [| loop l |] in
     let correct_index =
-      let i = list_index0 e.e_origin.o_hyp l_hyps in
+      let i = List.index0 e.e_origin.o_hyp l_hyps in
       (* PL: it seems that additionnally introduced hyps are in the way during
              normalization, hence this index shifting... *)
       if i=0 then 0 else Pervasives.(+) i (List.length to_introduce)
@@ -1291,7 +1291,7 @@ let total_reflexive_omega_tactic gl =
   let systems_list = destructurate_hyps full_reified_goal in
   if !debug then display_systems systems_list;
   resolution env full_reified_goal systems_list gl
-  with NO_CONTRADICTION -> Util.error "ROmega can't solve this system"
+  with NO_CONTRADICTION -> Errors.error "ROmega can't solve this system"
 
 
 (*i let tester = Tacmach.hide_atomic_tactic "TestOmega" test_tactic i*)

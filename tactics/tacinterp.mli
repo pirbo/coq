@@ -1,13 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
-open Util
 open Names
 open Proof_type
 open Tacmach
@@ -15,9 +14,10 @@ open Tactic_debug
 open Term
 open Tacexpr
 open Genarg
-open Topconstr
+open Constrexpr
 open Mod_subst
 open Redexpr
+open Misctypes
 
 (** Values for interpretation *)
 type value =
@@ -77,16 +77,18 @@ type glob_sign = {
   gsigma : Evd.evar_map;
   genv : Environ.env }
 
+val fully_empty_glob_sign : glob_sign
+
 val add_interp_genarg :
   string ->
     (glob_sign -> raw_generic_argument -> glob_generic_argument) *
     (interp_sign -> goal sigma -> glob_generic_argument ->
-      typed_generic_argument) *
+      Evd.evar_map * typed_generic_argument) *
     (substitution -> glob_generic_argument -> glob_generic_argument)
     -> unit
 
 val interp_genarg :
-  interp_sign -> goal sigma -> glob_generic_argument -> typed_generic_argument
+  interp_sign -> goal sigma -> glob_generic_argument -> Evd.evar_map * typed_generic_argument
 
 val intern_genarg :
   glob_sign -> raw_generic_argument -> glob_generic_argument
@@ -98,11 +100,11 @@ val intern_constr :
   glob_sign -> constr_expr -> glob_constr_and_expr
 
 val intern_constr_with_bindings :
-  glob_sign -> constr_expr * constr_expr Glob_term.bindings ->
-  glob_constr_and_expr * glob_constr_and_expr Glob_term.bindings
+  glob_sign -> constr_expr * constr_expr bindings ->
+  glob_constr_and_expr * glob_constr_and_expr bindings
 
 val intern_hyp :
-  glob_sign -> identifier Util.located -> identifier Util.located
+  glob_sign -> identifier Loc.located -> identifier Loc.located
 
 val subst_genarg :
   substitution -> glob_generic_argument -> glob_generic_argument
@@ -111,28 +113,30 @@ val subst_glob_constr_and_expr :
   substitution -> glob_constr_and_expr -> glob_constr_and_expr
 
 val subst_glob_with_bindings :
-  substitution -> glob_constr_and_expr Glob_term.with_bindings -> glob_constr_and_expr Glob_term.with_bindings
+  substitution -> glob_constr_and_expr with_bindings -> glob_constr_and_expr with_bindings
 
 (** Interprets any expression *)
-val val_interp : interp_sign -> goal sigma -> glob_tactic_expr -> value
+val val_interp : interp_sign -> goal sigma -> glob_tactic_expr -> Evd.evar_map * value
 
 (** Interprets an expression that evaluates to a constr *)
 val interp_ltac_constr : interp_sign -> goal sigma -> glob_tactic_expr ->
-  constr
+  Evd.evar_map * constr
 
 (** Interprets redexp arguments *)
-val interp_redexp : Environ.env -> Evd.evar_map -> raw_red_expr -> red_expr
+val dump_glob_red_expr : raw_red_expr -> unit
+val interp_redexp : Environ.env -> Evd.evar_map -> raw_red_expr -> Evd.evar_map * red_expr
 
 (** Interprets tactic expressions *)
 val interp_tac_gen : (identifier * value) list -> identifier list ->
                  debug_info -> raw_tactic_expr -> tactic
 
-val interp_hyp :  interp_sign -> goal sigma -> identifier located -> identifier
+val interp_hyp :  interp_sign -> goal sigma -> identifier Loc.located -> identifier
 
-val interp_bindings : interp_sign -> Environ.env -> Evd.evar_map -> glob_constr_and_expr Glob_term.bindings -> Evd.evar_map * constr Glob_term.bindings
+val interp_bindings : interp_sign -> Environ.env -> Evd.evar_map ->
+ glob_constr_and_expr bindings -> Evd.evar_map * constr bindings
 
-val interp_open_constr_with_bindings : interp_sign -> Environ.env -> Evd.evar_map -> 
-  glob_constr_and_expr Glob_term.with_bindings -> Evd.evar_map * constr Glob_term.with_bindings
+val interp_open_constr_with_bindings : interp_sign -> Environ.env -> Evd.evar_map ->
+  glob_constr_and_expr with_bindings -> Evd.evar_map * constr with_bindings
 
 (** Initial call for interpretation *)
 val glob_tactic : raw_tactic_expr -> glob_tactic_expr
@@ -143,7 +147,7 @@ val eval_tactic : glob_tactic_expr -> tactic
 
 val interp : raw_tactic_expr -> tactic
 
-val eval_ltac_constr : goal sigma -> raw_tactic_expr -> constr
+val eval_ltac_constr : goal sigma -> raw_tactic_expr -> Evd.evar_map * constr
 
 val subst_tactic : substitution -> glob_tactic_expr -> glob_tactic_expr
 
@@ -162,8 +166,8 @@ val print_ltac : Libnames.qualid -> std_ppcmds
 
 exception CannotCoerceTo of string
 
-val interp_ltac_var : (value -> 'a) -> interp_sign -> Environ.env option -> identifier located -> 'a
+val interp_ltac_var : (value -> 'a) -> interp_sign -> Environ.env option -> identifier Loc.located -> 'a
 
-val interp_int : interp_sign -> identifier located -> int
+val interp_int : interp_sign -> identifier Loc.located -> int
 
-val error_ltac_variable : loc -> identifier -> Environ.env option -> value -> string -> 'a
+val error_ltac_variable : Loc.t -> identifier -> Environ.env option -> value -> string -> 'a

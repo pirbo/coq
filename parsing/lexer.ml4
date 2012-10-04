@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -94,19 +94,20 @@ module Error = struct
 	 | UnsupportedUnicode x ->
 	     Printf.sprintf "Unsupported Unicode character (0x%x)" x)
 
-  let print ppf x = Format.fprintf ppf "%s@." (to_string x)
+  (* Require to fix the Camlp4 signature *)
+  let print ppf x = Pp.pp_with ppf (Pp.str (to_string x))
 
 end
 open Error
 
-let err loc str = Loc.raise (make_loc loc) (Error.E str)
+let err loc str = Loc.raise (Loc.make_loc loc) (Error.E str)
 
 let bad_token str = raise (Error.E (Bad_token str))
 
 (* Lexer conventions on tokens *)
 
 type token_kind =
-  | Utf8Token of (utf8_status * int)
+  | Utf8Token of (Unicode.status * int)
   | AsciiChar
   | EmptyStream
 
@@ -160,8 +161,8 @@ let lookup_utf8_tail c cs =
 	  (Char.code c3 land 0x3F) lsl 6 + (Char.code c4 land 0x3F)
       | _ -> error_utf8 cs
     in
-    try classify_unicode unicode, n
-    with UnsupportedUtf8 ->
+    try Unicode.classify unicode, n
+    with Unicode.Unsupported ->
       njunk n cs; error_unsupported_unicode_character n unicode cs
 
 let lookup_utf8 cs =
@@ -171,7 +172,7 @@ let lookup_utf8 cs =
     | None -> EmptyStream
 
 let unlocated f x =
-  try f x with Loc.Exc_located (_,exc) -> raise exc
+  try f x with Loc.Exc_located (_, exc) -> raise exc
 
 let check_keyword str =
   let rec loop_symb = parser
@@ -198,8 +199,8 @@ let check_ident str =
         loop_id true s
     | [< s >] ->
 	match unlocated lookup_utf8 s with
-	| Utf8Token (UnicodeLetter, n) -> njunk n s; loop_id true s
-	| Utf8Token (UnicodeIdentPart, n) when intail -> njunk n s; loop_id true s
+	| Utf8Token (Unicode.Letter, n) -> njunk n s; loop_id true s
+	| Utf8Token (Unicode.IdentPart, n) when intail -> njunk n s; loop_id true s
 	| EmptyStream -> ()
 	| Utf8Token _ | AsciiChar -> bad_token str
   in
@@ -260,7 +261,7 @@ let rec ident_tail len = parser
       ident_tail (store len c) s
   | [< s >] ->
       match lookup_utf8 s with
-      | Utf8Token ((UnicodeIdentPart | UnicodeLetter), n) ->
+      | Utf8Token ((Unicode.IdentPart | Unicode.Letter), n) ->
 	  ident_tail (nstore n len s) s
       | _ -> len
 
@@ -281,7 +282,7 @@ let rec string in_comments bp len = parser
       (parser
         | [< '')'; s >] ->
             if in_comments = Some 0 then
-	      msg_warning (str "Not interpreting \"*)\" as the end of current non-terminated comment because it occurs in a non-terminated string of the comment.");
+	      msg_warning (strbrk "Not interpreting \"*)\" as the end of current non-terminated comment because it occurs in a non-terminated string of the comment.");
             let in_comments = Option.map pred in_comments in
  	    string in_comments bp (store (store len '*') ')') s
         | [< >] ->
@@ -388,10 +389,10 @@ let rec progress_further last nj tt cs =
 and update_longest_valid_token last nj tt cs =
   match tt.node with
   | Some _ as last' ->
-      for i=1 to nj do Stream.junk cs done;
-      progress_further last' 0 tt cs
+    stream_njunk nj cs;
+    progress_further last' 0 tt cs
   | None ->
-      progress_further last nj tt cs
+    progress_further last nj tt cs
 
 (* nj is the number of char peeked since last valid token *)
 (* n the number of char in utf8 block *)
@@ -401,7 +402,7 @@ and progress_utf8 last nj n c tt cs =
     if n=1 then
       update_longest_valid_token last (nj+n) tt cs
     else
-      match Util.list_skipn (nj+1) (Stream.npeek (nj+n) cs) with
+      match Util.List.skipn (nj+1) (Stream.npeek (nj+n) cs) with
       | l when List.length l = n-1 ->
 	 List.iter (check_utf8_trailing_byte cs) l;
 	 let tt = List.fold_left (fun tt c -> CharMap.find c tt.branch) tt l in
@@ -444,7 +445,7 @@ let parse_after_special c bp =
       token_of_special c (get_buff len)
   | [< s >] ->
       match lookup_utf8 s with
-      | Utf8Token (UnicodeLetter, n) ->
+      | Utf8Token (Unicode.Letter, n) ->
 	  token_of_special c (get_buff (ident_tail (nstore n 0 s) s))
       | AsciiChar | Utf8Token _ | EmptyStream -> fst (process_chars bp c s)
 
@@ -456,7 +457,7 @@ let parse_after_qmark bp s =
     | None -> KEYWORD "?"
     | _ ->
 	match lookup_utf8 s with
-	  | Utf8Token (UnicodeLetter, _) -> LEFTQMARK
+	  | Utf8Token (Unicode.Letter, _) -> LEFTQMARK
 	  | AsciiChar | Utf8Token _ | EmptyStream -> fst (process_chars bp '?' s)
 
 let blank_or_eof cs =
@@ -505,13 +506,13 @@ let rec next_token = parser bp
       t
   | [< s >] ->
       match lookup_utf8 s with
-	| Utf8Token (UnicodeLetter, n) ->
+	| Utf8Token (Unicode.Letter, n) ->
 	    let len = ident_tail (nstore n 0 s) s in
 	    let id = get_buff len in
 	    let ep = Stream.count s in
 	    comment_stop bp;
 	    (try find_keyword id s with Not_found -> IDENT id), (bp, ep)
-	| AsciiChar | Utf8Token ((UnicodeSymbol | UnicodeIdentPart), _) ->
+	| AsciiChar | Utf8Token ((Unicode.Symbol | Unicode.IdentPart), _) ->
 	    let t = process_chars bp (Stream.next s) s in
 	    comment_stop bp; t
 	| EmptyStream ->
@@ -537,7 +538,7 @@ let loct_add loct i loc = Hashtbl.add loct i loc
 
 let current_location_table = ref (loct_create ())
 
-type location_table = (int, loc) Hashtbl.t
+type location_table = (int, CompatLoc.t) Hashtbl.t
 let location_table () = !current_location_table
 let restore_location_table t = current_location_table := t
 let location_function n = loct_func !current_location_table n
@@ -595,10 +596,10 @@ ELSE (* official camlp4 for ocaml >= 3.10 *)
 
 module M_ = Camlp4.ErrorHandler.Register (Error)
 
-module Loc = Loc
+module Loc = CompatLoc
 module Token = struct
   include Tok (* Cf. tok.ml *)
-  module Loc = Loc
+  module Loc = CompatLoc
   module Error = Camlp4.Struct.EmptyError
   module Filter = struct
     type token_filter = (Tok.t * Loc.t) Stream.t -> (Tok.t * Loc.t) Stream.t

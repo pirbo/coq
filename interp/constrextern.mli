@@ -1,25 +1,28 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Pp
 open Names
 open Term
 open Termops
 open Sign
 open Environ
 open Libnames
+open Globnames
 open Nametab
 open Glob_term
 open Pattern
-open Topconstr
+open Constrexpr
+open Notation_term
 open Notation
+open Misctypes
 
-val check_same_type : constr_expr -> constr_expr -> unit
+val is_same_type : constr_expr -> constr_expr -> bool
 
 (** Translation of pattern, cases pattern, glob_constr and term into syntax
    trees for printing *)
@@ -34,7 +37,7 @@ val extern_constr_pattern : names_context -> constr_pattern -> constr_expr
 
 val extern_constr : bool -> env -> constr -> constr_expr
 val extern_constr_in_scope : bool -> scope_name -> env -> constr -> constr_expr
-val extern_reference : loc -> Idset.t -> global_reference -> reference
+val extern_reference : Loc.t -> Idset.t -> global_reference -> reference
 val extern_type : bool -> env -> types -> constr_expr
 val extern_sort : sorts -> glob_sort
 val extern_rel_context : constr option -> env ->
@@ -52,7 +55,7 @@ val print_projections : bool ref
 
 (** Debug printing options *)
 val set_debug_global_reference_printer :
-  (loc -> global_reference -> reference) -> unit
+  (Loc.t -> global_reference -> reference) -> unit
 val in_debugger : bool ref
 
 (** This governs printing of implicit arguments. If [with_implicits] is

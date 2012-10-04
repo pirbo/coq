@@ -1,23 +1,19 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma"  i*)
+(*i camlp4deps: "grammar/grammar.cma"  i*)
 
 open Formula
 open Sequent
 open Ground
 open Goptions
-open Tactics
 open Tacticals
 open Tacinterp
-open Term
-open Names
-open Util
 open Libnames
 
 (* declaring search depth as a global option *)
@@ -60,13 +56,13 @@ let (set_default_solver, default_solver, print_default_solver) =
 VERNAC COMMAND EXTEND Firstorder_Set_Solver
 | [ "Set" "Firstorder" "Solver" tactic(t) ] -> [
     set_default_solver 
-      (Vernacexpr.use_section_locality ())
+      (Locality.use_section_locality ())
       (Tacinterp.glob_tactic t) ]
 END
 
 VERNAC COMMAND EXTEND Firstorder_Print_Solver
 | [ "Print" "Firstorder" "Solver" ] -> [
-    Pp.msgnl
+    Pp.msg_info
       (Pp.(++) (Pp.str"Firstorder solver tactic is ") (print_default_solver ())) ]
 END
 
@@ -103,11 +99,12 @@ let normalize_evaluables=
 	   unfold_in_hyp (Lazy.force defined_connectives)
 	   (Tacexpr.InHypType id)) *)
 
+open Pp
 open Genarg
 open Ppconstr
 open Printer
 let pr_firstorder_using_raw _ _ _ = prlist_with_sep pr_comma pr_reference
-let pr_firstorder_using_glob _ _ _ = prlist_with_sep pr_comma (pr_or_var (pr_located pr_global))
+let pr_firstorder_using_glob _ _ _ = prlist_with_sep pr_comma (pr_or_var (fun x -> (pr_global (snd x))))
 let pr_firstorder_using_typed _ _ _ = prlist_with_sep pr_comma pr_global
 
 ARGUMENT EXTEND firstorder_using
@@ -134,8 +131,6 @@ TACTIC EXTEND firstorder
 |   [ "firstorder" tactic_opt(t) firstorder_using(l)
        "with" ne_preident_list(l') ] ->
       [ gen_ground_tac true (Option.map eval_tactic t) l l' ]
-|   [ "firstorder" tactic_opt(t) ] ->
-      [ gen_ground_tac true (Option.map eval_tactic t) [] [] ]
 END
 
 TACTIC EXTEND gintuition

@@ -1,13 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Loc
 open Pp
-open Util
 open Names
 open Term
 open Sign
@@ -20,6 +20,8 @@ open Genarg
 open Tacexpr
 open Termops
 open Glob_term
+open Locus
+open Misctypes
 
 (** Tacticals i.e. functions from tactics to tactics. *)
 
@@ -45,14 +47,15 @@ val tclREPEAT_MAIN   : tactic -> tactic
 val tclFIRST         : tactic list -> tactic
 val tclSOLVE         : tactic list -> tactic
 val tclTRY           : tactic -> tactic
-val tclINFO          : tactic -> tactic
 val tclCOMPLETE      : tactic -> tactic
 val tclAT_LEAST_ONCE : tactic -> tactic
 val tclFAIL          : int -> std_ppcmds -> tactic
 val tclFAIL_lazy     : int -> std_ppcmds Lazy.t -> tactic
 val tclDO            : int -> tactic -> tactic
+val tclTIMEOUT       : int -> tactic -> tactic
 val tclWEAK_PROGRESS : tactic -> tactic
 val tclPROGRESS      : tactic -> tactic
+val tclSHOWHYPS      : tactic -> tactic
 val tclNOTSAMEGOAL   : tactic -> tactic
 val tclTHENTRY       : tactic -> tactic -> tactic
 val tclMAP           : ('a -> tactic) -> 'a list -> tactic
@@ -94,23 +97,9 @@ val onHyps      : (goal sigma -> named_context) ->
 
 (** {6 Tacticals applying to goal components } *)
 
-(** A [simple_clause] is a set of hypotheses, possibly extended with
-   the conclusion (conclusion is represented by None) *)
-
-type simple_clause = identifier option list
-
 (** A [clause] denotes occurrences and hypotheses in a
    goal; in particular, it can abstractly refer to the set of
    hypotheses independently of the effective contents of the current goal *)
-
-type clause = identifier gclause
-
-val simple_clause_of : clause -> goal sigma -> simple_clause
-
-val allHypsAndConcl : clause
-val allHyps         : clause
-val onHyp           : identifier -> clause
-val onConcl         : clause
 
 val tryAllHyps          : (identifier -> tactic) -> tactic
 val tryAllHypsAndConcl  : (identifier option -> tactic) -> tactic
@@ -120,36 +109,6 @@ val onAllHypsAndConcl   : (identifier option -> tactic) -> tactic
 
 val onClause   : (identifier option -> tactic) -> clause -> tactic
 val onClauseLR : (identifier option -> tactic) -> clause -> tactic
-
-(** {6 An intermediate form of occurrence clause with no mention of occurrences } *)
-
-(** A [hyp_location] is an hypothesis together with a position, in
-   body if any, in type or in both *)
-
-type hyp_location = identifier * hyp_location_flag
-
-(** A [goal_location] is either an hypothesis (together with a position, in
-   body if any, in type or in both) or the goal *)
-
-type goal_location = hyp_location option
-
-(** {6 A concrete view of occurrence clauses } *)
-
-(** [clause_atom] refers either to an hypothesis location (i.e. an
-   hypothesis with occurrences and a position, in body if any, in type
-   or in both) or to some occurrences of the conclusion *)
-
-type clause_atom =
-  | OnHyp of identifier * occurrences_expr * hyp_location_flag
-  | OnConcl of occurrences_expr
-
-(** A [concrete_clause] is an effective collection of
-  occurrences in the hypotheses and the conclusion *)
-
-type concrete_clause = clause_atom list
-
-(** This interprets an [clause] in a given [goal] context *)
-val concrete_clause_of : clause -> goal sigma -> concrete_clause
 
 (** {6 Elimination tacticals. } *)
 
@@ -170,7 +129,7 @@ type branch_assumptions = {
 (** [check_disjunctive_pattern_size loc pats n] returns an appropriate 
    error message if |pats| <> n *)
 val check_or_and_pattern_size :
-  Util.loc -> or_and_intro_pattern_expr -> int -> unit
+  Loc.t -> or_and_intro_pattern_expr -> int -> unit
 
 (** Tolerate "[]" to mean a disjunctive pattern of any length *)
 val fix_empty_or_and_pattern : int -> or_and_intro_pattern_expr ->

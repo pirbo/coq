@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,7 +12,7 @@ open Tacmach
 open Equality
 
 (** Rewriting rules before tactic interpretation *)
-type raw_rew_rule = Util.loc * Term.constr * bool * Tacexpr.raw_tactic_expr
+type raw_rew_rule = Loc.t * Term.constr * bool * Tacexpr.raw_tactic_expr
 
 (** To add rewriting rules to a base *)
 val add_rew_rules : string -> raw_rew_rule list -> unit
@@ -35,11 +35,11 @@ val find_rewrites : string -> rew_rule list
 
 val find_matches : string -> constr -> rew_rule list
 
-val auto_multi_rewrite : ?conds:conditions -> string list -> Tacticals.clause -> tactic
+val auto_multi_rewrite : ?conds:conditions -> string list -> Locus.clause -> tactic
 
-val auto_multi_rewrite_with : ?conds:conditions -> tactic -> string list -> Tacticals.clause -> tactic
+val auto_multi_rewrite_with : ?conds:conditions -> tactic -> string list -> Locus.clause -> tactic
 
-val print_rewrite_hintdb : string -> unit
+val print_rewrite_hintdb : string -> Pp.std_ppcmds
 
 open Clenv
 
@@ -56,6 +56,6 @@ type hypinfo = {
 }
 
 val find_applied_relation : bool ->
-  Util.loc ->
+  Loc.t ->
   Environ.env -> Evd.evar_map -> Term.constr -> bool -> hypinfo
 

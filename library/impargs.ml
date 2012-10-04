@@ -1,14 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Names
-open Libnames
+open Globnames
 open Term
 open Reduction
 open Declarations
@@ -16,11 +17,11 @@ open Environ
 open Inductive
 open Libobject
 open Lib
-open Nametab
 open Pp
-open Topconstr
+open Constrexpr
 open Termops
 open Namegen
+open Decl_kinds
 
 (*s Flags governing the computation of implicit arguments *)
 
@@ -167,8 +168,8 @@ let push_lift d (e,n) = (push_rel d e,n+1)
 
 let is_reversible_pattern bound depth f l =
   isRel f & let n = destRel f in (n < bound+depth) & (n >= depth) &
-  array_for_all (fun c -> isRel c & destRel c < depth) l &
-  array_distinct l
+  Array.for_all (fun c -> isRel c & destRel c < depth) l &
+  Array.distinct l
 
 (* Precondition: rels in env are for inductive types only *)
 let add_free_rels_until strict strongly_strict revpat bound env m pos acc =
@@ -207,11 +208,10 @@ let rec is_rigid_head t = match kind_of_term t with
 
 (* calcule la liste des arguments implicites *)
 
-let find_displayed_name_in all avoid na b =
-  if all then
-    compute_and_force_displayed_name_in (RenamingElsewhereFor b) avoid na b
-  else
-    compute_displayed_name_in (RenamingElsewhereFor b) avoid na b
+let find_displayed_name_in all avoid na (_,b as envnames_b) =
+  let flag = RenamingElsewhereFor envnames_b in
+  if all then compute_and_force_displayed_name_in flag avoid na b
+  else compute_displayed_name_in flag avoid na b
 
 let compute_implicits_gen strict strongly_strict revpat contextual all env t =
   let rigid = ref true in
@@ -219,7 +219,7 @@ let compute_implicits_gen strict strongly_strict revpat contextual all env t =
     let t = whd_betadeltaiota env t in
     match kind_of_term t with
       | Prod (na,a,b) ->
-	  let na',avoid' = find_displayed_name_in all avoid na b in
+	  let na',avoid' = find_displayed_name_in all avoid na (names,b) in
 	  add_free_rels_until strict strongly_strict revpat n env a (Hyp (n+1))
             (aux (push_rel (na',None,a) env) avoid' (n+1) (na'::names) b)
       | _ ->
@@ -232,7 +232,7 @@ let compute_implicits_gen strict strongly_strict revpat contextual all env t =
   in
   match kind_of_term (whd_betadeltaiota env t) with
     | Prod (na,a,b) ->
-	let na',avoid = find_displayed_name_in all [] na b in
+	let na',avoid = find_displayed_name_in all [] na ([],b) in
 	let v = aux (push_rel (na',None,a) env) avoid 1 [na'] b in
 	!rigid, Array.to_list v
     | _ -> true, []
@@ -338,7 +338,7 @@ let set_manual_implicits env flags enriching autoimps l =
 	else l, None
     with Not_found -> l, None
   in
-  if not (list_distinct l) then
+  if not (List.distinct l) then
     error ("Some parameters are referred more than once.");
   (* Compare with automatic implicits to recover printing data and names *)
   let rec merge k l = function
@@ -377,8 +377,6 @@ let compute_semi_auto_implicits env f manual t =
       let _,autoimpls = compute_auto_implicits env f f.auto t in
       [DefaultImpArgs, set_manual_implicits env f f.auto autoimpls manual]
 
-let compute_implicits env t = compute_semi_auto_implicits env !implicit_args [] t
-
 (*s Constants. *)
 
 let compute_constant_implicits flags manual cst =
@@ -413,7 +411,7 @@ let compute_mib_implicits flags manual kn =
 let compute_all_mib_implicits flags manual kn =
   let imps = compute_mib_implicits flags manual kn in
   List.flatten
-    (array_map_to_list (fun (ind,cstrs) -> ind::Array.to_list cstrs) imps)
+    (Array.map_to_list (fun (ind,cstrs) -> ind::Array.to_list cstrs) imps)
 
 (*s Variables. *)
 
@@ -435,7 +433,7 @@ let compute_global_implicits flags manual = function
 (* Merge a manual explicitation with an implicit_status list *)
 
 let merge_impls (cond,oldimpls) (_,newimpls) =
-  let oldimpls,usersuffiximpls = list_chop (List.length newimpls) oldimpls in
+  let oldimpls,usersuffiximpls = List.chop (List.length newimpls) oldimpls in
   cond, (List.map2 (fun orig ni ->
     match orig with
     | Some (_, Manual, _) -> orig
@@ -482,10 +480,12 @@ let subst_implicits_decl subst (r,imps as o) =
   let r' = fst (subst_global subst r) in if r==r' then o else (r',imps)
 
 let subst_implicits (subst,(req,l)) =
-  (ImplLocal,list_smartmap (subst_implicits_decl subst) l)
+  (ImplLocal,List.smartmap (subst_implicits_decl subst) l)
 
 let impls_of_context ctx =
-  List.rev_map (fun (id,impl,_,_) -> if impl = Lib.Implicit then Some (id, Manual, (true,true)) else None)
+  List.rev_map
+    (fun (id,impl,_,_) ->
+      if impl = Implicit then Some (id, Manual, (true,true)) else None)
     (List.filter (fun (_,_,b,_) -> b = None) ctx)
 
 let section_segment_of_reference = function
@@ -561,7 +561,7 @@ let rebuild_implicits (req,l) =
 	  if flags.auto then
 	    let newimpls = List.hd (compute_global_implicits flags [] ref) in
 	    let p = List.length (snd newimpls) - userimplsize in
-	    let newimpls = on_snd (list_firstn p) newimpls in
+	    let newimpls = on_snd (List.firstn p) newimpls in
 	    [ref,List.map (fun o -> merge_impls o newimpls) oldimpls]
 	  else
 	    [ref,oldimpls]
@@ -604,14 +604,14 @@ let declare_constant_implicits con =
 
 let declare_mib_implicits kn =
   let flags = !implicit_args in
-  let imps = array_map_to_list
+  let imps = Array.map_to_list
     (fun (ind,cstrs) -> ind::(Array.to_list cstrs))
     (compute_mib_implicits flags [] kn) in
     add_anonymous_leaf
       (inImplicits (ImplMutualInductive (kn,flags),List.flatten imps))
 
 (* Declare manual implicits *)
-type manual_explicitation = Topconstr.explicitation * (bool * bool * bool)
+type manual_explicitation = Constrexpr.explicitation * (bool * bool * bool)
 
 type manual_implicits = manual_explicitation list
 
@@ -692,7 +692,7 @@ let rec select_impargs_size n = function
   | (LessArgsThan p, impls)::l ->
       if n <= p then impls else select_impargs_size n l
 
-let rec select_stronger_impargs = function
+let select_stronger_impargs = function
   | [] -> [] (* Tolerance for (DefaultImpArgs,[]) *)
   | (_,impls)::_ -> impls
 

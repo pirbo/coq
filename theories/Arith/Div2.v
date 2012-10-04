@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -11,7 +11,7 @@ Require Import Plus.
 Require Import Compare_dec.
 Require Import Even.
 
-Open Local Scope nat_scope.
+Local Open Scope nat_scope.
 
 Implicit Type n : nat.
 
@@ -43,7 +43,7 @@ Qed.
 
 Lemma lt_div2 : forall n, 0 < n -> div2 n < n.
 Proof.
-  intro n. pattern n in |- *. apply ind_0_1_SS.
+  intro n. pattern n. apply ind_0_1_SS.
   (* n = 0 *)
   inversion 1.
   (* n=1 *)
@@ -69,24 +69,24 @@ Proof.
     (* S n *) inversion_clear H. apply even_div2 in H0 as <-. trivial.
 Qed.
 
-Lemma div2_even : forall n, div2 n = div2 (S n) -> even n
-with div2_odd : forall n, S (div2 n) = div2 (S n) -> odd n.
+Lemma div2_even n : div2 n = div2 (S n) -> even n
+with div2_odd n : S (div2 n) = div2 (S n) -> odd n.
 Proof.
-  destruct n; intro H.
-    (* 0 *) constructor.
-    (* S n *) constructor. apply div2_odd. rewrite H. trivial.
-  destruct n; intro H.
-    (* 0 *) discriminate.
-    (* S n *) constructor. apply div2_even. injection H as <-. trivial.
+{ destruct n; intro H.
+  - constructor.
+  - constructor. apply div2_odd. rewrite H. trivial. }
+{ destruct n; intro H.
+  - discriminate.
+  - constructor. apply div2_even. injection H as <-. trivial. }
 Qed.
 
 Hint Resolve even_div2 div2_even odd_div2 div2_odd: arith.
 
-Lemma even_odd_div2 :
-  forall n,
-    (even n <-> div2 n = div2 (S n)) /\ (odd n <-> S (div2 n) = div2 (S n)).
+Lemma even_odd_div2 n :
+ (even n <-> div2 n = div2 (S n)) /\
+ (odd n <-> S (div2 n) = div2 (S n)).
 Proof.
-  auto decomp using div2_odd, div2_even, odd_div2, even_div2.
+ split; split; auto using div2_odd, div2_even, odd_div2, even_div2.
 Qed.
 
 
@@ -99,12 +99,12 @@ Hint Unfold double: arith.
 
 Lemma double_S : forall n, double (S n) = S (S (double n)).
 Proof.
-  intro. unfold double in |- *. simpl in |- *. auto with arith.
+  intro. unfold double. simpl. auto with arith.
 Qed.
 
 Lemma double_plus : forall n (m:nat), double (n + m) = double n + double m.
 Proof.
-  intros m n. unfold double in |- *.
+  intros m n. unfold double.
   do 2 rewrite plus_assoc_reverse. rewrite (plus_permute n).
   reflexivity.
 Qed.
@@ -115,7 +115,7 @@ Lemma even_odd_double :
   forall n,
     (even n <-> n = double (div2 n)) /\ (odd n <-> n = S (double (div2 n))).
 Proof.
-  intro n. pattern n in |- *. apply ind_0_1_SS.
+  intro n. pattern n. apply ind_0_1_SS.
   (* n = 0 *)
   split; split; auto with arith.
   intro H. inversion H.
@@ -126,11 +126,11 @@ Proof.
   intros. destruct H as ((IH1,IH2),(IH3,IH4)).
   split; split.
   intro H. inversion H. inversion H1.
-  simpl in |- *. rewrite (double_S (div2 n0)). auto with arith.
-  simpl in |- *. rewrite (double_S (div2 n0)). intro H. injection H. auto with arith.
+  simpl. rewrite (double_S (div2 n0)). auto with arith.
+  simpl. rewrite (double_S (div2 n0)). intro H. injection H. auto with arith.
   intro H. inversion H. inversion H1.
-  simpl in |- *. rewrite (double_S (div2 n0)). auto with arith.
-  simpl in |- *. rewrite (double_S (div2 n0)). intro H. injection H. auto with arith.
+  simpl. rewrite (double_S (div2 n0)). auto with arith.
+  simpl. rewrite (double_S (div2 n0)). intro H. injection H. auto with arith.
 Qed.
 (** Specializations *)
 

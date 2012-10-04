@@ -1,29 +1,33 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Compat
 open Pp
+open Errors
 open Util
 open Names
-open Term
 open Pcoq
 open Glob_term
-open Genarg
 open Tacexpr
 open Libnames
+open Globnames
 
 open Nametab
 open Detyping
 open Tok
+open Misctypes
+open Decl_kinds
+open Genredexpr
 
 (* Generic xml parser without raw data *)
 
-type attribute = string * (loc * string)
-type xml = XmlTag of loc * string * attribute list * xml list
+type attribute = string * (Loc.t * string)
+type xml = XmlTag of Loc.t * string * attribute list * xml list
 
 let check_tags loc otag ctag =
   if otag <> ctag then
@@ -41,14 +45,14 @@ GEXTEND Gram
   xml:
     [ [ "<"; otag = IDENT; attrs = LIST0 attr; ">"; l = LIST1 xml;
         "<"; "/"; ctag = IDENT; ">"  ->
-	  check_tags loc otag ctag;
-	  XmlTag (loc,ctag,attrs,l)
+	  check_tags (!@loc) otag ctag;
+	  XmlTag (!@loc,ctag,attrs,l)
       | "<"; tag = IDENT; attrs = LIST0 attr; "/"; ">" ->
-	  XmlTag (loc,tag,attrs,[])
+	  XmlTag (!@loc,tag,attrs,[])
     ] ]
   ;
   attr:
-    [ [ name = IDENT; "="; data = STRING -> (name, (loc, data)) ] ]
+    [ [ name = IDENT; "="; data = STRING -> (name, (!@loc, data)) ] ]
   ;
 END
 
@@ -95,8 +99,8 @@ let inductive_of_cdata a = match global_of_cdata a with
 let ltacref_of_cdata (loc,a) = (loc,locate_tactic (uri_of_data a))
 
 let sort_of_cdata (loc,a) = match a with
-  | "Prop" -> GProp Null
-  | "Set" -> GProp Pos
+  | "Prop" -> GProp
+  | "Set" -> GSet
   | "Type" -> GType None
   | _ -> user_err_loc (loc,"",str "sort expected.")
 
@@ -143,17 +147,17 @@ let rec interp_xml_constr = function
   | XmlTag (loc,"VAR",al,[]) ->
       error "XML parser: unable to interp free variables"
   | XmlTag (loc,"LAMBDA",al,(_::_ as xl)) ->
-      let body,decls = list_sep_last xl in
+      let body,decls = List.sep_last xl in
       let ctx = List.map interp_xml_decl decls in
       List.fold_right (fun (na,t) b -> GLambda (loc, na, Explicit, t, b))
 	ctx (interp_xml_target body)
   | XmlTag (loc,"PROD",al,(_::_ as xl)) ->
-      let body,decls = list_sep_last xl in
+      let body,decls = List.sep_last xl in
       let ctx = List.map interp_xml_decl decls in
       List.fold_right (fun (na,t) b -> GProd (loc, na, Explicit, t, b))
 	ctx (interp_xml_target body)
   | XmlTag (loc,"LETIN",al,(_::_ as xl)) ->
-      let body,defs = list_sep_last xl in
+      let body,defs = List.sep_last xl in
       let ctx = List.map interp_xml_def defs in
       List.fold_right (fun (na,t) b -> GLetIn (loc, na, t, b))
         ctx (interp_xml_target body)
@@ -171,11 +175,11 @@ let rec interp_xml_constr = function
       let p = interp_xml_patternsType x in
       let tm = interp_xml_inductiveTerm y in
       let vars = compute_branches_lengths ind in
-      let brs = list_map_i (fun i c -> (i,vars.(i),interp_xml_pattern c)) 0 yl
+      let brs = List.map_i (fun i c -> (i,vars.(i),interp_xml_pattern c)) 0 yl
       in
       let mat = simple_cases_matrix_of_branches ind brs in
       let nparams,n = compute_inductive_nargs ind in
-      let nal,rtn = return_type_of_predicate ind nparams n p in
+      let nal,rtn = return_type_of_predicate ind n p in
       GCases (loc,RegularStyle,rtn,[tm,nal],mat)
   | XmlTag (loc,"MUTIND",al,[]) ->
       GRef (loc, IndRef (get_xml_inductive al))
@@ -183,14 +187,14 @@ let rec interp_xml_constr = function
       GRef (loc, ConstructRef (get_xml_constructor al))
   | XmlTag (loc,"FIX",al,xl) ->
       let li,lnct = List.split (List.map interp_xml_FixFunction xl) in
-      let ln,lc,lt = list_split3 lnct in
+      let ln,lc,lt = List.split3 lnct in
       let lctx = List.map (fun _ -> []) ln in
       GRec (loc, GFix (Array.of_list li, get_xml_noFun al), Array.of_list ln, Array.of_list lctx, Array.of_list lc, Array.of_list lt)
   | XmlTag (loc,"COFIX",al,xl) ->
-      let ln,lc,lt = list_split3 (List.map interp_xml_CoFixFunction xl) in
+      let ln,lc,lt = List.split3 (List.map interp_xml_CoFixFunction xl) in
       GRec (loc, GCoFix (get_xml_noFun al), Array.of_list ln, [||], Array.of_list lc, Array.of_list lt)
   | XmlTag (loc,"CAST",al,[x1;x2]) ->
-      GCast (loc, interp_xml_term x1, CastConv (DEFAULTcast, interp_xml_type x2))
+      GCast (loc, interp_xml_term x1, CastConv (interp_xml_type x2))
   | XmlTag (loc,"SORT",al,[]) ->
       GSort (loc, get_xml_sort al)
   | XmlTag (loc,s,_,_) ->

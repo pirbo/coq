@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -8,13 +8,11 @@
 
 open Pp
 open Util
-open Flags
 open Names
 open Nameops
 open Namegen
 open Term
 open Termops
-open Inductive
 open Indtypes
 open Sign
 open Environ
@@ -22,16 +20,13 @@ open Pretype_errors
 open Type_errors
 open Typeclasses_errors
 open Indrec
-open Reduction
 open Cases
 open Logic
 open Printer
-open Glob_term
 open Evd
 
 let pr_lconstr c = quote (pr_lconstr c)
 let pr_lconstr_env e c = quote (pr_lconstr_env e c)
-let pr_lconstr_env_at_top e c = quote (pr_lconstr_env_at_top e c)
 let pr_ljudge_env e c = let v,t = pr_ljudge_env e c in (quote v,quote t)
 
 let pr_db env i =
@@ -176,8 +171,8 @@ let explain_cant_apply_bad_type env sigma (n,exptyp,actualtyp) rator randl =
   let pr,prt = pr_ljudge_env env rator in
   let term_string1 = str (plural nargs "term") in
   let term_string2 =
-    if nargs>1 then str "The " ++ nth n ++ str " term" else str "This term" in
-  let appl = prvect_with_sep pr_fnl
+    if nargs>1 then str "The " ++ pr_nth n ++ str " term" else str "This term" in
+  let appl = prvect_with_sep fnl
 	       (fun c ->
 		  let pc,pct = pr_ljudge_env env c in
 		  hov 2 (pc ++ spc () ++ str ": " ++ pct)) randl
@@ -199,7 +194,7 @@ let explain_cant_apply_not_functional env sigma rator randl =
 (*  let pe = pr_ne_context_of (str "in environment") env in*)
   let pr = pr_lconstr_env env rator.uj_val in
   let prt = pr_lconstr_env env rator.uj_type in
-  let appl = prvect_with_sep pr_fnl
+  let appl = prvect_with_sep fnl
 	       (fun c ->
 		  let pc = pr_lconstr_env env c.uj_val in
 		  let pct = pr_lconstr_env env c.uj_type in
@@ -233,7 +228,7 @@ let explain_ill_formed_rec_body env err names i fixenv vdefj =
   let prt_name i =
     match names.(i) with
         Name id -> str "Recursive definition of " ++ pr_id id
-      | Anonymous -> str "The " ++ nth i ++ str " definition" in
+      | Anonymous -> str "The " ++ pr_nth i ++ str " definition" in
 
   let st = match err with
 
@@ -248,18 +243,18 @@ let explain_ill_formed_rec_body env err names i fixenv vdefj =
       let called =
         match names.(j) with
             Name id -> pr_id id
-          | Anonymous -> str "the " ++ nth i ++ str " definition" in
+          | Anonymous -> str "the " ++ pr_nth i ++ str " definition" in
       let pr_db x = quote (pr_db env x) in
       let vars =
         match (lt,le) with
             ([],[]) -> assert false
           | ([],[x]) -> str "a subterm of " ++ pr_db x
           | ([],_) -> str "a subterm of the following variables: " ++
-              prlist_with_sep pr_spc pr_db le
+              pr_sequence pr_db le
           | ([x],_) -> pr_db x
           | _ ->
               str "one of the following variables: " ++
-              prlist_with_sep pr_spc pr_db lt in
+              pr_sequence pr_db lt in
       str "Recursive call to " ++ called ++ spc () ++
       strbrk "has principal argument equal to" ++ spc () ++
       pr_lconstr_env arg_env arg ++ strbrk " instead of " ++ vars
@@ -268,7 +263,7 @@ let explain_ill_formed_rec_body env err names i fixenv vdefj =
       let called =
         match names.(j) with
             Name id -> pr_id id
-          | Anonymous -> str "the " ++ nth i ++ str " definition" in
+          | Anonymous -> str "the " ++ pr_nth i ++ str " definition" in
      str "Recursive call to " ++ called ++ str " has not enough arguments"
 
   (* CoFixpoint guard errors *)
@@ -317,7 +312,7 @@ let explain_ill_typed_rec_body env sigma i names vdefj vargs =
   let pvd,pvdt = pr_ljudge_env env (vdefj.(i)) in
   let pv = pr_lconstr_env env vargs.(i) in
   str "The " ++
-  (if Array.length vdefj = 1 then mt () else nth (i+1) ++ spc ()) ++
+  (if Array.length vdefj = 1 then mt () else pr_nth (i+1) ++ spc ()) ++
   str "recursive definition" ++ spc () ++ pvd ++ spc () ++
   str "has type" ++ spc () ++ pvdt ++ spc () ++
   str "while it should be" ++ spc () ++ pv ++ str "."
@@ -342,35 +337,35 @@ let pr_ne_context_of header footer env =
   then footer
   else pr_ne_context_of header env
 
-let explain_hole_kind env evi = function
-  | QuestionMark _ -> str "this placeholder"
-  | CasesType ->
+let explain_evar_kind env evi = function
+  | Evar_kinds.QuestionMark _ -> str "this placeholder"
+  | Evar_kinds.CasesType ->
       str "the type of this pattern-matching problem"
-  | BinderType (Name id) ->
+  | Evar_kinds.BinderType (Name id) ->
       str "the type of " ++ Nameops.pr_id id
-  | BinderType Anonymous ->
+  | Evar_kinds.BinderType Anonymous ->
       str "the type of this anonymous binder"
-  | ImplicitArg (c,(n,ido),b) ->
+  | Evar_kinds.ImplicitArg (c,(n,ido),b) ->
       let id = Option.get ido in
       str "the implicit parameter " ++
       pr_id id ++ spc () ++ str "of" ++
       spc () ++ Nametab.pr_global_env Idset.empty c
-  | InternalHole ->
+  | Evar_kinds.InternalHole ->
       str "an internal placeholder" ++
 	Option.cata (fun evi ->
 	  let env = Evd.evar_env evi in
 	    str " of type "  ++ pr_lconstr_env env evi.evar_concl ++
 	      pr_ne_context_of (str " in environment:"++ fnl ()) (mt ()) env)
 	(mt ()) evi
-  | TomatchTypeParameter (tyi,n) ->
-      str "the " ++ nth n ++
+  | Evar_kinds.TomatchTypeParameter (tyi,n) ->
+      str "the " ++ pr_nth n ++
       str " argument of the inductive type (" ++ pr_inductive env tyi ++
       str ") of this term"
-  | GoalEvar ->
+  | Evar_kinds.GoalEvar ->
       str "an existential variable"
-  | ImpossibleCase ->
+  | Evar_kinds.ImpossibleCase ->
       str "the type of an impossible pattern-matching clause"
-  | MatchingVar _ ->
+  | Evar_kinds.MatchingVar _ ->
       assert false
 
 let explain_not_clean env sigma ev t k =
@@ -378,7 +373,7 @@ let explain_not_clean env sigma ev t k =
   let env = make_all_name_different env in
   let id = Evd.string_of_existential ev in
   let var = pr_lconstr_env env t in
-  str "Tried to instantiate " ++ explain_hole_kind env None k ++
+  str "Tried to instantiate " ++ explain_evar_kind env None k ++
   str " (" ++ str id ++ str ")" ++ spc () ++
   str "with a term using variable " ++ var ++ spc () ++
   str "which is not in its scope."
@@ -389,19 +384,16 @@ let explain_unsolvability = function
       strbrk " (several distinct possible instances found)"
 
 let explain_typeclass_resolution env evi k =
-  match k with
-  | GoalEvar | InternalHole | ImplicitArg _ ->
-      (match Typeclasses.class_of_constr evi.evar_concl with
-      | Some c ->
-	  let env = Evd.evar_env evi in
-	    fnl () ++ str "Could not find an instance for " ++
-	      pr_lconstr_env env evi.evar_concl ++
-	      pr_ne_context_of (str " in environment:"++ fnl ()) (str ".") env
-      | None -> mt())
+  match Typeclasses.class_of_constr evi.evar_concl with
+  | Some c ->
+    let env = Evd.evar_env evi in
+      fnl () ++ str "Could not find an instance for " ++
+      pr_lconstr_env env evi.evar_concl ++
+      pr_ne_context_of (str " in environment:"++ fnl ()) (str ".") env
   | _ -> mt()
 
 let explain_unsolvable_implicit env evi k explain =
-  str "Cannot infer " ++ explain_hole_kind env (Some evi) k ++
+  str "Cannot infer " ++ explain_evar_kind env (Some evi) k ++
   explain_unsolvability explain ++ str "." ++
   explain_typeclass_resolution env evi k
 
@@ -694,17 +686,13 @@ let pr_constr_exprs exprs =
 let explain_no_instance env (_,id) l =
   str "No instance found for class " ++ Nameops.pr_id id ++ spc () ++
   str "applied to arguments" ++ spc () ++
-    prlist_with_sep pr_spc (pr_lconstr_env env) l
+    pr_sequence (pr_lconstr_env env) l
 
-let is_goal_evar evi = match evi.evar_source with (_, GoalEvar) -> true | _ -> false
+let is_goal_evar evi = match evi.evar_source with (_, Evar_kinds.GoalEvar) -> true | _ -> false
 
 let pr_constraints printenv env evm =
-  let evm = Evd.undefined_evars (Evarutil.nf_evar_map_undefined evm) in
-  let evm = fold_undefined 
-    (fun ev evi evm' -> 
-       if is_goal_evar evi then Evd.remove evm' ev else evm') evm evm
-  in
   let l = Evd.to_list evm in
+  assert(l <> []);
   let (ev, evi) = List.hd l in
     if List.for_all (fun (ev', evi') ->
       eq_named_context_val evi.evar_hyps evi'.evar_hyps) l
@@ -720,18 +708,23 @@ let pr_constraints printenv env evm =
       pr_evar_map None evm
 
 let explain_unsatisfiable_constraints env evd constr =
-  let evm = Evarutil.nf_evar_map evd in
-  let undef = Evd.undefined_evars evm in
+  let evm = Evd.undefined_evars (Evarutil.nf_evar_map_undefined evd) in
+  (* Remove goal evars *)
+  let undef = fold_undefined 
+    (fun ev evi evm' -> 
+       if is_goal_evar evi then Evd.remove evm' ev else evm') evm evm
+  in
   match constr with
   | None ->
       str"Unable to satisfy the following constraints:" ++ fnl() ++
 	pr_constraints true env undef
   | Some (ev, k) ->
-      explain_unsolvable_implicit env (Evd.find evm ev) k None ++ fnl () ++
-	if List.length (Evd.to_list undef) > 1 then
-	  str"With the following constraints:" ++ fnl() ++
-	    pr_constraints false env (Evd.remove undef ev)
-	else mt ()
+      explain_typeclass_resolution env (Evd.find evm ev) k ++ fnl () ++
+	(let remaining = Evd.remove undef ev in
+	   if Evd.has_undefined remaining then
+	     str"With the following constraints:" ++ fnl() ++
+	       pr_constraints false env remaining
+	   else mt ())
 
 let explain_mismatched_contexts env c i j =
   str"Mismatched contexts while declaring instance: " ++ brk (1,1) ++
@@ -825,12 +818,16 @@ let error_ill_formed_constructor env id c v nparams nargs =
    else
      mt()) ++ str "."
 
+let pr_ltype_using_barendregt_convention_env env c =
+  (* Use goal_concl_style as an approximation of Barendregt's convention (?) *)
+  quote (pr_goal_concl_style_env env c)
+
 let error_bad_ind_parameters env c n v1 v2  =
-  let pc = pr_lconstr_env_at_top env c in
+  let pc = pr_ltype_using_barendregt_convention_env env c in
   let pv1 = pr_lconstr_env env v1 in
   let pv2 = pr_lconstr_env env v2 in
   str "Last occurrence of " ++ pv2 ++ str " must have " ++ pv1 ++
-  str " as " ++ nth n ++ str " argument in " ++ brk(1,1) ++ pc ++ str "."
+  str " as " ++ pr_nth n ++ str " argument in " ++ brk(1,1) ++ pc ++ str "."
 
 let error_same_names_types id =
   str "The name" ++ spc () ++ pr_id id ++ spc () ++
@@ -944,14 +941,14 @@ let explain_unused_clause env pats =
 (* Without localisation
   let s = if List.length pats > 1 then "s" else "" in
   (str ("Unused clause with pattern"^s) ++ spc () ++
-    hov 0 (prlist_with_sep pr_spc pr_cases_pattern pats) ++ str ")")
+    hov 0 (pr_sequence pr_cases_pattern pats) ++ str ")")
 *)
   str "This clause is redundant."
 
 let explain_non_exhaustive env pats =
   str "Non exhaustive pattern-matching: no clause found for " ++
   str (plural (List.length pats) "pattern") ++
-  spc () ++ hov 0 (prlist_with_sep pr_spc pr_cases_pattern pats)
+  spc () ++ hov 0 (pr_sequence pr_cases_pattern pats)
 
 let explain_cannot_infer_predicate env typs =
   let env = make_all_name_different env in
@@ -960,7 +957,7 @@ let explain_cannot_infer_predicate env typs =
     str "For " ++ pr_lconstr_env env cstr ++ str ": " ++ pr_lconstr_env env typ
   in
   str "Unable to unify the types found in the branches:" ++
-  spc () ++ hov 0 (prlist_with_sep pr_fnl pr_branch (Array.to_list typs))
+  spc () ++ hov 0 (prlist_with_sep fnl pr_branch (Array.to_list typs))
 
 let explain_pattern_matching_error env = function
   | BadPattern (c,t) ->
@@ -984,13 +981,19 @@ let explain_pattern_matching_error env = function
 
 let explain_reduction_tactic_error = function
   | Tacred.InvalidAbstraction (env,c,(env',e)) ->
-      str "The abstracted term" ++ spc () ++ pr_lconstr_env_at_top env c ++
+      str "The abstracted term" ++ spc () ++
+      quote (pr_goal_concl_style_env env c) ++
       spc () ++ str "is not well typed." ++ fnl () ++
       explain_type_error env' Evd.empty e
 
 let explain_ltac_call_trace (nrep,last,trace,loc) =
   let calls =
     (nrep,last) :: List.rev (List.map(fun(n,_,ck)->(n,ck))trace) in
+  let tacexpr_differ te te' =
+    (* NB: The following comparison may raise an exception
+       since a tacexpr may embed a functional part via a TacExtend *)
+    try te <> te' with Invalid_argument _ -> false
+  in
   let pr_call (n,ck) =
     (match ck with
        | Proof_type.LtacNotationCall s -> quote (str s)
@@ -1000,18 +1003,18 @@ let explain_ltac_call_trace (nrep,last,trace,loc) =
 	     Pptactic.pr_glob_tactic (Global.env()) t ++ str ")"
        | Proof_type.LtacAtomCall (te,otac) -> quote
 	   (Pptactic.pr_glob_tactic (Global.env())
-	      (Tacexpr.TacAtom (dummy_loc,te)))
+	      (Tacexpr.TacAtom (Loc.ghost,te)))
 	   ++ (match !otac with
-		 | Some te' when (Obj.magic te' <> te) ->
-		     strbrk " (expanded to " ++ quote
-		       (Pptactic.pr_tactic (Global.env())
-			  (Tacexpr.TacAtom (dummy_loc,te')))
-		     ++ str ")"
+		 | Some te' when tacexpr_differ (Obj.magic te') te ->
+		   strbrk " (expanded to " ++ quote
+		     (Pptactic.pr_tactic (Global.env())
+			(Tacexpr.TacAtom (Loc.ghost,te')))
+		   ++ str ")"
 		 | _ -> mt ())
        | Proof_type.LtacConstrInterp (c,(vars,unboundvars)) ->
 	   let filter =
 	     function (id,None) -> None | (id,Some id') -> Some(id,([],mkVar id')) in
-	   let unboundvars = list_map_filter filter unboundvars in
+	   let unboundvars = List.map_filter filter unboundvars in
 	   quote (pr_glob_constr_env (Global.env()) c) ++
 	     (if unboundvars <> [] or vars <> [] then
 		strbrk " (with " ++
@@ -1024,7 +1027,7 @@ let explain_ltac_call_trace (nrep,last,trace,loc) =
        else if n>2 then str " (repeated "++int n++str" times)"
        else mt()) in
     if calls <> [] then
-      let kind_of_last_call = match list_last calls with
+      let kind_of_last_call = match List.last calls with
     | (_,Proof_type.LtacConstrInterp _) -> ", last term evaluation failed."
     | _ -> ", last call failed." in
     hov 0 (str "In nested Ltac calls to " ++

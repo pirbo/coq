@@ -55,7 +55,7 @@ val jmeq_refl : unit -> Term.constr
 val new_save_named : bool -> unit
 
 val save : bool -> identifier ->  Entries.definition_entry  -> Decl_kinds.goal_kind ->
-  Tacexpr.declaration_hook -> unit
+  unit Tacexpr.declaration_hook -> unit
 
 (* [get_proof_clean do_reduce] : returns the proof name, definition, kind and hook and
    abort the proof
@@ -63,7 +63,7 @@ val save : bool -> identifier ->  Entries.definition_entry  -> Decl_kinds.goal_k
 val get_proof_clean : bool ->
   Names.identifier *
     (Entries.definition_entry * Decl_kinds.goal_kind *
-       Tacexpr.declaration_hook)
+      unit Tacexpr.declaration_hook)
 
 
 
@@ -112,3 +112,14 @@ exception Defining_principle of exn
 exception ToShow of exn
 
 val is_strict_tcc : unit -> bool
+
+val h_intros: Names.identifier list -> Proof_type.tactic
+val h_id :  Names.identifier
+val hrec_id :  Names.identifier
+val acc_inv_id :  Term.constr Util.delayed
+val ltof_ref : Globnames.global_reference Util.delayed
+val well_founded_ltof : Term.constr Util.delayed
+val acc_rel : Term.constr Util.delayed
+val well_founded : Term.constr Util.delayed
+val evaluable_of_global_reference : Globnames.global_reference -> Names.evaluable_global_reference
+val list_rewrite : bool -> (Term.constr*bool) list -> Proof_type.tactic

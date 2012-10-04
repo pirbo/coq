@@ -1,12 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Term
+open Errors
 open Util
 open Goptions
 
@@ -61,15 +61,6 @@ type form=
   | Bot
   | Conjunct of form * form
   | Disjunct of form * form
-
-type tag=int
-
-let decomp_form=function
-    Atom i -> Some (i,[])
-  | Arrow (f1,f2) -> Some (-1,[f1;f2])
-  | Bot -> Some (-2,[])
-  | Conjunct (f1,f2) -> Some (-3,[f1;f2])
-  | Disjunct (f1,f2) -> Some (-4,[f1;f2])
 
 module Fmap=Map.Make(struct type t=form let compare=compare end)
 
@@ -471,7 +462,7 @@ and pp_atom= function
   | Atom n -> int n
   | f -> str "(" ++ hv 2 (pp_form f) ++ str ")"
 
-let pr_form f = msg (pp_form f)
+let pr_form f = pp_form f
 
 let pp_intmap map =
   let pp=ref (str "") in
@@ -509,8 +500,8 @@ let pp_gl gl= cut () ++
 
 let pp =
   function
-      Incomplete(gl,ctx) -> msgnl (pp_gl gl)
-    | _ -> msg (str "<complete>")
+      Incomplete(gl,ctx) -> pp_gl gl ++ fnl ()
+    | _ -> str "<complete>"
 
 let pp_info () =
   let count_info =
@@ -532,7 +523,7 @@ let pp_info () =
 	int s_info.created_branches ++ str " created" ++ fnl () ++
 	str "Hypotheses : " ++
 	int s_info.created_hyps ++ str " created" ++ fnl () in
-    msgnl
+    msg_info
       ( str "Proof-search statistics :" ++ fnl () ++
 	count_info ++
 	str "Branch ends: " ++

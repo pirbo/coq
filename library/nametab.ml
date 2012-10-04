@@ -1,18 +1,17 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
-open Compat
 open Pp
 open Names
 open Libnames
-open Nameops
-open Declarations
+open Globnames
 
 
 exception GlobalizationError of qualid
@@ -504,8 +503,8 @@ let global_inductive r =
 (********************************************************************)
 (* Registration of tables as a global table and rollback            *)
 
-type frozen = ccitab * dirtab * kntab * kntab
-    * globrevtab * mprevtab * knrevtab * knrevtab
+type frozen = ccitab * dirtab * mptab * kntab 
+    * globrevtab * mprevtab * mptrevtab * knrevtab
 
 let init () =
   the_ccitab := SpTab.empty;
@@ -517,9 +516,7 @@ let init () =
   the_modtyperevtab := MPmap.empty;
   the_tacticrevtab := KNmap.empty
 
-
-
-let freeze () =
+let freeze () : frozen =
   !the_ccitab,
   !the_dirtab,
   !the_modtypetab,

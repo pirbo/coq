@@ -1,4 +1,5 @@
 open Glob_term
+open Misctypes
 
 (* Ocaml 3.06 Map.S does not handle is_empty *)
 val idmap_is_empty : 'a Names.Idmap.t -> bool
@@ -14,9 +15,9 @@ val pattern_to_term : cases_pattern -> glob_constr
 
 (*
    Some basic functions to rebuild glob_constr
-   In each of them the location is Util.dummy_loc
+   In each of them the location is Util.Loc.ghost
 *)
-val mkGRef : Libnames.global_reference -> glob_constr
+val mkGRef : Globnames.global_reference -> glob_constr
 val mkGVar : Names.identifier -> glob_constr
 val mkGApp  : glob_constr*(glob_constr list) -> glob_constr
 val mkGLambda : Names.name * glob_constr * glob_constr -> glob_constr
@@ -84,9 +85,9 @@ val alpha_rt : Names.identifier list -> glob_constr -> glob_constr
 
 (* same as alpha_rt but for case branches *)
 val alpha_br : Names.identifier list ->
-    Util.loc * Names.identifier list * Glob_term.cases_pattern list *
+    Loc.t * Names.identifier list * Glob_term.cases_pattern list *
     Glob_term.glob_constr ->
-    Util.loc * Names.identifier list * Glob_term.cases_pattern list *
+    Loc.t * Names.identifier list * Glob_term.cases_pattern list *
     Glob_term.glob_constr
 
 

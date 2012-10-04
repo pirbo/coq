@@ -1,17 +1,14 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pp
 open Util
 open Names
-open Pcoq
-open Topconstr
-open Libnames
+open Globnames
 
 exception Non_closed_number
 
@@ -19,7 +16,6 @@ exception Non_closed_number
 (* Parsing R via scopes                                               *)
 (**********************************************************************)
 
-open Libnames
 open Glob_term
 open Bigint
 
@@ -30,7 +26,7 @@ let make_path dir id = Libnames.make_path dir (id_of_string id)
 let r_path = make_path rdefinitions "R"
 
 (* TODO: temporary hack *)
-let make_path dir id = Libnames.encode_con dir (id_of_string id)
+let make_path dir id = Globnames.encode_con dir (id_of_string id)
 
 let r_kn = make_path rdefinitions "R"
 let glob_R = ConstRef r_kn
@@ -116,8 +112,8 @@ let uninterp_r p =
 let _ = Notation.declare_numeral_interpreter "R_scope"
   (r_path,["Coq";"Reals";"Rdefinitions"])
   r_of_int
-  ([GRef(dummy_loc,glob_Ropp);GRef(dummy_loc,glob_R0);
-    GRef(dummy_loc,glob_Rplus);GRef(dummy_loc,glob_Rmult);
-    GRef(dummy_loc,glob_R1)],
+  ([GRef(Loc.ghost,glob_Ropp);GRef(Loc.ghost,glob_R0);
+    GRef(Loc.ghost,glob_Rplus);GRef(Loc.ghost,glob_Rmult);
+    GRef(Loc.ghost,glob_R1)],
     uninterp_r,
     false)

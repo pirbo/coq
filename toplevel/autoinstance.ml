@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,8 +12,7 @@ open Printer
 open Names
 open Term
 open Evd
-open Sign
-open Libnames
+open Globnames
 (*i*)
 
 (*s
@@ -53,7 +52,7 @@ let subst_evar_in_evm evar def evm =
 
 let rec safe_define evm ev c =
   if not (closedn (-1) c) then raise Termops.CannotFilter else
-(*  msgnl(str"safe_define "++pr_evar_map evm++spc()++str" |- ?"++Util.pr_int ev++str" := "++pr_constr c);*)
+(*  msgnl(str"safe_define "++pr_evar_map evm++spc()++str" |- ?"++Pp.int ev++str" := "++pr_constr c);*)
   let evi = (Evd.find evm ev) in
   let define_subst evm sigma =
     Util.Intmap.fold
@@ -99,15 +98,15 @@ module SubstSet : Set.S with type elt = Termops.subst
 let complete_evar (cl,gen,evm:signature) (ev,evi) (k:signature -> unit) =
   let ev_typ = Libtypes.reduce (evar_concl evi) in
   let sort_is_prop = is_Prop (Typing.type_of (Global.env()) evm (evar_concl evi)) in
-(*  msgnl(str"cherche "++pr_constr ev_typ++str" pour "++Util.pr_int ev);*)
+(*  msgnl(str"cherche "++pr_constr ev_typ++str" pour "++Pp.int ev);*)
   let substs = ref SubstSet.empty in
   try List.iter
     ( fun (gr,(pat,_),s) ->
 	let (_,genl,_) = Termops.decompose_prod_letin pat in
 	let genl = List.map (fun (_,_,t) -> t) genl in
 	let ((cl,gen,evm),argl) = add_gen_ctx (cl,gen,evm) genl in
-	let def = applistc (Libnames.constr_of_global gr) argl in
-(*	msgnl(str"essayons  ?"++Util.pr_int ev++spc()++str":="++spc()
+	let def = applistc (Globnames.constr_of_global gr) argl in
+(*	msgnl(str"essayons  ?"++Pp.int ev++spc()++str":="++spc()
 	      ++pr_constr def++spc()++str":"++spc()++pr_constr (Global.type_of_global gr)*)
 	(*++spc()++str"dans"++spc()++pr_evar_map evm++spc());*)
 	try
@@ -145,7 +144,7 @@ let complete_with_evars_permut (cl,gen,evm:signature) evl c (k:signature -> unit
 	let tyl = List.map (fun (_,_,t) -> t) ctx in
 	let ((cl,gen,evm),argl) = add_gen_ctx (cl,gen,evm) tyl in
 	let def = applistc c argl in
-(*	msgnl(str"trouvé def ?"++Util.pr_int ev++str" := "++pr_constr def++str " dans "++pr_evar_map evm);*)
+(*	msgnl(str"trouvé def ?"++Pp.int ev++str" := "++pr_constr def++str " dans "++pr_evar_map evm);*)
 	try
 	  if not (Evd.is_defined evm ev) then
 	    let evm = safe_define evm ev def in
@@ -163,7 +162,7 @@ let make_instance_ident gr =
 
 let new_instance_message ident typ def =
   Flags.if_verbose
-  msgnl (str"new instance"++spc()
+  msg_info (str"new instance"++spc()
 	 ++Nameops.pr_id ident++spc()++str":"++spc()
 	 ++pr_constr typ++spc()++str":="++spc()
 	 ++pr_constr def)
@@ -204,7 +203,7 @@ let declare_class_instance gr ctx params =
     (ce,Decl_kinds.IsDefinition Decl_kinds.Instance) in
   Typeclasses.add_instance (Typeclasses.new_instance cl (Some 100) true (ConstRef cst));
   new_instance_message ident typ def
-  with e -> msgnl (str"Error defining instance := "++pr_constr def++str" : "++pr_constr typ++str"  "++Errors.print e)
+  with e -> msg_info (str"Error defining instance := "++pr_constr def++str" : "++pr_constr typ++str"  "++Errors.print e)
 
 let rec iter_under_prod (f:rel_context->constr->unit) (ctx:rel_context) t = f ctx t;
   match kind_of_term t with
@@ -214,15 +213,15 @@ let rec iter_under_prod (f:rel_context->constr->unit) (ctx:rel_context) t = f ct
 (* main search function: search for total instances containing gr, and
    apply k to each of them *)
 let complete_signature_with_def gr deftyp (k:instance_decl_function -> signature -> unit) : unit =
-  let gr_c = Libnames.constr_of_global gr in
-  let (smap:(Libnames.global_reference * Evd.evar_map,
+  let gr_c = Globnames.constr_of_global gr in
+  let (smap:(Globnames.global_reference * Evd.evar_map,
    ('a * 'b * Term.constr) list * Evd.evar)
   Gmapl.t ref) = ref Gmapl.empty in
   iter_under_prod
     ( fun ctx typ ->
 	List.iter
 	  (fun ((cl,ev,evm),_,_) ->
-(*	     msgnl(pr_global gr++str" : "++pr_constr typ++str" matche ?"++Util.pr_int ev++str " dans "++pr_evar_map evm);*)
+(*	     msgnl(pr_global gr++str" : "++pr_constr typ++str" matche ?"++Pp.int ev++str " dans "++pr_evar_map evm);*)
 	     smap := Gmapl.add (cl,evm) (ctx,ev) !smap)
 	  (Recordops.methods_matching typ)
     ) [] deftyp;
@@ -265,7 +264,7 @@ let declare_instance (k:global_reference -> rel_context -> constr list -> unit)
        then Evd.remove evm ev,gen
        else evm,(ev::gen))
     gen (evm,[]) in
-(*  msgnl(str"instance complète : ["++Util.prlist_with_sep (fun _ -> str";") Util.pr_int gen++str"] : "++spc()++pr_evar_map evm);*)
+(*  msgnl(str"instance complète : ["++Util.prlist_with_sep (fun _ -> str";") Pp.int gen++str"] : "++spc()++pr_evar_map evm);*)
   let ngen = List.length gen in
   let (_,ctx,evm) = List.fold_left
     ( fun (i,ctx,evm) ev ->

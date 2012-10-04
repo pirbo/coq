@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -25,7 +25,7 @@ Check
  fun (P : forall A : Type, let B := A in A -> Type) (f : P True I) (A : Type) =>
    let B := A in
      fun (a : A) (e : eq1 A a) =>
-       match e in (eq1 A0 B0 a0) return (P A0 a0) with
+       match e in (eq1 A0 a0) return (P A0 a0) with
        | refl1 => f
        end.
 

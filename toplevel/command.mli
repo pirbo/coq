@@ -1,19 +1,20 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Pp
 open Names
 open Term
 open Entries
 open Libnames
+open Globnames
 open Tacexpr
 open Vernacexpr
-open Topconstr
+open Constrexpr
 open Decl_kinds
 open Redexpr
 open Constrintern
@@ -32,23 +33,29 @@ val set_declare_assumptions_hook : (types -> unit) -> unit
 
 val interp_definition :
   local_binder list -> red_expr option -> constr_expr ->
-  constr_expr option -> definition_entry * Impargs.manual_implicits
+  constr_expr option -> definition_entry * Evd.evar_map * Impargs.manual_implicits
 
-val declare_definition : identifier -> locality * definition_object_kind ->
-  definition_entry -> Impargs.manual_implicits -> declaration_hook -> unit
+val declare_definition : identifier -> definition_kind ->
+  definition_entry -> Impargs.manual_implicits -> 'a declaration_hook -> 'a
+
+val do_definition : identifier -> definition_kind ->
+  local_binder list -> red_expr option -> constr_expr ->
+  constr_expr option -> unit declaration_hook -> unit
 
 (** {6 Parameters/Assumptions} *)
 
 val interp_assumption :
   local_binder list -> constr_expr -> types * Impargs.manual_implicits
 
+(** returns [false] if the assumption is neither local to a section,
+    nor in a module type and meant to be instantiated. *)
 val declare_assumption : coercion_flag -> assumption_kind -> types ->
   Impargs.manual_implicits ->
-  bool (** implicit *) -> Entries.inline -> variable located -> unit
+  bool (** implicit *) -> Entries.inline -> variable Loc.located -> bool
 
-val declare_assumptions : variable located list ->
+val declare_assumptions : variable Loc.located list ->
   coercion_flag -> assumption_kind -> types -> Impargs.manual_implicits ->
-  bool -> Entries.inline -> unit
+  bool -> Entries.inline -> bool
 
 (** {6 Inductive and coinductive types} *)
 
@@ -94,7 +101,7 @@ val do_mutual_inductive :
 
 type structured_fixpoint_expr = {
   fix_name : identifier;
-  fix_annot : identifier located option;
+  fix_annot : identifier Loc.located option;
   fix_binders : local_binder list;
   fix_body : constr_expr option;
   fix_type : constr_expr

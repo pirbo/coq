@@ -10,10 +10,10 @@ Elimschemes
 Tactics
 Hiddentac
 Elim
-Dhyp
 Auto
 Equality
 Contradiction
+Refine
 Inv
 Leminv
 Tacinterp

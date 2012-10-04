@@ -1,22 +1,16 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Compat
 open Pp
+open Errors
 open Util
-open Term
-open Termops
-open Sign
 open Evd
-open Sign
 open Environ
-open Reductionops
-open Type_errors
 open Proof_type
 open Logic
 
@@ -37,10 +31,10 @@ let abstract_tactic_expr ?(dflt=false) te tacfun gls =
 
 let abstract_tactic ?(dflt=false) te =
   !abstract_tactic_box := Some te;
-  abstract_tactic_expr ~dflt (Tacexpr.TacAtom (dummy_loc,te))
+  abstract_tactic_expr ~dflt (Tacexpr.TacAtom (Loc.ghost,te))
 
 let abstract_extended_tactic ?(dflt=false) s args =
-  abstract_tactic ~dflt (Tacexpr.TacExtend (dummy_loc, s, args))
+  abstract_tactic ~dflt (Tacexpr.TacExtend (Loc.ghost, s, args))
 
 let refiner = function
   | Prim pr ->
@@ -88,7 +82,7 @@ let tclIDTAC gls = goal_goal_list gls
 
 (* the message printing identity tactic *)
 let tclIDTAC_MESSAGE s gls =
-  msg (hov 0 s); tclIDTAC gls
+  pp (hov 0 s); pp_flush (); tclIDTAC gls
 
 (* General failure tactic *)
 let tclFAIL_s s gls = errorlabstrm "Refiner.tclFAIL_s" (str s)
@@ -115,7 +109,7 @@ let thens3parts_tac tacfi tac tacli (sigr,gs) =
   let ng = List.length gs in
   if ng<nf+nl then errorlabstrm "Refiner.thensn_tac" (str "Not enough subgoals.");
   let gll =
-      (list_map_i (fun i ->
+      (List.map_i (fun i ->
         apply_sig_tac sigr (if i<nf then tacfi.(i) else if i>=ng-nl then tacli.(nl-ng+i) else tac))
 	0 gs) in
     (sigr,List.flatten gll)
@@ -123,32 +117,13 @@ let thens3parts_tac tacfi tac tacli (sigr,gs) =
 (* Apply [taci.(i)] on the first n subgoals and [tac] on the others *)
 let thensf_tac taci tac = thens3parts_tac taci tac [||]
 
-(* Apply [taci.(i)] on the last n subgoals and [tac] on the others *)
-let thensl_tac tac taci = thens3parts_tac [||] tac taci
-
 (* Apply [tac i] on the ith subgoal (no subgoals number check) *)
 let thensi_tac tac (sigr,gs) =
   let gll =
-    list_map_i (fun i -> apply_sig_tac sigr (tac i)) 1 gs in
+    List.map_i (fun i -> apply_sig_tac sigr (tac i)) 1 gs in
   (sigr, List.flatten gll)
 
 let then_tac tac = thensf_tac [||] tac
-
-let non_existent_goal n =
-  errorlabstrm ("No such goal: "^(string_of_int n))
-    (str"Trying to apply a tactic to a non existent goal")
-
-(* Apply tac on the i-th goal (if i>0). If i<0, then start counting from
-   the last goal (i=-1). *)
-let theni_tac i tac ((_,gl) as subgoals) =
-  let nsg = List.length gl in
-  let k = if i < 0 then nsg + i + 1 else i in
-  if nsg < 1 then errorlabstrm "theni_tac" (str"No more subgoals.")
-  else if k >= 1 & k <= nsg then
-    thensf_tac
-      (Array.init k (fun i -> if i+1 = k then tac else tclIDTAC)) tclIDTAC
-      subgoals
-  else non_existent_goal k
 
 (* [tclTHENS3PARTS tac1 [|t1 ; ... ; tn|] tac2 [|t'1 ; ... ; t'm|] gls]
    applies the tactic [tac1] to [gls] then, applies [t1], ..., [tn] to
@@ -235,6 +210,35 @@ let tclNOTSAMEGOAL (tac : tactic) goal =
   then errorlabstrm "Refiner.tclNOTSAMEGOAL"
       (str"Tactic generated a subgoal identical to the original goal.")
   else rslt
+
+(* Execute tac and show the names of hypothesis create by tac in
+   the "as" format. The resulting goals are printed *after* the
+   as-expression, which forces pg to some gymnastic. TODO: Have
+   something similar (better?) in the xml protocol. *)
+let tclSHOWHYPS (tac : tactic) (goal: Goal.goal Evd.sigma)
+    :Proof_type.goal list Evd.sigma =
+  let oldhyps:Sign.named_context = pf_hyps goal in
+  let rslt:Proof_type.goal list Evd.sigma = tac goal in
+  let {it=gls;sigma=sigma} = rslt in
+  let hyps:Sign.named_context list =
+    List.map (fun gl -> pf_hyps { it = gl; sigma=sigma}) gls in
+  let newhyps =
+    List.map (fun hypl -> List.subtract hypl oldhyps) hyps in
+  let emacs_str s =
+    if !Flags.print_emacs then s else "" in
+  let s = 
+    let frst = ref true in
+    List.fold_left
+    (fun acc lh -> acc ^ (if !frst then (frst:=false;"") else " | ")
+      ^ (List.fold_left
+	   (fun acc (nm,_,_) -> (Names.string_of_id nm) ^ " " ^ acc)
+	   "" lh))
+    "" newhyps in
+  pp (str (emacs_str "<infoH>")
+      ++  (hov 0 (str s))
+      ++  (str (emacs_str "</infoH>")) ++ fnl());
+  rslt;;
+
 
 let catch_failerror e =
   if catchable_exception e then check_for_interrupt ()
@@ -414,10 +418,6 @@ let tclEVARS sigma gls = tclIDTAC {gls with sigma=sigma}
 
 let pp_info = ref (fun _ _ _ -> assert false)
 let set_info_printer f = pp_info := f
-
-let tclINFO (tac : tactic) gls =
-  msgnl (hov 0 (str "Warning: info is currently not working"));
-  tac gls
 
 (* Check that holes in arguments have been resolved *)
 

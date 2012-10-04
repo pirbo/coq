@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,10 +15,9 @@
 
 (* This file provides with various operations on modules and module types *)
 
+open Errors
 open Util
-open Pp
 open Names
-open Univ
 open Term
 open Declarations
 open Environ
@@ -98,9 +97,6 @@ let error_no_module_to_end _ =
 
 let error_no_modtype_to_end _ =
   raise (ModuleTypingError NoModuleTypeToEnd)
-
-let error_not_a_modtype s =
-  raise (ModuleTypingError (NotAModuleType s))
 
 let error_not_a_module s =
   raise (ModuleTypingError (NotAModule s))
@@ -564,7 +560,7 @@ and clean_expr l = function
        if  str_clean == str && sig_clean = sigt.typ_expr then
 	 s else SEBfunctor (mbid,{sigt with typ_expr=sig_clean},str_clean)
   | SEBstruct str as s->
-      let str_clean = Util.list_smartmap (clean_struct l) str in 
+      let str_clean = Util.List.smartmap (clean_struct l) str in 
 	if  str_clean == str then s else SEBstruct(str_clean)
   |  str -> str 
 
@@ -574,7 +570,7 @@ let rec collect_mbid l = function
 	if  str_clean == str then s else 
       SEBfunctor (mbid,sigt,str_clean)
   | SEBstruct str as s->
-      let str_clean = Util.list_smartmap (clean_struct l) str in 
+      let str_clean = Util.List.smartmap (clean_struct l) str in 
 	if  str_clean == str then s else SEBstruct(str_clean)
   |  _ -> anomaly "Modops:the evaluation of the structure failed "
        

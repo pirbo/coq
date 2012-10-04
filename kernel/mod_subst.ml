@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -61,8 +61,6 @@ module Umap = struct
   let add_mp mp x (m1,m2) = (MPmap.add mp x m1, m2)
   let find_mp mp map = MPmap.find mp (fst map)
   let find_mbi mbi map = MBImap.find mbi (snd map)
-  let mem_mp mp map = MPmap.mem mp (fst map)
-  let mem_mbi mbi map = MBImap.mem mbi (snd map)
   let iter_mbi f map = MBImap.iter f (snd map)
   let fold fmp fmbi (m1,m2) i =
     MPmap.fold fmp m1 (MBImap.fold fmbi m2 i)
@@ -123,7 +121,7 @@ let add_kn_delta_resolver kn kn' = Deltamap.add_kn kn (Equiv kn')
 
 let add_mp_delta_resolver mp1 mp2 = Deltamap.add_mp mp1 mp2
 
-(** Extending a [substitution *)
+(** Extending a [substitution] *)
 
 let add_mbid mbid mp resolve s = Umap.add_mbi mbid (mp,resolve) s
 let add_mp mp1 mp2 resolve s = Umap.add_mp mp1 (mp2,resolve) s
@@ -146,7 +144,7 @@ let mind_in_delta mind resolver = kn_in_delta (user_mind mind) resolver
 let mp_of_delta resolve mp =
  try Deltamap.find_mp mp resolve with Not_found -> mp
 
-let rec find_prefix resolve mp =
+let find_prefix resolve mp =
   let rec sub_mp = function
     | MPdot(mp,l) as mp_sup ->
 	(try Deltamap.find_mp mp_sup resolve
@@ -339,7 +337,7 @@ let rec map_kn f f' c =
 	  in
 	  let p' = func p in
 	  let ct' = func ct in
-	  let l' = array_smartmap func l in
+	  let l' = Array.smartmap func l in
 	    if (ci.ci_ind==ci_ind && p'==p
 		&& l'==l && ct'==ct)then c
 	    else
@@ -368,21 +366,21 @@ let rec map_kn f f' c =
 	    else mkLetIn (na, b', t', ct')
       | App (ct,l) ->
 	  let ct' = func ct in
-	  let l' = array_smartmap func l in
+	  let l' = Array.smartmap func l in
 	    if (ct'== ct && l'==l) then c
 	    else mkApp (ct',l')
       | Evar (e,l) ->
-	  let l' = array_smartmap func l in
+	  let l' = Array.smartmap func l in
 	    if (l'==l) then c
 	    else mkEvar (e,l')
       | Fix (ln,(lna,tl,bl)) ->
-	  let tl' = array_smartmap func tl in
-	  let bl' = array_smartmap func bl in
+	  let tl' = Array.smartmap func tl in
+	  let bl' = Array.smartmap func bl in
 	    if (bl == bl'&& tl == tl') then c
 	    else mkFix (ln,(lna,tl',bl'))
       | CoFix(ln,(lna,tl,bl)) ->
-	  let tl' = array_smartmap func tl in
-	  let bl' = array_smartmap func bl in
+	  let tl' = Array.smartmap func tl in
+	  let bl' = Array.smartmap func bl in
 	    if (bl == bl'&& tl == tl') then c
 	    else mkCoFix (ln,(lna,tl',bl'))
       | _ -> c

@@ -411,6 +411,7 @@ through the <tt>Require Import</tt> command.</p>
     theories/Lists/List.v
     theories/Lists/ListSet.v
     theories/Lists/SetoidList.v
+    theories/Lists/SetoidPermutation.v
     theories/Lists/Streams.v
     theories/Lists/StreamMemo.v
     theories/Lists/ListTactics.v
@@ -423,6 +424,7 @@ through the <tt>Require Import</tt> command.</p>
       theories/Vectors/Fin.v
       theories/Vectors/VectorDef.v
       theories/Vectors/VectorSpec.v
+      theories/Vectors/VectorEq.v
       (theories/Vectors/Vector.v)
     </dd>
 
@@ -466,7 +468,9 @@ through the <tt>Require Import</tt> command.</p>
     theories/MSets/MSetEqProperties.v
     theories/MSets/MSetWeakList.v
     theories/MSets/MSetList.v
+    theories/MSets/MSetGenTree.v
     theories/MSets/MSetAVL.v
+    theories/MSets/MSetRBT.v
     theories/MSets/MSetPositive.v
     theories/MSets/MSetToFiniteSet.v
     (theories/MSets/MSets.v)
@@ -532,7 +536,10 @@ through the <tt>Require Import</tt> command.</p>
     theories/Reals/Rsigma.v
     theories/Reals/R_sqr.v
     theories/Reals/Rtrigo_fun.v
+    theories/Reals/Rtrigo1.v
     theories/Reals/Rtrigo.v
+    theories/Reals/Ratan.v
+    theories/Reals/Machin.v
     theories/Reals/SplitAbsolu.v
     theories/Reals/SplitRmult.v
     theories/Reals/Alembert.v
@@ -553,6 +560,8 @@ through the <tt>Require Import</tt> command.</p>
     theories/Reals/Ranalysis2.v
     theories/Reals/Ranalysis3.v
     theories/Reals/Ranalysis4.v
+    theories/Reals/Ranalysis5.v
+    theories/Reals/Ranalysis_reg.v
     theories/Reals/Rcomplete.v
     theories/Reals/RiemannInt.v
     theories/Reals/RiemannInt_SF.v
@@ -569,7 +578,6 @@ through the <tt>Require Import</tt> command.</p>
     theories/Reals/SeqSeries.v
     theories/Reals/Sqrt_reg.v
     theories/Reals/Rlogic.v
-    theories/Reals/LegacyRfield.v
     (theories/Reals/Reals.v)
   </dd>
     

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -12,7 +12,7 @@ open Names
 open Term
 open Mod_subst
 open Environ
-open Libnames
+open Globnames
 open Nameops
 open Libobject
 open Lib
@@ -113,8 +113,8 @@ let kind_of_head env t =
           k+n-m,[],a
         else
           (* enough arguments to [cst] *)
-          k,list_skipn n l,List.nth l (i-1) in
-      let l' = list_tabulate (fun _ -> mkMeta 0) q @ rest in
+          k,List.skipn n l,List.nth l (i-1) in
+      let l' = List.tabulate (fun _ -> mkMeta 0) q @ rest in
       aux k' l' a (with_subcase or with_case)
   | ConstructorHead when with_case -> NotImmediatelyComputableHead
   | x -> x

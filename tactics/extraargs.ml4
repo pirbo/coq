@@ -1,20 +1,20 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Pp
-open Pcoq
 open Genarg
 open Names
 open Tacexpr
 open Tacinterp
-open Termops
+open Misctypes
+open Locus
 
 (* Rewriting orientation *)
 
@@ -33,30 +33,22 @@ END
 
 let pr_orient = pr_orient () () ()
 
-let pr_int_list_full _prc _prlc _prt l =
-  let rec aux = function
-    | i :: l -> Pp.int i ++ Pp.spc () ++ aux l
-    | [] -> Pp.mt()
-  in aux l
 
-ARGUMENT EXTEND int_nelist
-  PRINTED BY pr_int_list_full
-  RAW_TYPED AS int list
-  RAW_PRINTED BY pr_int_list_full
-  GLOB_TYPED AS int list
-  GLOB_PRINTED BY pr_int_list_full
-| [ integer(x) int_nelist(l) ] -> [x::l]
-| [ integer(x) ] -> [ [x] ]
-END
-
-let pr_int_list = pr_int_list_full () () ()
-
-open Glob_term
+let pr_int_list = Pp.pr_sequence Pp.int
+let pr_int_list_full _prc _prlc _prt l = pr_int_list l
 
 let pr_occurrences _prc _prlc _prt l =
   match l with
     | ArgArg x -> pr_int_list x
     | ArgVar (loc, id) -> Nameops.pr_id id
+
+let occurrences_of = function
+  | [] -> NoOccurrences
+  | n::_ as nl when n < 0 -> AllOccurrencesBut (List.map abs nl)
+  | nl ->
+      if List.exists (fun n -> n < 0) nl then
+        Errors.error "Illegal negative occurrence number.";
+      OnlyOccurrences nl
 
 let coerce_to_int = function
   | VInteger n -> n
@@ -72,6 +64,8 @@ let interp_occs ist gl l =
     | ArgVar (_,id as locid) ->
 	(try int_list_of_VList (List.assoc id ist.lfun)
 	  with Not_found | CannotCoerceTo _ -> [interp_int ist locid])
+let interp_occs ist gl l =
+  Tacmach.project gl , interp_occs ist gl l
 
 let glob_occs ist l = l
 
@@ -93,7 +87,7 @@ ARGUMENT EXTEND occurrences
   GLOB_TYPED AS occurrences_or_var
   GLOB_PRINTED BY pr_occurrences
 
-| [ int_nelist(l) ] -> [ ArgArg l ]
+| [ ne_integer_list(l) ] -> [ ArgArg l ]
 | [ var(id) ] -> [ ArgVar id ]
 END
 
@@ -103,7 +97,7 @@ let pr_gen prc _prlc _prtac c = prc c
 
 let pr_globc _prc _prlc _prtac (_,glob) = Printer.pr_glob_constr glob
 
-let interp_glob ist gl (t,_) = (ist,t)
+let interp_glob ist gl (t,_) = Tacmach.project gl , (ist,t)
 
 let glob_glob = Tacinterp.intern_constr
 
@@ -127,7 +121,7 @@ END
 
 type 'id gen_place= ('id * hyp_location_flag,unit) location
 
-type loc_place = identifier Util.located gen_place
+type loc_place = identifier Loc.located gen_place
 type place = identifier gen_place
 
 let pr_gen_place pr_id = function
@@ -150,6 +144,9 @@ let interp_place ist gl = function
     ConclLocation () -> ConclLocation ()
   | HypLocation (id,hl) -> HypLocation (interp_hyp ist gl id,hl)
 
+let interp_place ist gl p =
+  Tacmach.project gl , interp_place ist gl p
+
 let subst_place subst pl = pl
 
 ARGUMENT EXTEND hloc
@@ -166,11 +163,11 @@ ARGUMENT EXTEND hloc
   |  [ "in" "|-" "*" ] ->
     [ ConclLocation () ]
 | [ "in" ident(id) ] ->
-    [ HypLocation ((Util.dummy_loc,id),InHyp) ]
+    [ HypLocation ((Loc.ghost,id),InHyp) ]
 | [ "in" "(" "Type" "of" ident(id) ")" ] ->
-    [ HypLocation ((Util.dummy_loc,id),InHypTypeOnly) ]
+    [ HypLocation ((Loc.ghost,id),InHypTypeOnly) ]
 | [ "in" "(" "Value" "of" ident(id) ")" ] ->
-    [ HypLocation ((Util.dummy_loc,id),InHypValueOnly) ]
+    [ HypLocation ((Loc.ghost,id),InHypValueOnly) ]
 
  END
 
@@ -203,7 +200,7 @@ let pr_in_hyp  pr_id (lo,concl) :  Pp.std_ppcmds =
     | None,false -> str "in" ++ spc () ++ str "*" ++ spc () ++ str "|-"
     | Some l,_ ->
 	str "in" ++
-	  Util.prlist (fun id -> spc () ++ pr_id id) l ++
+         spc () ++ prlist_with_sep pr_comma pr_id l ++
 	  match concl with
 	    | true -> spc () ++ str "|-" ++ spc () ++ str "*"
 	    | _ -> mt ()
@@ -214,7 +211,7 @@ let pr_in_arg_hyp _ _ _ = pr_in_hyp (fun (_,id) -> Ppconstr.pr_id id)
 let pr_in_arg_hyp_typed  _ _  _  = pr_in_hyp Ppconstr.pr_id
 
 
-let pr_var_list_gen pr_id = Util.prlist_with_sep (fun () -> str ",") pr_id
+let pr_var_list_gen pr_id = Pp.prlist_with_sep (fun () -> str ",") pr_id
 
 let pr_var_list_typed _ _ _ =  pr_var_list_gen Ppconstr.pr_id
 
@@ -268,16 +265,16 @@ END
 
 let pr_in_arg_hyp = pr_in_arg_hyp_typed () () ()
 
-let gen_in_arg_hyp_to_clause trad_id (hyps ,concl) : Tacticals.clause =
-  {Tacexpr.onhyps=
+let gen_in_arg_hyp_to_clause trad_id (hyps ,concl) : clause =
+  {onhyps=
    Option.map
      (fun l ->
 	List.map
-	  (fun id -> ( (all_occurrences_expr,trad_id id),InHyp))
+	  (fun id -> ( (AllOccurrences,trad_id id),InHyp))
 	  l
      )
      hyps;
-   Tacexpr.concl_occs = if concl then all_occurrences_expr else no_occurrences_expr}
+   concl_occs = if concl then AllOccurrences else NoOccurrences}
 
 
 let raw_in_arg_hyp_to_clause = gen_in_arg_hyp_to_clause snd
@@ -287,13 +284,13 @@ let glob_in_arg_hyp_to_clause = gen_in_arg_hyp_to_clause (fun x -> x)
 (* spiwack argument for the commands of the retroknowledge *)
 
 let (wit_r_nat_field, globwit_r_nat_field, rawwit_r_nat_field) =
-  Genarg.create_arg "r_nat_field"
+  Genarg.create_arg None "r_nat_field"
 let (wit_r_n_field, globwit_r_n_field, rawwit_r_n_field) =
-  Genarg.create_arg "r_n_field"
+  Genarg.create_arg None "r_n_field"
 let (wit_r_int31_field, globwit_r_int31_field, rawwit_r_int31_field) =
-  Genarg.create_arg "r_int31_field"
+  Genarg.create_arg None "r_int31_field"
 let (wit_r_field, globwit_r_field, rawwit_r_field) =
-  Genarg.create_arg "r_field"
+  Genarg.create_arg None "r_field"
 
 (* spiwack: the print functions are incomplete, but I don't know what they are
 	used for *)
@@ -382,7 +379,9 @@ PRINTED BY pr_r_int31_field
 | [ "int31" "compare" ] -> [ Retroknowledge.Int31Compare ]
 | [ "int31" "head0" ] -> [ Retroknowledge.Int31Head0 ]
 | [ "int31" "tail0" ] -> [ Retroknowledge.Int31Tail0 ]
-
+| [ "int31" "lor" ] -> [ Retroknowledge.Int31Lor ]
+| [ "int31" "land" ] -> [ Retroknowledge.Int31Land ]
+| [ "int31" "lxor" ] -> [ Retroknowledge.Int31Lxor ]
 END
 
 ARGUMENT EXTEND retroknowledge_field

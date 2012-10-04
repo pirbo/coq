@@ -1,35 +1,36 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
+open Compat
 open Util
 open Term
 open Names
 open Pp
-open Topconstr
+open Constrexpr
 open Indfun_common
 open Indfun
 open Genarg
-open Pcoq
 open Tacticals
-open Constr
+open Misctypes
+open Miscops
 
 let pr_binding prc = function
-  | loc, Glob_term.NamedHyp id, c -> hov 1 (Ppconstr.pr_id id ++ str " := " ++ cut () ++ prc c)
-  | loc, Glob_term.AnonHyp n, c -> hov 1 (int n ++ str " := " ++ cut () ++ prc c)
+  | loc, NamedHyp id, c -> hov 1 (Ppconstr.pr_id id ++ str " := " ++ cut () ++ prc c)
+  | loc, AnonHyp n, c -> hov 1 (int n ++ str " := " ++ cut () ++ prc c)
 
 let pr_bindings prc prlc = function
-  | Glob_term.ImplicitBindings l ->
+  | ImplicitBindings l ->
       brk (1,1) ++ str "with" ++ brk (1,1) ++
-      Util.prlist_with_sep spc prc l
-  | Glob_term.ExplicitBindings l ->
+      pr_sequence prc l
+  | ExplicitBindings l ->
       brk (1,1) ++ str "with" ++ brk (1,1) ++
-        Util.prlist_with_sep spc (fun b -> str"(" ++ pr_binding prlc b ++ str")") l
-  | Glob_term.NoBindings -> mt ()
+        pr_sequence (fun b -> str"(" ++ pr_binding prlc b ++ str")") l
+  | NoBindings -> mt ()
 
 let pr_with_bindings prc prlc (c,bl) =
   prc c ++ hv 0 (pr_bindings prc prlc bl)
@@ -111,7 +112,7 @@ TACTIC EXTEND snewfunind
 END
 
 
-let pr_constr_coma_sequence prc _ _ = Util.prlist_with_sep Util.pr_comma prc
+let pr_constr_coma_sequence prc _ _ = prlist_with_sep pr_comma prc
 
 ARGUMENT EXTEND constr_coma_sequence'
   TYPED AS constr_list
@@ -137,7 +138,7 @@ module FunctionGram =
 struct
   let gec s = Gram.entry_create ("Function."^s)
 		(* types *)
-  let function_rec_definition_loc : (Vernacexpr.fixpoint_expr * Vernacexpr.decl_notation list) located Gram.entry = gec "function_rec_definition_loc"
+  let function_rec_definition_loc : (Vernacexpr.fixpoint_expr * Vernacexpr.decl_notation list) Loc.located Gram.entry = gec "function_rec_definition_loc"
 end
 open FunctionGram
 
@@ -145,16 +146,16 @@ GEXTEND Gram
   GLOBAL: function_rec_definition_loc ;
 
   function_rec_definition_loc:
-    [ [ g = Vernac.rec_definition -> loc, g ]]
+    [ [ g = Vernac.rec_definition -> !@loc, g ]]
     ;
 
   END
-type 'a function_rec_definition_loc_argtype = ((Vernacexpr.fixpoint_expr * Vernacexpr.decl_notation list) located, 'a) Genarg.abstract_argument_type
+type 'a function_rec_definition_loc_argtype = ((Vernacexpr.fixpoint_expr * Vernacexpr.decl_notation list) Loc.located, 'a) Genarg.abstract_argument_type
 
 let (wit_function_rec_definition_loc : Genarg.tlevel function_rec_definition_loc_argtype),
   (globwit_function_rec_definition_loc : Genarg.glevel function_rec_definition_loc_argtype),
   (rawwit_function_rec_definition_loc : Genarg.rlevel function_rec_definition_loc_argtype) =
-  Genarg.create_arg "function_rec_definition_loc"
+  Genarg.create_arg None "function_rec_definition_loc"
 VERNAC COMMAND EXTEND Function
    ["Function" ne_function_rec_definition_loc_list_sep(recsl,"with")] ->
 	[
@@ -180,12 +181,12 @@ let warning_error names e =
     | Building_graph e ->
 	Pp.msg_warning
 	  (str "Cannot define graph(s) for " ++
-	     h 1 (prlist_with_sep (fun _ -> str","++spc ()) Libnames.pr_reference names) ++
+	     h 1 (pr_enum Libnames.pr_reference names) ++
 	     if do_observe () then (spc () ++ Errors.print e) else mt ())
     | Defining_principle e ->
 	Pp.msg_warning
 	  (str "Cannot define principle(s) for "++
-	     h 1 (prlist_with_sep (fun _ -> str","++spc ()) Libnames.pr_reference names) ++
+	     h 1 (pr_enum Libnames.pr_reference names) ++
 	     if do_observe () then Errors.print e else mt ())
     | _ -> raise e
 
@@ -207,7 +208,7 @@ VERNAC COMMAND EXTEND NewFunctionalScheme
 		    ;
 		    try Functional_principles_types.build_scheme fas
 		    with Functional_principles_types.No_graph_found ->
-		      Util.error ("Cannot generate induction principle(s)")
+		      Errors.error ("Cannot generate induction principle(s)")
     		      | e ->
 			  let names = List.map (fun (_,na,_) -> na) fas in
 			  warning_error names e
@@ -308,7 +309,7 @@ let mkEq typ c1 c2 =
 let poseq_unsafe idunsafe cstr gl =
   let typ = Tacmach.pf_type_of gl cstr in
   tclTHEN
-    (Tactics.letin_tac None (Name idunsafe) cstr None allHypsAndConcl)
+    (Tactics.letin_tac None (Name idunsafe) cstr None Locusops.allHypsAndConcl)
     (tclTHENFIRST
       (Tactics.assert_tac Anonymous (mkEq typ (mkVar idunsafe) cstr))
       Tactics.reflexivity)
@@ -377,7 +378,7 @@ let finduction (oid:identifier option) (heuristic: fapp_info list -> fapp_info l
   let info_list = find_fapp test g in
   let ordered_info_list = heuristic info_list in
   prlistconstr (List.map (fun x -> applist (x.fname,x.largs)) ordered_info_list);
-  if List.length ordered_info_list = 0 then Util.error "function not found in goal\n";
+  if List.length ordered_info_list = 0 then Errors.error "function not found in goal\n";
   let taclist: Proof_type.tactic list =
     List.map
       (fun info ->
@@ -419,7 +420,7 @@ TACTIC EXTEND finduction
     ["finduction" ident(id) natural_opt(oi)] ->
       [
 	match oi with
-	  | Some(n) when n<=0 -> Util.error "numerical argument must be > 0"
+	  | Some(n) when n<=0 -> Errors.error "numerical argument must be > 0"
 	  | _ ->
 	      let heuristic = chose_heuristic oi in
 	      finduction (Some id) heuristic tclIDTAC
@@ -458,19 +459,19 @@ VERNAC COMMAND EXTEND MergeFunind
       "with" "(" ident(id2) ne_ident_list(cl2)  ")" "using" ident(id) ] ->
      [
        let f1 = Constrintern.interp_constr Evd.empty (Global.env())
-	 (CRef (Libnames.Ident (Util.dummy_loc,id1))) in
+	 (CRef (Libnames.Ident (Loc.ghost,id1))) in
        let f2 = Constrintern.interp_constr Evd.empty (Global.env())
-	 (CRef (Libnames.Ident (Util.dummy_loc,id2))) in
+	 (CRef (Libnames.Ident (Loc.ghost,id2))) in
        let f1type = Typing.type_of (Global.env()) Evd.empty f1 in
        let f2type = Typing.type_of (Global.env()) Evd.empty f2 in
        let ar1 = List.length (fst (decompose_prod f1type)) in
        let ar2 = List.length (fst (decompose_prod f2type)) in
        let _ =
 	 if ar1 <> List.length cl1 then
-	   Util.error ("not the right number of arguments for " ^ string_of_id id1) in
+	   Errors.error ("not the right number of arguments for " ^ string_of_id id1) in
        let _ =
 	 if ar2 <> List.length cl2 then
-	   Util.error ("not the right number of arguments for " ^ string_of_id id2) in
+	   Errors.error ("not the right number of arguments for " ^ string_of_id id2) in
        Merge.merge id1 id2 (Array.of_list cl1) (Array.of_list cl2)  id
      ]
 END

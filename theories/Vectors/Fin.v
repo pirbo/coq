@@ -14,7 +14,7 @@ Require Arith_base.
 the n-uplet and [FS] set (n-1)-uplet of all the element but the first.
 
    Author: Pierre Boutillier
-   Institution: PPS, INRIA 12/2010
+   Institution: PPS, INRIA 12/2010-01/2012-07/2012
 *)
 
 Inductive t : nat -> Set :=
@@ -23,10 +23,7 @@ Inductive t : nat -> Set :=
 
 Section SCHEMES.
 Definition case0 P (p: t 0): P p :=
-  match p as p' in t n return
-    match n as n' return t n' -> Type
-  with |0 => fun f0 => P f0 |S _ => fun _ => @ID end p'
-  with |F1 _ => @id |FS _ _ => @id end.
+  match p with | F1 _ | FS _ _ => fun devil => False_rect (@ID) devil (* subterm !!! *) end.
 
 Definition caseS (P: forall {n}, t (S n) -> Type)
   (P1: forall n, @P n F1) (PS : forall {n} (p: t n), P (FS p))
@@ -54,11 +51,8 @@ Definition rect2 (P: forall {n} (a b: t n), Type)
     forall {n} (a b: t n), P a b :=
 fix rect2_fix {n} (a: t n): forall (b: t n), P a b :=
 match a with
-  |F1 m => fun (b: t (S m)) => match b as b' in t n'
-                   return match n',b' with
-                            |0,_ => @ID
-                            |S n0,b0 => P F1 b0
-                          end with
+  |F1 m => fun (b: t (S m)) => match b as b' in t (S n')
+                   return P F1 b' with
                      |F1 m' => H0 m'
                      |FS m' b' => H1 b'
                    end
@@ -69,10 +63,17 @@ match a with
 end.
 End SCHEMES.
 
+Definition FS_inj {n} (x y: t n) (eq: FS x = FS y): x = y :=
+match eq in _ = a return
+  match a as a' in t m return match m with |0 => Prop |S n' => t n' -> Prop end
+  with @F1 _ =>  fun _ => True |@FS _ y => fun x' => x' = y end x with
+  eq_refl => eq_refl
+end.
+
 (** [to_nat f] = p iff [f] is the p{^ th} element of [fin m]. *)
 Fixpoint to_nat {m} (n : t m) : {i | i < m} :=
-  match n in t k return {i | i< k} with
-    |F1 j => exist (fun i => i< S j) 0 (Lt.lt_0_Sn j)
+  match n with
+    |F1 j => exist _ 0 (Lt.lt_0_Sn j)
     |FS _ p => match to_nat p with |exist i P => exist _ (S i) (Lt.lt_n_S _ _ P) end
   end.
 
@@ -80,7 +81,7 @@ Fixpoint to_nat {m} (n : t m) : {i | i < m} :=
 p >= n else *)
 Fixpoint of_nat (p n : nat) : (t n) + { exists m, p = n + m } :=
   match n with
-   |0 => inright _ (ex_intro (fun x => p = 0 + x) p (@eq_refl _ p))
+   |0 => inright _ (ex_intro _ p eq_refl)
    |S n' => match p with
       |0 => inleft _ (F1)
       |S p' => match of_nat p' n' with
@@ -138,6 +139,7 @@ Qed.
 [fin (n + m)]
 Really really ineficient !!! *)
 Definition L_R {m} n (p : t m) : t (n + m).
+Proof.
 induction n.
   exact p.
   exact ((fix LS k (p: t k) :=
@@ -167,6 +169,7 @@ end.
 
 Lemma depair_sanity {m n} (o : t m) (p : t n) :
   proj1_sig (to_nat (depair o p)) = n * (proj1_sig (to_nat o)) + (proj1_sig (to_nat p)).
+Proof.
 induction o ; simpl.
   rewrite L_sanity. now rewrite Mult.mult_0_r.
 
@@ -174,3 +177,55 @@ induction o ; simpl.
   rewrite Plus.plus_assoc. destruct (to_nat o); simpl; rewrite Mult.mult_succ_r.
     now rewrite (Plus.plus_comm n).
 Qed.
+
+Fixpoint eqb {m n} (p : t m) (q : t n) :=
+match p, q with
+| @F1 m', @F1 n' => EqNat.beq_nat m' n'
+| @FS _ _, @F1 _ => false
+| @F1 _, @FS _ _ => false
+| @FS _ p', @FS _ q' => eqb p' q'
+end.
+
+Lemma eqb_nat_eq : forall m n (p : t m) (q : t n), eqb p q = true -> m = n.
+Proof.
+intros m n p; revert n; induction p; destruct q; simpl; intros; f_equal.
++ now apply EqNat.beq_nat_true.
++ easy.
++ easy.
++ eapply IHp. eassumption.
+Qed.
+
+Lemma eqb_eq : forall n (p q : t n), eqb p q = true <-> p = q.
+Proof.
+apply rect2; simpl; intros.
+- split; intros ; [ reflexivity | now apply EqNat.beq_nat_true_iff ].
+- now split.
+- now split.
+- eapply iff_trans.
+ + eassumption.
+ + split.
+  * intros; now f_equal.
+  * apply FS_inj.
+Qed.
+
+Lemma eq_dec {n} (x y : t n): {x = y} + {x <> y}.
+Proof.
+ case_eq (eqb x y); intros.
+  + left; now apply eqb_eq.
+  + right. intros Heq. apply <- eqb_eq in Heq. congruence.
+Defined.
+
+Definition cast: forall {m} (v: t m) {n}, m = n -> t n.
+Proof.
+refine (fix cast {m} (v: t m) {struct v} :=
+ match v in t m' return forall n, m' = n -> t n with
+ |@F1 _ => fun n => match n with
+   | 0 => fun H => False_rect _ _
+   | S n' => fun H => F1
+ end
+ |@FS _ f => fun n => match n with
+   | 0 => fun H => False_rect _ _
+   | S n' => fun H => FS (cast f n' (f_equal pred H))
+ end
+end); discriminate.
+Defined.

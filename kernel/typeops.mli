@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -32,8 +32,10 @@ val assumption_of_judgment :  env -> unsafe_judgment -> types
 val type_judgment          :  env -> unsafe_judgment -> unsafe_type_judgment
 
 (** {6 Type of sorts. } *)
-val judge_of_prop_contents : contents -> unsafe_judgment
-val judge_of_type          : universe -> unsafe_judgment
+val judge_of_prop : unsafe_judgment
+val judge_of_set  : unsafe_judgment
+val judge_of_prop_contents  : contents -> unsafe_judgment
+val judge_of_type           : universe -> unsafe_judgment
 
 (** {6 Type of a bound variable. } *)
 val judge_of_relative : env -> int -> unsafe_judgment

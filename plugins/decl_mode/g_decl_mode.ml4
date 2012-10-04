@@ -1,26 +1,24 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 (* arnaud: veiller à l'aspect tutorial des commentaires *)
 
+open Compat
 open Pp
 open Tok
 open Decl_expr
 open Names
-open Term
-open Genarg
 open Pcoq
 
 open Pcoq.Constr
 open Pcoq.Tactic
-open Pcoq.Vernac_
 
 let pr_goal gs =
   let (g,sigma) = Goal.V82.nf_evar (Tacmach.project gs) (Evd.sig_it gs) in
@@ -29,7 +27,7 @@ let pr_goal gs =
     (str "     *** Declarative Mode ***" ++ fnl ()++fnl ()),
     (str "thesis := "  ++ fnl ()),
     Printer.pr_context_of env,
-    Printer.pr_ltype_env_at_top env (Goal.V82.concl sigma g)
+    Printer.pr_goal_concl_style_env env (Goal.V82.concl sigma g)
   in
     preamb ++
     str"  " ++ hv 0 (penv ++ fnl () ++
@@ -46,15 +44,15 @@ let pr_open_subgoals () =
 *)
 
 let pr_proof_instr instr = 
-  Util.anomaly "Cannot print a proof_instr"
+  Errors.anomaly "Cannot print a proof_instr"
     (* arnaud: Il nous faut quelque chose de type extr_genarg_printer si on veut aller
                      dans cette direction
        Ppdecl_proof.pr_proof_instr (Global.env()) instr
     *)
 let pr_raw_proof_instr instr =
-  Util.anomaly "Cannot print a raw proof_instr"
+  Errors.anomaly "Cannot print a raw proof_instr"
 let pr_glob_proof_instr instr =
-  Util.anomaly "Cannot print a non-interpreted proof_instr"
+  Errors.anomaly "Cannot print a non-interpreted proof_instr"
 
 let interp_proof_instr _ { Evd.it = gl ; sigma = sigma }=
   Decl_interp.interp_proof_instr 
@@ -65,7 +63,7 @@ let interp_proof_instr _ { Evd.it = gl ; sigma = sigma }=
 let vernac_decl_proof () = 
   let pf = Proof_global.give_me_the_proof () in
   if Proof.is_done pf then 
-    Util.error "Nothing left to prove here."
+    Errors.error "Nothing left to prove here."
   else
     Proof.transaction pf begin fun () ->
       Decl_proof_instr.go_to_proof_mode () ;
@@ -103,7 +101,7 @@ let proof_instr = Gram.entry_create "proofmode:instr"
 
 (* [Genarg.create_arg] creates a new embedding into Genarg. *)
 let (wit_proof_instr,globwit_proof_instr,rawwit_proof_instr) =
-  Genarg.create_arg "proof_instr"
+  Genarg.create_arg None "proof_instr"
 let _ = Tacinterp.add_interp_genarg "proof_instr"
   begin
   begin fun e x -> (* declares the globalisation function *)
@@ -111,6 +109,7 @@ let _ = Tacinterp.add_interp_genarg "proof_instr"
       (Decl_interp.intern_proof_instr e (Genarg.out_gen rawwit_proof_instr x))
   end,
   begin fun ist gl x -> (* declares the interpretation function *)
+    Tacmach.project gl ,
     Genarg.in_gen wit_proof_instr 
       (interp_proof_instr ist gl (Genarg.out_gen globwit_proof_instr x))
   end,
@@ -191,7 +190,7 @@ GLOBAL: proof_instr;
   statement :
     [[ i=ident ; ":" ; c=constr -> {st_label=Name i;st_it=c}
      | i=ident -> {st_label=Anonymous;
-		   st_it=Topconstr.CRef (Libnames.Ident (loc, i))}
+		   st_it=Constrexpr.CRef (Libnames.Ident (!@loc, i))}
      | c=constr -> {st_label=Anonymous;st_it=c}
      ]];
   constr_or_thesis :
@@ -204,7 +203,7 @@ GLOBAL: proof_instr;
     |
       [ i=ident ; ":" ; cot=constr_or_thesis -> {st_label=Name i;st_it=cot}
       | i=ident -> {st_label=Anonymous;
-		    st_it=This (Topconstr.CRef (Libnames.Ident (loc, i)))}
+		    st_it=This (Constrexpr.CRef (Libnames.Ident (!@loc, i)))}
       | c=constr -> {st_label=Anonymous;st_it=This c}
       ]
     ];

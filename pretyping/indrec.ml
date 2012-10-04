@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -11,23 +11,20 @@
 (* This file builds various inductive schemes *)
 
 open Pp
+open Errors
 open Util
 open Names
 open Libnames
+open Globnames
 open Nameops
 open Term
 open Namegen
 open Declarations
-open Entries
 open Inductive
 open Inductiveops
 open Environ
 open Reductionops
-open Typeops
-open Type_errors
-open Safe_typing
 open Nametab
-open Sign
 
 type dep_flag = bool
 
@@ -137,7 +134,7 @@ let type_rec_branch is_rec dep env sigma (vargs,depPvect,decP) tyi cs recargs =
 	    let d = (n,Some b,t) in
 	    mkLetIn (n,b,t,prec (push_rel d env) (i+1) (d::sign) c)
      	| Ind (_,_) ->
-	    let realargs = list_skipn nparams largs in
+	    let realargs = List.skipn nparams largs in
 	    let base = applist (lift i pk,realargs) in
             if depK then
 	      Reduction.beta_appvect
@@ -158,7 +155,7 @@ let type_rec_branch is_rec dep env sigma (vargs,depPvect,decP) tyi cs recargs =
                   (match dest_recarg ra with
 	            | Mrec (_,j) when is_rec -> (depPvect.(j),rest)
 	            | Imbr _  ->
-		        Flags.if_warn msg_warning (str "Ignoring recursive call");
+		        Flags.if_warn msg_warning (strbrk "Ignoring recursive call");
 		        (None,rest)
                     | _ -> (None, rest))
 	  in
@@ -212,7 +209,7 @@ let make_rec_branch_arg env sigma (nparrec,fvect,decF) f cstr recargs =
 	    let d = (n,Some b,t) in
 	    mkLetIn (n,b,t,prec (push_rel d env) (i+1) (d::hyps) c)
      	| Ind _ ->
-            let realargs = list_skipn nparrec largs
+            let realargs = List.skipn nparrec largs
             and arg = appvect (mkRel (i+1), Termops.extended_rel_vect 0 hyps) in
             applist(lift i fk,realargs@[arg])
      	| _ -> assert false
@@ -324,7 +321,7 @@ let mis_make_indrec env sigma listdepkind mib =
 		(fun f -> appvect (f, Termops.extended_rel_vect ndepar lnonparrec))
 		fi
 	      in
-		array_map3
+		Array.map3
 		  (make_rec_branch_arg env sigma
 		      (nparrec,depPvec,larsign))
                   vecfi constrs (dest_subterms recargsvec.(tyi))
@@ -434,7 +431,7 @@ let mis_make_indrec env sigma listdepkind mib =
 	mis_make_case_com dep env sigma indi (mibi,mipi) kind
   in
     (* Body of mis_make_indrec *)
-    list_tabulate make_one_rec nrec
+    List.tabulate make_one_rec nrec
 
 (**********************************************************************)
 (* This builds elimination predicate for Case tactic *)

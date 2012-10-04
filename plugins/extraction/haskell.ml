@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,10 +9,11 @@
 (*s Production of Haskell syntax. *)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
-open Libnames
+open Globnames
 open Table
 open Miniml
 open Mlutil
@@ -31,13 +32,19 @@ let keywords =
     "as"; "qualified"; "hiding" ; "unit" ; "unsafeCoerce" ]
   Idset.empty
 
-let preamble mod_name used_modules usf =
+let pp_comment s = str "-- " ++ s ++ fnl ()
+let pp_bracket_comment s = str"{- " ++ hov 0 s ++ str" -}"
+
+let preamble mod_name comment used_modules usf =
   let pp_import mp = str ("import qualified "^ string_of_modfile mp ^"\n")
   in
   (if not usf.magic then mt ()
    else
-     str "{-# OPTIONS_GHC -cpp -fglasgow-exts #-}\n" ++
-     str "{- For Hugs, use the option -F\"cpp -P -traditional\" -}\n\n")
+     str "{-# OPTIONS_GHC -cpp -fglasgow-exts #-}" ++ fnl () ++
+     str "{- For Hugs, use the option -F\"cpp -P -traditional\" -}")
+  ++ fnl () ++ fnl ()
+  ++
+  pp_bracket_comment comment ++ fnl () ++ fnl ()
   ++
   str "module " ++ pr_upper_id mod_name ++ str " where" ++ fnl2 () ++
   str "import qualified Prelude" ++ fnl () ++
@@ -73,10 +80,6 @@ let pp_global k r =
 
 (*s Pretty-printing of types. [par] is a boolean indicating whether parentheses
     are needed or not. *)
-
-let kn_sig =
-  let specif = MPfile (dirpath_of_string "Coq.Init.Specif") in
-  make_mind specif empty_dirpath (mk_label "sig")
 
 let rec pp_type par vl t =
   let rec pp_rec par = function
@@ -216,7 +219,7 @@ and pp_fix par env i (ids,bl) args =
        (v 1 (str "let {" ++ fnl () ++
 	     prvect_with_sep (fun () -> str ";" ++ fnl ())
 	       (fun (fi,ti) -> pp_function env (pr_id fi) ti)
-	       (array_map2 (fun a b -> a,b) ids bl) ++
+	       (Array.map2 (fun a b -> a,b) ids bl) ++
 	     str "}") ++
         fnl () ++ str "in " ++ pp_apply (pr_id ids.(i)) false args))
 
@@ -228,8 +231,6 @@ and pp_function env f t =
      hov 2 (pp_expr false env' [] t'))
 
 (*s Pretty-printing of inductive types declaration. *)
-
-let pp_comment s = str "-- " ++ s ++ fnl ()
 
 let pp_logical_ind packet =
   pp_comment (pr_id packet.ip_typename ++ str " : logical inductive") ++
@@ -357,7 +358,7 @@ let haskell_descr = {
   preamble = preamble;
   pp_struct = pp_struct;
   sig_suffix = None;
-  sig_preamble = (fun _ _ _ -> mt ());
+  sig_preamble = (fun _ s _ _ -> (pp_bracket_comment s)++fnl());
   pp_sig = (fun _ -> mt ());
   pp_decl = pp_decl;
 }

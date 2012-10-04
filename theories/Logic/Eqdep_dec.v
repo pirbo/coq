@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,7 +9,7 @@
 (* Created by Bruno Barras, Jan 1998 *)
 (* Made a module instance for EqdepFacts by Hugo Herbelin, Mar 2006 *)
 
-(** We prove that there is only one proof of [x=x], i.e [refl_equal x].
+(** We prove that there is only one proof of [x=x], i.e [eq_refl x].
     This holds if the equality upon the set of [x] is decidable.
     A corollary of this theorem is the equality of the right projections
     of two equal dependent pairs.
@@ -43,7 +43,7 @@ Section EqdepDec.
   Let comp (x y y':A) (eq1:x = y) (eq2:x = y') : y = y' :=
     eq_ind _ (fun a => a = y') eq2 _ eq1.
 
-  Remark trans_sym_eq : forall (x y:A) (u:x = y), comp u u = refl_equal y.
+  Remark trans_sym_eq : forall (x y:A) (u:x = y), comp u u = eq_refl y.
   Proof.
     intros.
     case u; trivial.
@@ -61,7 +61,7 @@ Section EqdepDec.
 
   Let nu_constant : forall (y:A) (u v:x = y), nu u = nu v.
     intros.
-    unfold nu in |- *.
+    unfold nu.
     case (eq_dec x y); intros.
     reflexivity.
 
@@ -69,13 +69,13 @@ Section EqdepDec.
   Qed.
 
 
-  Let nu_inv (y:A) (v:x = y) : x = y := comp (nu (refl_equal x)) v.
+  Let nu_inv (y:A) (v:x = y) : x = y := comp (nu (eq_refl x)) v.
 
 
   Remark nu_left_inv : forall (y:A) (u:x = y), nu_inv (nu u) = u.
   Proof.
     intros.
-    case u; unfold nu_inv in |- *.
+    case u; unfold nu_inv.
     apply trans_sym_eq.
   Qed.
 
@@ -90,10 +90,10 @@ Section EqdepDec.
   Qed.
 
   Theorem K_dec :
-    forall P:x = x -> Prop, P (refl_equal x) -> forall p:x = x, P p.
+    forall P:x = x -> Prop, P (eq_refl x) -> forall p:x = x, P p.
   Proof.
     intros.
-    elim eq_proofs_unicity with x (refl_equal x) p.
+    elim eq_proofs_unicity with x (eq_refl x) p.
     trivial.
   Qed.
 
@@ -115,7 +115,7 @@ Section EqdepDec.
   Proof.
     intros.
     cut (proj (ex_intro P x y) y = proj (ex_intro P x y') y).
-    simpl in |- *.
+    simpl.
     case (eq_dec x x).
     intro e.
     elim e using K_dec; trivial.
@@ -135,7 +135,7 @@ Require Import EqdepFacts.
 Theorem K_dec_type :
   forall A:Type,
     (forall x y:A, {x = y} + {x <> y}) ->
-    forall (x:A) (P:x = x -> Prop), P (refl_equal x) -> forall p:x = x, P p.
+    forall (x:A) (P:x = x -> Prop), P (eq_refl x) -> forall p:x = x, P p.
 Proof.
   intros A eq_dec x P H p.
   elim p using K_dec; intros.
@@ -146,7 +146,7 @@ Qed.
 Theorem K_dec_set :
   forall A:Set,
     (forall x y:A, {x = y} + {x <> y}) ->
-    forall (x:A) (P:x = x -> Prop), P (refl_equal x) -> forall p:x = x, P p.
+    forall (x:A) (P:x = x -> Prop), P (eq_refl x) -> forall p:x = x, P p.
 Proof fun A => K_dec_type (A:=A).
 
 (** We deduce the [eq_rect_eq] axiom for (decidable) types *)
@@ -212,13 +212,13 @@ Module DecidableEqDep (M:DecidableType).
 
   (** Uniqueness of Reflexive Identity Proofs *)
 
-  Lemma UIP_refl : forall (x:U) (p:x = x), p = refl_equal x.
+  Lemma UIP_refl : forall (x:U) (p:x = x), p = eq_refl x.
   Proof (UIP__UIP_refl U UIP).
 
   (** Streicher's axiom K *)
 
   Lemma Streicher_K :
-    forall (x:U) (P:x = x -> Prop), P (refl_equal x) -> forall p:x = x, P p.
+    forall (x:U) (P:x = x -> Prop), P (eq_refl x) -> forall p:x = x, P p.
   Proof (K_dec_type eq_dec).
 
   (** Injectivity of equality on dependent pairs in [Type] *)
@@ -281,13 +281,13 @@ Module DecidableEqDepSet (M:DecidableSet).
 
   (** Uniqueness of Reflexive Identity Proofs *)
 
-  Lemma UIP_refl : forall (x:U) (p:x = x), p = refl_equal x.
+  Lemma UIP_refl : forall (x:U) (p:x = x), p = eq_refl x.
   Proof N.UIP_refl.
 
   (** Streicher's axiom K *)
 
   Lemma Streicher_K :
-    forall (x:U) (P:x = x -> Prop), P (refl_equal x) -> forall p:x = x, P p.
+    forall (x:U) (P:x = x -> Prop), P (eq_refl x) -> forall p:x = x, P p.
   Proof N.Streicher_K.
 
   (** Proof-irrelevance on subsets of decidable sets *)
@@ -301,7 +301,7 @@ Module DecidableEqDepSet (M:DecidableSet).
 
   Lemma inj_pair2 :
     forall (P:U -> Type) (p:U) (x y:P p),
-      existS P p x = existS P p y -> x = y.
+      existT P p x = existT P p y -> x = y.
   Proof eq_dep_eq__inj_pair2 U N.eq_dep_eq.
 
   (** Injectivity of equality on dependent pairs with second component

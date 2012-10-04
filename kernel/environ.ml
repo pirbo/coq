@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -20,6 +20,7 @@
 (* This file defines the type of environments on which the
    type-checker works, together with simple related functions *)
 
+open Errors
 open Util
 open Names
 open Sign
@@ -67,7 +68,7 @@ let push_rel = push_rel
 let push_rel_context ctxt x = Sign.fold_rel_context push_rel ctxt ~init:x
 
 let push_rec_types (lna,typarray,_) env =
-  let ctxt = array_map2_i (fun i na t -> (na, None, lift i t)) lna typarray in
+  let ctxt = Array.map2_i (fun i na t -> (na, None, lift i t)) lna typarray in
   Array.fold_left (fun e assum -> push_rel assum e) env ctxt
 
 let fold_rel_context f env ~init =
@@ -99,6 +100,7 @@ let map_named_val f (ctxt,ctxtv) =
 let empty_named_context = empty_named_context
 
 let push_named = push_named
+let push_named_context = List.fold_right push_named
 let push_named_context_val = push_named_context_val
 
 let val_of_named_context ctxt =
@@ -315,7 +317,7 @@ let compile_constant_body = Cbytegen.compile_constant_body
 
 exception Hyp_not_found
 
-let rec apply_to_hyp (ctxt,vals) id f =
+let apply_to_hyp (ctxt,vals) id f =
   let rec aux rtail ctxt vals =
     match ctxt, vals with
     | (idc,c,ct as d)::ctxt, v::vals ->
@@ -328,7 +330,7 @@ let rec apply_to_hyp (ctxt,vals) id f =
     | _, _ -> assert false
   in aux [] ctxt vals
 
-let rec apply_to_hyp_and_dependent_on (ctxt,vals) id f g =
+let apply_to_hyp_and_dependent_on (ctxt,vals) id f g =
   let rec aux ctxt vals =
     match ctxt,vals with
     | (idc,c,ct as d)::ctxt, v::vals ->
@@ -519,6 +521,9 @@ fun env field value ->
     | KInt31 (_, Int31Compare) -> add_int31_binop_from_const Cbytecodes.Kcompareint31
     | KInt31 (_, Int31Head0) -> add_int31_unop_from_const Cbytecodes.Khead0int31
     | KInt31 (_, Int31Tail0) -> add_int31_unop_from_const Cbytecodes.Ktail0int31
+    | KInt31 (_, Int31Lor) -> add_int31_binop_from_const Cbytecodes.Klorint31
+    | KInt31 (_, Int31Land) -> add_int31_binop_from_const Cbytecodes.Klandint31
+    | KInt31 (_, Int31Lxor) -> add_int31_binop_from_const Cbytecodes.Klxorint31
     | _ -> env.retroknowledge
   in
   Retroknowledge.add_field retroknowledge_with_reactive_info field value

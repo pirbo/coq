@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -110,7 +110,7 @@ let subst_rel_declaration sub (id,copt,t as x) =
   let t' = subst_mps sub t in
   if copt == copt' & t == t' then x else (id,copt',t')
 
-let subst_rel_context sub = list_smartmap (subst_rel_declaration sub)
+let subst_rel_context sub = List.smartmap (subst_rel_declaration sub)
 
 (* TODO: these substitution functions could avoid duplicating things
    when the substitution have preserved all the fields *)
@@ -141,11 +141,11 @@ let hcons_rel_decl ((n,oc,t) as d) =
   and t' = hcons_types t
   in if n' == n && oc' == oc && t' == t then d else (n',oc',t')
 
-let hcons_rel_context l = list_smartmap hcons_rel_decl l
+let hcons_rel_context l = List.smartmap hcons_rel_decl l
 
 let hcons_polyarity ar =
   { poly_param_levels =
-      list_smartmap (Option.smartmap hcons_univ) ar.poly_param_levels;
+      List.smartmap (Option.smartmap hcons_univ) ar.poly_param_levels;
     poly_level = hcons_univ ar.poly_level }
 
 let hcons_const_type = function
@@ -325,10 +325,10 @@ let subst_mind_packet sub mbp =
   { mind_consnames = mbp.mind_consnames;
     mind_consnrealdecls = mbp.mind_consnrealdecls;
     mind_typename = mbp.mind_typename;
-    mind_nf_lc = array_smartmap (subst_mps sub) mbp.mind_nf_lc;
+    mind_nf_lc = Array.smartmap (subst_mps sub) mbp.mind_nf_lc;
     mind_arity_ctxt = subst_rel_context sub mbp.mind_arity_ctxt;
     mind_arity = subst_indarity sub mbp.mind_arity;
-    mind_user_lc = array_smartmap (subst_mps sub) mbp.mind_user_lc;
+    mind_user_lc = Array.smartmap (subst_mps sub) mbp.mind_user_lc;
     mind_nrealargs = mbp.mind_nrealargs;
     mind_nrealargs_ctxt = mbp.mind_nrealargs_ctxt;
     mind_kelim = mbp.mind_kelim;
@@ -346,7 +346,7 @@ let subst_mind sub mib =
     mind_nparams_rec = mib.mind_nparams_rec;
     mind_params_ctxt =
       map_rel_context (subst_mps sub) mib.mind_params_ctxt;
-    mind_packets = array_smartmap (subst_mind_packet sub) mib.mind_packets ;
+    mind_packets = Array.smartmap (subst_mind_packet sub) mib.mind_packets ;
     mind_constraints = mib.mind_constraints  }
 
 let hcons_indarity = function
@@ -360,13 +360,13 @@ let hcons_mind_packet oib =
    mind_typename = hcons_ident oib.mind_typename;
    mind_arity_ctxt = hcons_rel_context oib.mind_arity_ctxt;
    mind_arity = hcons_indarity oib.mind_arity;
-   mind_consnames = array_smartmap hcons_ident oib.mind_consnames;
-   mind_user_lc = array_smartmap hcons_types oib.mind_user_lc;
-   mind_nf_lc = array_smartmap hcons_types oib.mind_nf_lc }
+   mind_consnames = Array.smartmap hcons_ident oib.mind_consnames;
+   mind_user_lc = Array.smartmap hcons_types oib.mind_user_lc;
+   mind_nf_lc = Array.smartmap hcons_types oib.mind_nf_lc }
 
 let hcons_mind mib =
   { mib with
-    mind_packets = array_smartmap hcons_mind_packet mib.mind_packets;
+    mind_packets = Array.smartmap hcons_mind_packet mib.mind_packets;
     mind_params_ctxt = hcons_rel_context mib.mind_params_ctxt;
     mind_constraints = hcons_constraints mib.mind_constraints }
 

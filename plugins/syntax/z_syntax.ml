@@ -1,17 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pcoq
 open Pp
+open Errors
 open Util
 open Names
-open Topconstr
-open Libnames
 open Bigint
 
 exception Non_closed_number
@@ -20,7 +18,7 @@ exception Non_closed_number
 (* Parsing positive via scopes                                        *)
 (**********************************************************************)
 
-open Libnames
+open Globnames
 open Glob_term
 
 let binnums = ["Coq";"Numbers";"BinNums"]
@@ -31,7 +29,7 @@ let make_path dir id = Libnames.make_path (make_dir dir) (id_of_string id)
 let positive_path = make_path binnums "positive"
 
 (* TODO: temporary hack *)
-let make_kn dir id = Libnames.encode_mind dir id
+let make_kn dir id = Globnames.encode_mind dir id
 
 let positive_kn = make_kn (make_dir binnums) (id_of_string "positive")
 let glob_positive = IndRef (positive_kn,0)
@@ -85,9 +83,9 @@ let uninterp_positive p =
 let _ = Notation.declare_numeral_interpreter "positive_scope"
   (positive_path,binnums)
   interp_positive
-  ([GRef (dummy_loc, glob_xI);
-    GRef (dummy_loc, glob_xO);
-    GRef (dummy_loc, glob_xH)],
+  ([GRef (Loc.ghost, glob_xI);
+    GRef (Loc.ghost, glob_xO);
+    GRef (Loc.ghost, glob_xH)],
    uninterp_positive,
    true)
 
@@ -136,8 +134,8 @@ let uninterp_n p =
 let _ = Notation.declare_numeral_interpreter "N_scope"
   (n_path,binnums)
   n_of_int
-  ([GRef (dummy_loc, glob_N0);
-    GRef (dummy_loc, glob_Npos)],
+  ([GRef (Loc.ghost, glob_N0);
+    GRef (Loc.ghost, glob_Npos)],
   uninterp_n,
   true)
 
@@ -184,8 +182,8 @@ let uninterp_z p =
 let _ = Notation.declare_numeral_interpreter "Z_scope"
   (z_path,binnums)
   z_of_int
-  ([GRef (dummy_loc, glob_ZERO);
-    GRef (dummy_loc, glob_POS);
-    GRef (dummy_loc, glob_NEG)],
+  ([GRef (Loc.ghost, glob_ZERO);
+    GRef (Loc.ghost, glob_POS);
+    GRef (Loc.ghost, glob_NEG)],
   uninterp_z,
   true)

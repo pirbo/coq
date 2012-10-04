@@ -1,19 +1,20 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
 open Pp
 open Bigint
 open Names
 open Nametab
 open Libnames
+open Globnames
+open Constrexpr
 open Glob_term
-open Topconstr
+open Notation_term
 open Ppextend
 
 (** Notations *)
@@ -53,7 +54,7 @@ val find_scope : scope_name -> scope
 (** Declare delimiters for printing *)
 
 val declare_delimiters : scope_name -> delimiters -> unit
-val find_delimiters_scope : loc -> delimiters -> scope_name
+val find_delimiters_scope : Loc.t -> delimiters -> scope_name
 
 (** {6 Declare and uses back and forth an interpretation of primitive token } *)
 
@@ -67,7 +68,7 @@ type required_module = full_path * string list
 type cases_pattern_status = bool (** true = use prim token in patterns *)
 
 type 'a prim_token_interpreter =
-    loc -> 'a -> glob_constr
+    Loc.t -> 'a -> glob_constr
 
 type 'a prim_token_uninterpreter =
     glob_constr list * (glob_constr -> 'a option) * cases_pattern_status
@@ -81,10 +82,10 @@ val declare_string_interpreter : scope_name -> required_module ->
 (** Return the [term]/[cases_pattern] bound to a primitive token in a
    given scope context*)
 
-val interp_prim_token : loc -> prim_token -> local_scopes ->
+val interp_prim_token : Loc.t -> prim_token -> local_scopes ->
   glob_constr * (notation_location * scope_name option)
-val interp_prim_token_cases_pattern : loc -> prim_token -> name ->
-  local_scopes -> cases_pattern * (notation_location * scope_name option)
+val interp_prim_token_cases_pattern_expr : Loc.t -> (global_reference -> unit) -> prim_token ->
+  local_scopes -> raw_cases_pattern_expr * (notation_location * scope_name option)
 
 (** Return the primitive token associated to a [term]/[cases_pattern];
    raise [No_match] if no such token *)
@@ -93,6 +94,8 @@ val uninterp_prim_token :
   glob_constr -> scope_name * prim_token
 val uninterp_prim_token_cases_pattern :
   cases_pattern -> name * scope_name * prim_token
+val uninterp_prim_token_ind_pattern :
+ inductive -> cases_pattern list -> scope_name * prim_token
 
 val availability_of_prim_token :
   prim_token -> scope_name -> local_scopes -> delimiters option option
@@ -110,13 +113,15 @@ val declare_notation_interpretation : notation -> scope_name option ->
 val declare_uninterpretation : interp_rule -> interpretation -> unit
 
 (** Return the interpretation bound to a notation *)
-val interp_notation : loc -> notation -> local_scopes ->
+val interp_notation : Loc.t -> notation -> local_scopes ->
       interpretation * (notation_location * scope_name option)
 
 (** Return the possible notations for a given term *)
 val uninterp_notations : glob_constr ->
       (interp_rule * interpretation * int option) list
 val uninterp_cases_pattern_notations : cases_pattern ->
+      (interp_rule * interpretation * int option) list
+val uninterp_ind_pattern_notations : inductive ->
       (interp_rule * interpretation * int option) list
 
 (** Test if a notation is available in the scopes 
@@ -132,7 +137,7 @@ val level_of_notation : notation -> level (** raise [Not_found] if no level *)
 
 (** {6 Miscellaneous} *)
 
-val interp_notation_as_global_reference : loc -> (global_reference -> bool) ->
+val interp_notation_as_global_reference : Loc.t -> (global_reference -> bool) ->
       notation -> delimiters option -> global_reference
 
 (** Checks for already existing notations *)
@@ -145,7 +150,13 @@ val declare_arguments_scope :
 
 val find_arguments_scope : global_reference -> scope_name option list
 
-val declare_class_scope : scope_name -> Classops.cl_typ -> unit
+type scope_class
+
+val scope_class_of_reference : global_reference -> scope_class
+val subst_scope_class :
+  Mod_subst.substitution -> scope_class -> scope_class option
+
+val declare_scope_class : scope_name -> scope_class -> unit
 val declare_ref_arguments_scope : global_reference -> unit
 
 val compute_arguments_scope : Term.types -> scope_name option list
@@ -162,6 +173,7 @@ val make_notation_key : symbol list -> notation
 val decompose_notation_key : notation -> symbol list
 
 (** Prints scopes (expects a pure aconstr printer) *)
+val pr_scope_class : scope_class -> std_ppcmds
 val pr_scope : (glob_constr -> std_ppcmds) -> scope_name -> std_ppcmds
 val pr_scopes : (glob_constr -> std_ppcmds) -> std_ppcmds
 val locate_notation : (glob_constr -> std_ppcmds) -> notation ->
@@ -177,3 +189,5 @@ val declare_notation_printing_rule : notation -> unparsing_rule -> unit
 val find_notation_printing_rule : notation -> unparsing_rule
 
 (** Rem: printing rules for primitive token are canonical *)
+
+val with_notation_protection : ('a -> 'b) -> 'a -> 'b

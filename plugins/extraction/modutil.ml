@@ -1,20 +1,18 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Names
-open Declarations
-open Environ
-open Libnames
+open Globnames
+open Errors
 open Util
 open Miniml
 open Table
 open Mlutil
-open Mod_subst
 
 (*S Functions upon ML modules. *)
 
@@ -32,7 +30,7 @@ let se_iter do_decl do_spec =
     | MTfunsig (_,mt,mt') -> mt_iter mt; mt_iter mt'
     | MTwith (mt,ML_With_type(idl,l,t))->
 	let mp_mt = msid_of_mt mt in
-	let l',idl' = list_sep_last idl in
+	let l',idl' = List.sep_last idl in
 	let mp_w =
 	  List.fold_left (fun mp l -> MPdot(mp,label_of_id l)) mp_mt idl'
 	in
@@ -194,6 +192,15 @@ let signature_of_structure s =
 
 (*s Searching one [ml_decl] in a [ml_structure] by its [global_reference] *)
 
+let is_modular = function
+  | SEdecl _ -> false
+  | SEmodule _ | SEmodtype _ -> true
+
+let rec search_structure l m = function
+  | [] -> raise Not_found
+  | (lab,d)::_ when lab=l && is_modular d = m -> d
+  | _::fields -> search_structure l m fields
+
 let get_decl_in_structure r struc =
   try
     let base_mp,ll = labels_of_ref r in
@@ -202,7 +209,7 @@ let get_decl_in_structure r struc =
     let rec go ll sel = match ll with
       | [] -> assert false
       | l :: ll ->
-	  match List.assoc l sel with
+	  match search_structure l (ll<>[]) sel with
 	    | SEdecl d -> d
 	    | SEmodtype m -> assert false
 	    | SEmodule m ->
@@ -263,7 +270,7 @@ let rec optim_se top to_appear s = function
 	else all := false
       done;
       if !all && top && not (library ())
-	&& (array_for_all (fun r -> not (List.mem r to_appear)) rv)
+	&& (Array.for_all (fun r -> not (List.mem r to_appear)) rv)
       then optim_se top to_appear s lse
       else (l,SEdecl (Dfix (rv, av, tv))) :: (optim_se top to_appear s lse)
   | (l,SEmodule m) :: lse ->
@@ -281,8 +288,6 @@ and optim_me to_appear s = function
 (* After these optimisations, some dependencies may not be needed anymore.
    For non-library extraction, we recompute a minimal set of dependencies
    for first-level objects *)
-
-exception NoDepCheck
 
 let base_r = function
   | ConstRef c as r -> r

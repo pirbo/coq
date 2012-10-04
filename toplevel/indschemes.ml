@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,7 +15,7 @@
    declaring new schemes *)
 
 open Pp
-open Flags
+open Errors
 open Util
 open Names
 open Declarations
@@ -26,13 +26,11 @@ open Decl_kinds
 open Indrec
 open Declare
 open Libnames
+open Globnames
 open Goptions
 open Nameops
 open Termops
-open Typeops
-open Inductiveops
 open Pretyping
-open Topconstr
 open Nametab
 open Smartlocate
 open Vernacexpr
@@ -52,6 +50,16 @@ let _ =
       optkey   = ["Elimination";"Schemes"];
       optread  = (fun () -> !elim_flag) ;
       optwrite = (fun b -> elim_flag := b) }
+
+let record_elim_flag = ref false
+let _ =
+  declare_bool_option
+    { optsync  = true;
+      optdepr  = false;
+      optname  = "automatic declaration of induction schemes for records";
+      optkey   = ["Record";"Elimination";"Schemes"];
+      optread  = (fun () -> !record_elim_flag) ;
+      optwrite = (fun b -> record_elim_flag := b) }
 
 let case_flag = ref false
 let _ =
@@ -168,7 +176,7 @@ let beq_scheme_msg mind =
   (* TODO: mutual inductive case *)
   str "Boolean equality on " ++
     pr_enum (fun ind -> quote (Printer.pr_inductive (Global.env()) ind))
-    (list_tabulate (fun i -> (mind,i)) (Array.length mib.mind_packets))
+    (List.tabulate (fun i -> (mind,i)) (Array.length mib.mind_packets))
 
 let declare_beq_scheme_with l kn =
   try_declare_scheme (beq_scheme_msg kn) declare_beq_scheme_gen UserVerbose l kn
@@ -211,7 +219,7 @@ let declare_one_induction_scheme ind =
   let from_prop = kind = InProp in
   let kelim = elim_sorts (mib,mip) in
   let elims =
-    list_map_filter (fun (sort,kind) ->
+    List.map_filter (fun (sort,kind) ->
       if List.mem sort kelim then Some kind else None)
       (if from_prop then kinds_from_prop else kinds_from_type) in
   List.iter (fun kind -> ignore (define_individual_scheme kind KernelVerbose None ind))
@@ -270,7 +278,7 @@ let declare_congr_scheme ind =
     then
       ignore (define_individual_scheme congr_scheme_kind KernelVerbose None ind)
     else
-      warning "Cannot build congruence scheme because eq is not found"
+      msg_warning (strbrk "Cannot build congruence scheme because eq is not found")
   end
 
 let declare_sym_scheme ind =
@@ -322,7 +330,7 @@ requested
               | InType -> recs ^ "t_nodep")
         ) in
         let newid = add_suffix (basename_of_global (IndRef ind)) suffix in
-        let newref = (dummy_loc,newid) in
+        let newref = (Loc.ghost,newid) in
           ((newref,isdep,ind,z)::l1),l2
       in
 	match t with
@@ -341,7 +349,7 @@ let do_mutual_induction_scheme lnamedepindsort =
       lnamedepindsort
   in
   let listdecl = Indrec.build_mutual_induction_scheme env0 sigma lrecspec in
-  let rec declare decl fi lrecref =
+  let declare decl fi lrecref =
     let decltype = Retyping.get_type_of env0 Evd.empty decl in
     let decltype = refresh_universes decltype in
     let cst = define fi UserVerbose decl (Some decltype) in
@@ -357,10 +365,10 @@ let get_common_underlying_mutual_inductive = function
       | (_,ind')::_ ->
 	  raise (RecursionSchemeError (NotMutualInScheme (ind,ind')))
       | [] ->
-	  if not (list_distinct (List.map snd (List.map snd all))) then
+	  if not (List.distinct (List.map snd (List.map snd all))) then
 	    error "A type occurs twice";
 	  mind,
-	  list_map_filter
+	  List.map_filter
 	    (function (Some id,(_,i)) -> Some (i,snd id) | (None,_) -> None) all
 
 let do_scheme l =
@@ -386,7 +394,7 @@ let list_split_rev_at index l =
   let rec aux i acc = function
       hd :: tl when i = index -> acc, tl
     | hd :: tl -> aux (succ i) (hd :: acc) tl
-    | [] -> failwith "list_split_when: Invalid argument"
+    | [] -> failwith "List.split_when: Invalid argument"
   in aux 0 [] l
 
 let fold_left' f = function
@@ -446,11 +454,11 @@ let do_combined_scheme name schemes =
 
 let map_inductive_block f kn n = for i=0 to n-1 do f (kn,i) done
 
-let mutual_inductive_size kn = Array.length (Global.lookup_mind kn).mind_packets
-
 let declare_default_schemes kn =
-  let n = mutual_inductive_size kn in
-  if !elim_flag then declare_induction_schemes kn;
+  let mib = Global.lookup_mind kn in
+  let n = Array.length mib.mind_packets in
+  if !elim_flag && (not mib.mind_record || !record_elim_flag) then
+    declare_induction_schemes kn;
   if !case_flag then map_inductive_block declare_one_case_analysis_scheme kn n;
   if is_eq_flag() then try_declare_beq_scheme kn;
   if !eq_dec_flag then try_declare_eq_decidability kn;

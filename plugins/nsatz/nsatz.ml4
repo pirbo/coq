@@ -1,40 +1,20 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
-open Pp
+open Errors
 open Util
-open Names
 open Term
-open Closure
-open Environ
-open Libnames
 open Tactics
-open Glob_term
-open Tacticals
-open Tacexpr
-open Pcoq
-open Tactic
-open Constr
-open Proof_type
 open Coqlib
-open Tacmach
-open Mod_subst
-open Tacinterp
-open Libobject
-open Printer
-open Declare
-open Decl_kinds
-open Entries
 
 open Num
-open Unix
 open Utile
 
 (***********************************************************************
@@ -419,7 +399,7 @@ let pol_sparse_to_term n2 p =
   aux p
 
 
-let rec remove_list_tail l i =
+let remove_list_tail l i =
   let rec aux l i =
     if l=[]
     then []

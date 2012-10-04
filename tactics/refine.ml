@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -47,16 +47,14 @@
  *)
 
 open Pp
+open Errors
 open Util
 open Names
 open Term
 open Termops
 open Namegen
 open Tacmach
-open Sign
 open Environ
-open Reduction
-open Typing
 open Tactics
 open Tacticals
 open Printer
@@ -117,7 +115,7 @@ let replace_by_meta env sigma = function
 exception NoMeta
 
 let replace_in_array keep_length env sigma a =
-  if array_for_all (function (TH (_,_,[])) -> true | _ -> false) a then
+  if Array.for_all (function (TH (_,_,[])) -> true | _ -> false) a then
     raise NoMeta;
   let a' = Array.map (function
 			| (TH (c,mm,[])) when not keep_length -> c,mm,[]
@@ -349,8 +347,8 @@ let rec tcc_aux subst (TH (c,mm,sgp) as _th) gl =
 	  | Name id -> id
           | _ -> error "Recursive functions must have names."
 	in
-	let fixes = array_map3 (fun f n c -> (out_name f,succ n,c)) fi ni ai in
-	let firsts,lasts = list_chop j (Array.to_list fixes) in
+	let fixes = Array.map3 (fun f n c -> (out_name f,succ n,c)) fi ni ai in
+	let firsts,lasts = List.chop j (Array.to_list fixes) in
 	tclTHENS
 	  (tclTHEN
             (ensure_products (succ ni.(j)))
@@ -366,8 +364,8 @@ let rec tcc_aux subst (TH (c,mm,sgp) as _th) gl =
 	  | Name id -> id
           | _ -> error "Recursive functions must have names."
 	in
-	let cofixes = array_map2 (fun f c -> (out_name f,c)) fi ai in
-	let firsts,lasts = list_chop j (Array.to_list cofixes) in
+	let cofixes = Array.map2 (fun f c -> (out_name f,c)) fi ai in
+	let firsts,lasts = List.chop j (Array.to_list cofixes) in
 	tclTHENS
 	  (mutual_cofix (out_name fi.(j)) (firsts@List.tl lasts) j)
 	  (List.map (function
@@ -388,7 +386,7 @@ let rec tcc_aux subst (TH (c,mm,sgp) as _th) gl =
 
 let refine (evd,c) gl =
   let sigma = project gl in
-  let evd = Typeclasses.resolve_typeclasses ~onlyargs:true (pf_env gl) evd in
+  let evd = Typeclasses.resolve_typeclasses ~filter:Typeclasses.no_goals (pf_env gl) evd in
   let c = Evarutil.nf_evar evd c in
   let (evd,c) = Evarutil.evars_to_metas sigma (evd,c) in
   (* Relies on Cast's put on Meta's by evars_to_metas, because it is otherwise

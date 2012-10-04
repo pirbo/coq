@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -114,7 +114,7 @@ let atompart_of_id id = fst (repr_ident id)
 
 let out_name = function
   | Name id -> id
-  | Anonymous -> failwith "out_name: expects a defined name"
+  | Anonymous -> failwith "Nameops.out_name"
 
 let name_fold f na a =
   match na with

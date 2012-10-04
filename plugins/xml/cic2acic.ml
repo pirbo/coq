@@ -23,8 +23,8 @@ let get_module_path_of_full_path path =
     (function modul -> Libnames.is_dirpath_prefix_of modul dirpath) modules
   with
      [] ->
-       Pp.warning ("Modules not supported: reference to "^
-         Libnames.string_of_path path^" will be wrong");
+       Pp.msg_warning (Pp.str ("Modules not supported: reference to "^
+         Libnames.string_of_path path^" will be wrong"));
        dirpath
    | [modul] -> modul
    | _ ->
@@ -59,7 +59,7 @@ let get_uri_of_var v pvars =
  let module N = Names in
   let rec search_in_open_sections =
    function
-      [] -> Util.error ("Variable "^v^" not found")
+      [] -> Errors.error ("Variable "^v^" not found")
     | he::tl as modules ->
        let dirpath = N.make_dirpath modules in
         if List.mem (N.id_of_string v) (D.last_section_hyps dirpath) then
@@ -125,16 +125,16 @@ let token_list_of_path dir id tag =
 
 let token_list_of_kernel_name tag =
  let module N = Names in
- let module LN = Libnames in
+ let module GN = Globnames in
  let id,dir = match tag with
    | Variable kn ->
        N.id_of_label (N.label kn), Lib.cwd ()
    | Constant con ->
        N.id_of_label (N.con_label con),
-       Lib.remove_section_part (LN.ConstRef con)
+       Lib.remove_section_part (GN.ConstRef con)
    | Inductive kn ->
        N.id_of_label (N.mind_label kn),
-       Lib.remove_section_part (LN.IndRef (kn,0))
+       Lib.remove_section_part (GN.IndRef (kn,0))
  in
  token_list_of_path dir id (etag_of_tag tag)
 ;;
@@ -162,7 +162,7 @@ let family_of_term ty =
  match Term.kind_of_term ty with
     Term.Sort s -> Coq_sort (Term.family_of_sort s)
   | Term.Const _ -> CProp  (* I could check that the constant is CProp *)
-  | _ -> Util.anomaly "family_of_term"
+  | _ -> Errors.anomaly "family_of_term"
 ;;
 
 module CPropRetyping =
@@ -177,7 +177,7 @@ module CPropRetyping =
   | h::rest ->
       match T.kind_of_term (DoubleTypeInference.whd_betadeltaiotacprop env sigma typ) with
         | T.Prod (na,c1,c2) -> subst_type env sigma (T.subst1 h c2) rest
-        | _ -> Util.anomaly "Non-functional construction"
+        | _ -> Errors.anomaly "Non-functional construction"
 
 
   let sort_of_atomic_type env sigma ft args =
@@ -193,7 +193,7 @@ let typeur sigma metamap =
     match Term.kind_of_term cstr with
     | T.Meta n ->
           (try T.strip_outer_cast (List.assoc n metamap)
-           with Not_found -> Util.anomaly "type_of: this is not a well-typed term")
+           with Not_found -> Errors.anomaly "type_of: this is not a well-typed term")
     | T.Rel n ->
         let (_,_,ty) = Environ.lookup_rel n env in
         T.lift n ty
@@ -202,7 +202,7 @@ let typeur sigma metamap =
           let (_,_,ty) = Environ.lookup_named id env in
           ty
         with Not_found ->
-          Util.anomaly ("type_of: variable "^(Names.string_of_id id)^" unbound"))
+          Errors.anomaly ("type_of: variable "^(Names.string_of_id id)^" unbound"))
     | T.Const c ->
         let cb = Environ.lookup_constant c env in
         Typeops.type_of_constant_type env (cb.Declarations.const_type)
@@ -212,7 +212,7 @@ let typeur sigma metamap =
     | T.Case (_,p,c,lf) ->
         let Inductiveops.IndType(_,realargs) =
           try Inductiveops.find_rectype env sigma (type_of env c)
-          with Not_found -> Util.anomaly "type_of: Bad recursive type" in
+          with Not_found -> Errors.anomaly "type_of: Bad recursive type" in
         let t = Reductionops.whd_beta sigma (T.applist (p, realargs)) in
         (match Term.kind_of_term (DoubleTypeInference.whd_betadeltaiotacprop env sigma (type_of env t)) with
           | T.Prod _ -> Reductionops.whd_beta sigma (T.applist (t, [c]))
@@ -253,7 +253,7 @@ let typeur sigma metamap =
           | _, (CProp as s) -> s)
     | T.App(f,args) -> sort_of_atomic_type env sigma (type_of env f) args
     | T.Lambda _ | T.Fix _ | T.Construct _ ->
-        Util.anomaly "sort_of: Not a type (1)"
+        Errors.anomaly "sort_of: Not a type (1)"
     | _ -> outsort env sigma (type_of env t)
 
   and sort_family_of env t =
@@ -265,7 +265,7 @@ let typeur sigma metamap =
     | T.App(f,args) ->
        sort_of_atomic_type env sigma (type_of env f) args
     | T.Lambda _ | T.Fix _ | T.Construct _ ->
-        Util.anomaly "sort_of: Not a type (1)"
+        Errors.anomaly "sort_of: Not a type (1)"
     | _ -> outsort env sigma (type_of env t)
 
   in type_of, sort_of, sort_family_of
@@ -351,7 +351,7 @@ try
           Acic.CicHash.find terms_to_types tt
 with _ ->
 (*CSC: Warning: it really happens, for example in Ring_theory!!! *)
-Pp.ppnl (Pp.(++) (Pp.str "BUG: this subterm was not visited during the double-type-inference: ") (Printer.pr_lconstr tt)) ; assert false
+Pp.msg_debug (Pp.(++) (Pp.str "BUG: this subterm was not visited during the double-type-inference: ") (Printer.pr_lconstr tt)) ; assert false
          else
           (* We are already in an inner-type and Coscoy's double *)
           (* type inference algorithm has not been applied.      *)
@@ -363,15 +363,6 @@ Pp.ppnl (Pp.(++) (Pp.str "BUG: this subterm was not visited during the double-ty
               (Termops.refresh_universes tt)) ;
            D.expected = None}
         in
-(* Debugging only:
-print_endline "TERMINE:" ; flush stdout ;
-Pp.ppnl (Printer.pr_lconstr tt) ; flush stdout ;
-print_endline "TIPO:" ; flush stdout ;
-Pp.ppnl (Printer.pr_lconstr synthesized) ; flush stdout ;
-print_endline "ENVIRONMENT:" ; flush stdout ;
-Pp.ppnl (Printer.pr_context_of env) ; flush stdout ;
-print_endline "FINE_ENVIRONMENT" ; flush stdout ;
-*)
          let innersort =
           let synthesized_innersort =
            get_sort_family_of env evar_map synthesized
@@ -431,13 +422,13 @@ print_endline "PASSATO" ; flush stdout ;
           let subst,residual_args,uninst_vars =
            let variables,basedir =
              try
-               let g = Libnames.global_of_constr h in
+               let g = Globnames.global_of_constr h in
                let sp =
                 match g with
-                   Libnames.ConstructRef ((induri,_),_)
-                 | Libnames.IndRef (induri,_) ->
-                    Nametab.path_of_global (Libnames.IndRef (induri,0))
-                 | Libnames.VarRef id ->
+                   Globnames.ConstructRef ((induri,_),_)
+                 | Globnames.IndRef (induri,_) ->
+                    Nametab.path_of_global (Globnames.IndRef (induri,0))
+                 | Globnames.VarRef id ->
                     (* Invariant: variables are never cooked in Coq *)
                     raise Not_found
                  | _ -> Nametab.path_of_global g
@@ -523,7 +514,7 @@ print_endline "PASSATO" ; flush stdout ;
                add_inner_type fresh_id'' ;
               A.AEvar
                (fresh_id'', n, Array.to_list (Array.map (aux' env idrefs) l))
-           | T.Meta _ -> Util.anomaly "Meta met during exporting to XML"
+           | T.Meta _ -> Errors.anomaly "Meta met during exporting to XML"
            | T.Sort s -> A.ASort (fresh_id'', s)
            | T.Cast (v,_, t) ->
               Hashtbl.add ids_to_inner_sorts fresh_id'' innersort ;
@@ -737,7 +728,7 @@ print_endline "PASSATO" ; flush stdout ;
                 let ids = ref (Termops.ids_of_context env) in
                  Array.map
                   (function
-                      N.Anonymous -> Util.error "Anonymous fix function met"
+                      N.Anonymous -> Errors.error "Anonymous fix function met"
                     | N.Name id as n ->
                        let res = N.Name (Namegen.next_name_away n !ids) in
                         ids := id::!ids ;
@@ -750,7 +741,7 @@ print_endline "PASSATO" ; flush stdout ;
                     let fi' =
                      match fi with
                         N.Name fi -> fi
-                      | N.Anonymous -> Util.error "Anonymous fix function met"
+                      | N.Anonymous -> Errors.error "Anonymous fix function met"
                     in
                      (id, fi', ai,
                       aux' env idrefs ti,
@@ -771,7 +762,7 @@ print_endline "PASSATO" ; flush stdout ;
                 let ids = ref (Termops.ids_of_context env) in
                  Array.map
                   (function
-                      N.Anonymous -> Util.error "Anonymous fix function met"
+                      N.Anonymous -> Errors.error "Anonymous fix function met"
                     | N.Name id as n ->
                        let res = N.Name (Namegen.next_name_away n !ids) in
                         ids := id::!ids ;
@@ -784,7 +775,7 @@ print_endline "PASSATO" ; flush stdout ;
                     let fi' =
                      match fi with
                         N.Name fi -> fi
-                      | N.Anonymous -> Util.error "Anonymous fix function met"
+                      | N.Anonymous -> Errors.error "Anonymous fix function met"
                     in
                      (id, fi',
                       aux' env idrefs ti,

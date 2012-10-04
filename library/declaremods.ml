@@ -1,12 +1,13 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Declarations
@@ -14,7 +15,6 @@ open Entries
 open Libnames
 open Libobject
 open Lib
-open Nametab
 open Mod_subst
 
 (** Rigid / flexible signature *)
@@ -1042,7 +1042,7 @@ let iter_all_segments f =
 	   List.iter apply_obj objects)
       !modtab_objects
   in
-  let rec apply_node = function
+  let apply_node = function
     | sp, Leaf o -> f sp o
     | _ -> ()
   in

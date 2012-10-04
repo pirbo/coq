@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -8,17 +8,17 @@
 
 (*i*)
 open Pp
+open Errors
 open Util
 open Names
-open Libnames
+open Globnames
 open Nameops
 open Termops
 open Reductionops
 open Term
-open Glob_term
-open Sign
-open Environ
 open Pattern
+open Patternops
+open Misctypes
 (*i*)
 
 (* Given a term with second-order variables in it,
@@ -110,7 +110,7 @@ let dummy_constr = mkProp
 let rec make_renaming ids = function
   | (Name id,Name _,_)::stk ->
       let renaming = make_renaming ids stk in
-      (try mkRel (list_index id ids) :: renaming
+      (try mkRel (List.index id ids) :: renaming
        with Not_found -> dummy_constr :: renaming)
   | (_,_,_)::stk ->
       dummy_constr :: make_renaming ids stk
@@ -152,7 +152,7 @@ let matches_core convert allow_partial_app allow_bound_rels pat c =
 		 | _ -> error "Only bound indices allowed in second order pattern matching.")
 	      args in
 	  let frels = Intset.elements (free_rels cT) in
-	  if list_subset frels relargs then
+	  if List.subset frels relargs then
 	    constrain (n,([],build_lambda relargs stk cT)) subst
 	  else
 	    raise PatternMatchingFailure
@@ -169,7 +169,9 @@ let matches_core convert allow_partial_app allow_bound_rels pat c =
 
       | PRel n1, Rel n2 when n1 = n2 -> subst
 
-      | PSort (GProp c1), Sort (Prop c2) when c1 = c2 -> subst
+      | PSort GProp, Sort (Prop Null) -> subst
+
+      | PSort GSet, Sort (Prop Pos) -> subst
 
       | PSort (GType _), Sort (Type _) -> subst
 
@@ -181,14 +183,14 @@ let matches_core convert allow_partial_app allow_bound_rels pat c =
       | PApp (PMeta (Some n),args1), App (c2,args2) when allow_partial_app ->
           let p = Array.length args2 - Array.length args1 in
           if p>=0 then
-            let args21, args22 = array_chop p args2 in
+            let args21, args22 = Array.chop p args2 in
 	    let c = mkApp(c2,args21) in
             let subst = merge_binding allow_bound_rels stk n c subst in
-            array_fold_left2 (sorec stk) subst args1 args22
+            Array.fold_left2 (sorec stk) subst args1 args22
           else raise PatternMatchingFailure
 
       | PApp (c1,arg1), App (c2,arg2) ->
-        (try array_fold_left2 (sorec stk) (sorec stk subst c1 c2) arg1 arg2
+        (try Array.fold_left2 (sorec stk) (sorec stk subst c1 c2) arg1 arg2
          with Invalid_argument _ -> raise PatternMatchingFailure)
 
       | PProd (na1,c1,d1), Prod(na2,c2,d2) ->
@@ -290,7 +292,7 @@ let sub_match ?(partial_app=false) ?(closed=true) pat c =
             let mk_ctx = function
               | [app';c] -> mk_ctx (mkApp (app',[|c|]))
               | _ -> assert false in
-	    try_aux [app;array_last lc] mk_ctx next
+	    try_aux [app;Array.last lc] mk_ctx next
           else
             let rec aux2 app args next =
               match args with

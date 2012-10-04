@@ -1,11 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Names
 open Term
@@ -13,10 +14,10 @@ open Tacmach
 open Tactics
 open Tacticals
 open Termops
-open Declarations
 open Formula
 open Sequent
-open Libnames
+open Globnames
+open Locus
 
 type seqtac= (Sequent.t -> tactic) -> Sequent.t -> tactic
 
@@ -128,7 +129,7 @@ let ll_ind_tac ind largs backtrack id continue seq gl=
        let head=mkApp ((lift p (constr_of_global id)),[|capply|]) in
 	 it_mkLambda_or_LetIn head rc in
        let lp=Array.length rcs in
-       let newhyps=list_tabulate myterm lp in
+       let newhyps=List.tabulate myterm lp in
 	 tclIFTHENELSE
 	   (tclTHENLIST
 	      [generalize newhyps;
@@ -202,8 +203,8 @@ let ll_forall_tac prod backtrack id continue seq=
 let constant str = Coqlib.gen_constant "User" ["Init";"Logic"] str
 
 let defined_connectives=lazy
-  [all_occurrences,EvalConstRef (destConst (constant "not"));
-   all_occurrences,EvalConstRef (destConst (constant "iff"))]
+  [AllOccurrences,EvalConstRef (destConst (constant "not"));
+   AllOccurrences,EvalConstRef (destConst (constant "iff"))]
 
 let normalize_evaluables=
   onAllHypsAndConcl

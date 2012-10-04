@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -131,7 +131,7 @@ Theorem Sorted_merge : forall l1 l2,
   Sorted l1 -> Sorted l2 -> Sorted (merge l1 l2).
 Proof.
 induction l1; induction l2; intros; simpl; auto.
-  destruct (a <=? a0) as ()_eqn:Heq1.
+  destruct (a <=? a0) eqn:Heq1.
     invert H.
       simpl. constructor; trivial; rewrite Heq1; constructor.
       assert (Sorted (merge (b::l) (a0::l2))) by (apply IHl1; auto).

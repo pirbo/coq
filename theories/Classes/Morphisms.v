@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -73,7 +73,7 @@ End ProperNotations.
 
 Export ProperNotations.
 
-Open Local Scope signature_scope.
+Local Open Scope signature_scope.
 
 (** [solve_proper] try to solve the goal [Proper (?==> ... ==>?) f]
     by repeated introductions and setoid rewrites. It should work

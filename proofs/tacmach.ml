@@ -1,16 +1,15 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Pp
+open Errors
 open Util
 open Names
 open Namegen
-open Sign
 open Term
 open Termops
 open Environ
@@ -22,7 +21,6 @@ open Tacred
 open Proof_type
 open Logic
 open Refiner
-open Tacexpr
 
 let re_sig it gc = { it = it; sigma = gc }
 
@@ -72,14 +70,6 @@ let pf_get_new_ids ids gls =
     (fun id acc -> (next_ident_away id (acc@avoid))::acc)
     ids []
 
-let pf_interp_constr gls c =
-  let evc = project gls in
-  Constrintern.interp_constr evc (pf_env gls) c
-
-let pf_interp_type gls c =
-  let evc = project gls in
-  Constrintern.interp_type evc (pf_env gls) c
-
 let pf_global gls id = Constrintern.construct_reference (pf_hyps gls) id
 
 let pf_parse_const gls = compose (pf_global gls) id_of_string
@@ -118,8 +108,6 @@ let pf_matches                  = pf_apply Matching.matches_conv
 (************************************)
 (* Tactics handling a list of goals *)
 (************************************)
-
-type transformation_tactic = proof_tree -> goal list 
 
 type validation_list = proof_tree list -> proof_tree list
 
@@ -201,8 +189,6 @@ let rename_hyp l       = with_check (rename_hyp_no_check l)
 (* Pretty-printers *)
 
 open Pp
-open Tacexpr
-open Glob_term
 
 let db_pr_goal sigma g =
   let env = Goal.V82.env sigma g in
@@ -217,5 +203,5 @@ let pr_gls gls =
 
 let pr_glls glls =
   hov 0 (pr_evar_map (Some 2) (sig_sig glls) ++ fnl () ++
-         prlist_with_sep pr_fnl (db_pr_goal (project glls)) (sig_it glls))
+         prlist_with_sep fnl (db_pr_goal (project glls)) (sig_it glls))
 

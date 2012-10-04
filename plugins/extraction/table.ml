@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -15,6 +15,8 @@ open Summary
 open Libobject
 open Goptions
 open Libnames
+open Globnames
+open Errors
 open Util
 open Pp
 open Miniml
@@ -65,7 +67,7 @@ let is_toplevel mp =
 let at_toplevel mp =
   is_modfile mp || is_toplevel mp
 
-let rec mp_length mp =
+let mp_length mp =
   let mp0 = current_toplevel () in
   let rec len = function
     | mp when mp = mp0 -> 1
@@ -337,7 +339,7 @@ let warning_both_mod_and_cst q mp r =
 
 let error_axiom_scheme r i =
   err (str "The type scheme axiom " ++ spc () ++
-       safe_pr_global r ++ spc () ++ str "needs " ++ pr_int i ++
+       safe_pr_global r ++ spc () ++ str "needs " ++ int i ++
        str " type variable(s).")
 
 let check_inside_module () =
@@ -428,8 +430,8 @@ let check_loaded_modfile mp = match base_mp mp with
   | _ -> ()
 
 let info_file f =
-  Flags.if_verbose message
-    ("The file "^f^" has been created by extraction.")
+  Flags.if_verbose msg_info
+    (str ("The file "^f^" has been created by extraction."))
 
 
 (*S The Extraction auxiliary commands *)
@@ -531,6 +533,31 @@ let _ = declare_int_option
                           | None -> chg_flag 0
                           | Some i -> chg_flag (max i 0))}
 
+(* This option controls whether "dummy lambda" are removed when a
+   toplevel constant is defined. *)
+let conservative_types_ref = ref false
+let conservative_types () = !conservative_types_ref
+
+let _ = declare_bool_option
+  {optsync = true;
+   optdepr = false;
+   optname = "Extraction Conservative Types";
+   optkey = ["Extraction"; "Conservative"; "Types"];
+   optread = (fun () -> !conservative_types_ref);
+   optwrite = (fun b -> conservative_types_ref := b) }
+
+
+(* Allows to print a comment at the beginning of the output files *)
+let file_comment_ref = ref ""
+let file_comment () = !file_comment_ref
+
+let _ = declare_string_option
+  {optsync = true;
+   optdepr = false;
+   optname = "Extraction File Comment";
+   optkey = ["Extraction"; "File"; "Comment"];
+   optread = (fun () -> !file_comment_ref);
+   optwrite = (fun s -> file_comment_ref := s) }
 
 (*s Extraction Lang *)
 
@@ -604,7 +631,6 @@ let extraction_inline b l =
 let print_extraction_inline () =
   let (i,n)= !inline_table in
   let i'= Refset'.filter (function ConstRef _ -> true | _ -> false) i in
-  msg
     (str "Extraction Inline:" ++ fnl () ++
      Refset'.fold
        (fun r p ->
@@ -645,7 +671,7 @@ let add_implicits r l =
 	else err (int i ++ str " is not a valid argument number for " ++
 		  safe_pr_global r)
     | ArgId id ->
-	(try list_index (Name id) names
+	(try List.index (Name id) names
 	 with Not_found ->
 	   err (str "No argument " ++ pr_id id ++ str " for " ++
 		safe_pr_global r))
@@ -737,8 +763,7 @@ let extraction_blacklist l =
 (* Printing part *)
 
 let print_extraction_blacklist () =
-  msgnl
-    (prlist_with_sep fnl pr_id (Idset.elements !blacklist_table))
+  prlist_with_sep fnl pr_id (Idset.elements !blacklist_table)
 
 (* Reset part *)
 
@@ -842,6 +867,7 @@ let extract_constant_inline inline r ids s =
 let extract_inductive r s l optstr =
   check_inside_section ();
   let g = Smartlocate.global_with_alias r in
+  Dumpglob.add_glob (loc_of_reference r) g;
   match g with
     | IndRef ((kn,i) as ip) ->
 	let mib = Global.lookup_mind kn in
@@ -851,7 +877,7 @@ let extract_inductive r s l optstr =
 	Lib.add_anonymous_leaf (in_customs (g,[],s));
 	Option.iter (fun s -> Lib.add_anonymous_leaf (in_custom_matchs (g,s)))
 	  optstr;
-	list_iter_i
+	List.iteri
 	  (fun j s ->
 	     let g = ConstructRef (ip,succ j) in
 	     Lib.add_anonymous_leaf (inline_extraction (true,[g]));

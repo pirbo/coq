@@ -1,15 +1,14 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Formula
-open Sequent
 open Unify
 open Rules
+open Errors
 open Util
 open Term
 open Glob_term
@@ -18,11 +17,11 @@ open Tactics
 open Tacticals
 open Termops
 open Reductionops
-open Declarations
 open Formula
 open Sequent
 open Names
-open Libnames
+open Globnames
+open Misctypes
 
 let compare_instance inst1 inst2=
 	match inst1,inst2 with
@@ -37,11 +36,11 @@ let compare_gr id1 id2 =
   if id1==id2 then 0 else
     if id1==dummy_id then 1
     else if id2==dummy_id then -1
-    else Libnames.RefOrdered.compare id1 id2
+    else Globnames.RefOrdered.compare id1 id2
 
 module OrderedInstance=
 struct
-  type t=instance * Libnames.global_reference
+  type t=instance * Globnames.global_reference
   let compare (inst1,id1) (inst2,id2)=
     (compare_instance =? compare_gr) inst2 inst1 id2 id1
     (* we want a __decreasing__ total order *)
@@ -113,7 +112,7 @@ let mk_open_instance id gl m t=
 	match nam with
 	    Name id -> id
 	  | Anonymous ->  dummy_bvid in
-  let revt=substl (list_tabulate (fun i->mkRel (m-i)) m) t in
+  let revt=substl (List.tabulate (fun i->mkRel (m-i)) m) t in
   let rec aux n avoid=
     if n=0 then [] else
       let nid=(fresh_id avoid var_id gl) in
@@ -125,10 +124,10 @@ let mk_open_instance id gl m t=
       match t with
 	  GLambda(loc,name,k,_,t0)->
 	    let t1=raux (n-1) t0 in
-	      GLambda(loc,name,k,GHole (dummy_loc,Evd.BinderType name),t1)
+	      GLambda(loc,name,k,GHole (Loc.ghost,Evar_kinds.BinderType name),t1)
 	| _-> anomaly "can't happen" in
   let ntt=try
-    Pretyping.Default.understand evmap env (raux m rawt)
+    Pretyping.understand evmap env (raux m rawt)
   with _ ->
     error "Untypable instance, maybe higher-order non-prenex quantification" in
     decompose_lam_n_assum m ntt
@@ -179,12 +178,12 @@ let right_instance_tac inst continue seq=
 	[tclTHENLIST
 	   [introf;
 	    (fun gls->
-	       split (Glob_term.ImplicitBindings
+	       split (ImplicitBindings
 			[mkVar (Tacmach.pf_nth_hyp_id gls 1)]) gls);
 	    tclSOLVE [wrap 0 true continue (deepen seq)]];
 	 tclTRY assumption]
     | Real ((0,t),_) ->
-	(tclTHEN (split (Glob_term.ImplicitBindings [t]))
+	(tclTHEN (split (ImplicitBindings [t]))
 	   (tclSOLVE [wrap 0 true continue (deepen seq)]))
     | Real ((m,t),_) ->
 	tclFAIL 0 (Pp.str "not implemented ... yet")

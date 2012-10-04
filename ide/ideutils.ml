@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -29,14 +29,7 @@ let set_location = ref  (function s -> failwith "not ready")
 
 let pbar = GRange.progress_bar ~pulse_step:0.2 ()
 
-let debug = ref (false)
-
-let prerr_endline s =
-  if !debug then try prerr_endline s;flush stderr with _ -> ()
-
 let get_insert input_buffer = input_buffer#get_iter_at_mark `INSERT
-
-let is_char_start c = let code = Char.code c in code < 0x80 || code >= 0xc0
 
 let byte_offset_to_char_offset s byte_offset =
   if (byte_offset < String.length s) then begin
@@ -57,34 +50,31 @@ let byte_offset_to_char_offset s byte_offset =
   end
 
 let print_id id =
-  prerr_endline ("GOT sig id :"^(string_of_int (Obj.magic id)))
+  Minilib.log ("GOT sig id :"^(string_of_int (Obj.magic id)))
 
 
 let do_convert s =
   Utf8_convert.f
     (if Glib.Utf8.validate s then begin
-       prerr_endline "Input is UTF-8";s
-     end else
-       let from_loc () =
-	 let _,char_set = Glib.Convert.get_charset () in
-	 flash_info
-	   ("Converting from locale ("^char_set^")");
-	 Glib.Convert.convert_with_fallback ~to_codeset:"UTF-8" ~from_codeset:char_set s
-       in
-       let from_manual () =
-	 flash_info
-	   ("Converting from "^ !current.encoding_manual);
-	 Glib.Convert.convert s ~to_codeset:"UTF-8" ~from_codeset:!current.encoding_manual
-       in
-       if !current.encoding_use_utf8 || !current.encoding_use_locale then begin
-	 try
-	   from_loc ()
-	 with _ -> from_manual ()
-       end else begin
-	 try
-	   from_manual ()
-	 with _ -> from_loc ()
-       end)
+      Minilib.log "Input is UTF-8";s
+    end else
+	let from_loc () =
+	  let _,char_set = Glib.Convert.get_charset () in
+	  flash_info
+	    ("Converting from locale ("^char_set^")");
+	  Glib.Convert.convert_with_fallback ~to_codeset:"UTF-8" ~from_codeset:char_set s
+	in
+	let from_manual enc =
+	  flash_info
+	    ("Converting from "^ enc);
+	  Glib.Convert.convert s ~to_codeset:"UTF-8" ~from_codeset:enc
+	in
+	match current.encoding with
+	  |Preferences.Eutf8 | Preferences.Elocale -> from_loc ()
+	  |Emanual enc ->
+	    try
+	      from_manual enc
+	    with _ -> from_loc ())
 
 let try_convert s =
   try
@@ -96,25 +86,28 @@ Please choose a correct encoding in the preference panel.*)";;
 
 let try_export file_name s =
   try let s =
-    try if !current.encoding_use_utf8 then begin
-      (prerr_endline "UTF-8 is enforced" ;s)
-    end else if !current.encoding_use_locale then begin
-      let is_unicode,char_set = Glib.Convert.get_charset () in
-      if is_unicode then
-	(prerr_endline "Locale is UTF-8" ;s)
-      else
-	(prerr_endline ("Locale is "^char_set);
-	 Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:char_set s)
-    end else
-      (prerr_endline ("Manual charset is "^ !current.encoding_manual);
-       Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:!current.encoding_manual s)
-    with e -> (prerr_endline ("Error ("^(Printexc.to_string e)^") in transcoding: falling back to UTF-8") ;s)
+    try match current.encoding with
+      |Eutf8 -> begin
+	(Minilib.log "UTF-8 is enforced" ;s)
+      end
+      |Elocale -> begin
+	let is_unicode,char_set = Glib.Convert.get_charset () in
+	if is_unicode then
+	  (Minilib.log "Locale is UTF-8" ;s)
+	else
+	  (Minilib.log ("Locale is "^char_set);
+	   Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:char_set s)
+      end
+      |Emanual enc ->
+	(Minilib.log ("Manual charset is "^ enc);
+       Glib.Convert.convert_with_fallback ~from_codeset:"UTF-8" ~to_codeset:enc s)
+    with e -> (Minilib.log ("Error ("^(Printexc.to_string e)^") in transcoding: falling back to UTF-8") ;s)
   in
   let oc = open_out file_name in
   output_string oc s;
   close_out oc;
   true
-  with e -> prerr_endline (Printexc.to_string e);false
+  with e -> Minilib.log (Printexc.to_string e);false
 
 let my_stat f = try Some (Unix.stat f) with _ -> None
 
@@ -234,16 +227,16 @@ let mutex text f =
     if Mutex.try_lock m
     then
       (try
-        prerr_endline ("Got lock on "^text);
+        Minilib.log ("Got lock on "^text);
         f x;
         Mutex.unlock m;
-        prerr_endline ("Released lock on "^text)
+        Minilib.log ("Released lock on "^text)
       with e ->
         Mutex.unlock m;
-        prerr_endline ("Released lock on "^text^" (on error)");
+        Minilib.log ("Released lock on "^text^" (on error)");
         raise e)
     else
-      prerr_endline
+      Minilib.log
         ("Discarded call for "^text^": computations ongoing")
 
 
@@ -252,43 +245,49 @@ let stock_to_widget ?(size=`DIALOG) s =
   in img#set_stock s;
   img#coerce
 
+let custom_coqtop = ref None
+
+let coqtop_path () =
+  let file = match !custom_coqtop with
+    | Some s -> s
+    | None ->
+      match current.cmd_coqtop with
+	| Some s -> s
+	| None ->
+	  let prog = String.copy Sys.executable_name in
+	  try
+	    let pos = String.length prog - 6 in
+	    let i = Str.search_backward (Str.regexp_string "coqide") prog pos in
+	    String.blit "coqtop" 0 prog i 6;
+	    prog
+	  with Not_found -> "coqtop"
+  in file
+
 let rec print_list print fmt = function
   | [] -> ()
   | [x] -> print fmt x
   | x :: r -> print fmt x; print_list print fmt r
 
-(* TODO: allow to report output as soon as it comes (user-fiendlier
-   for long commands like make...) *)
-let run_command f c =
-  let result = Buffer.create 127 in
-  let cin,cout,cerr = Unix.open_process_full c (Unix.environment ()) in
-  let buff = String.make 127 ' ' in
-  let buffe = String.make 127 ' ' in
-  let n = ref 0 in
-  let ne = ref 0 in
-  while n:= input cin buff 0 127 ; ne := input cerr buffe 0 127 ; !n+ !ne <> 0
-  do
-    let r = try_convert (String.sub buff 0 !n) in
-    f r;
-    Buffer.add_string result r;
-    let r = try_convert (String.sub buffe 0 !ne) in
-    f r;
-    Buffer.add_string result r
-  done;
-  (Unix.close_process_full (cin,cout,cerr),  Buffer.contents result)
+(* In win32, when a command-line is to be executed via cmd.exe
+   (i.e. Sys.command, Unix.open_process, ...), it cannot contain several
+   quoted "..." zones otherwise some quotes are lost. Solution: we re-quote
+   everything. Reference: http://ss64.com/nt/cmd.html *)
+
+let requote cmd = if Sys.os_type = "Win32" then "\""^cmd^"\"" else cmd
 
 let browse f url =
-  let com = Minilib.subst_command_placeholder !current.cmd_browse url in
-  let s = Sys.command com in
+  let com = Util.subst_command_placeholder current.cmd_browse url in
+  let _ = Unix.open_process_out com in ()
+(* This beautiful message will wait for twt ...
   if s = 127 then
     f ("Could not execute\n\""^com^
        "\"\ncheck your preferences for setting a valid browser command\n")
-
+*)
 let doc_url () =
-  if !current.doc_url = use_default_doc_url || !current.doc_url = "" then
+  if current.doc_url = use_default_doc_url || current.doc_url = "" then
     let addr = List.fold_left Filename.concat (Coq_config.docdir) ["html";"refman";"index.html"] in
     if Sys.file_exists addr then "file://"^addr else Coq_config.wwwrefman
-  else !current.doc_url
+  else current.doc_url
 
 let url_for_keyword =
   let ht = Hashtbl.create 97 in
@@ -297,7 +296,7 @@ let url_for_keyword =
 	let cin =
 	  try let index_urls = Filename.concat (List.find
             (fun x -> Sys.file_exists (Filename.concat x "index_urls.txt"))
-	    Minilib.xdg_config_dirs) "index_urls.txt" in
+	    (Minilib.coqide_config_dirs ())) "index_urls.txt" in
 	    open_in index_urls
 	  with Not_found ->
 	    let doc_url = doc_url () in
@@ -315,11 +314,11 @@ let url_for_keyword =
 		let u = String.sub s (i + 1) (String.length s - i - 1) in
 		  Hashtbl.add ht k u
 	      with _ ->
-		Minilib.safe_prerr_endline "Warning: Cannot parse documentation index file."
+		Minilib.log "Warning: Cannot parse documentation index file."
 	  done with End_of_file ->
 	    close_in cin
       with _ ->
-	Minilib.safe_prerr_endline "Warning: Cannot find documentation index file."
+	Minilib.log "Warning: Cannot find documentation index file."
       end;
       Hashtbl.find ht : string -> string)
 
@@ -327,4 +326,20 @@ let browse_keyword f text =
   try let u = Lazy.force url_for_keyword text in browse f (doc_url() ^ u)
   with Not_found -> f ("No documentation found for \""^text^"\".\n")
 
-let absolute_filename f = Minilib.correct_path f (Sys.getcwd ())
+let textview_width (view : #GText.view) =
+  let rect = view#visible_rect in
+  let pixel_width = Gdk.Rectangle.width rect in
+  let metrics = view#misc#pango_context#get_metrics ()  in
+  let char_width = GPango.to_pixels metrics#approx_char_width in
+  pixel_width / char_width
+
+let default_logger level message =
+  let level = match level with
+  | Interface.Debug _ -> `DEBUG
+  | Interface.Info -> `INFO
+  | Interface.Notice -> `NOTICE
+  | Interface.Warning -> `WARNING
+  | Interface.Error -> `ERROR
+  in
+  Minilib.log ~level message
+

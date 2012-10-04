@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -19,7 +19,7 @@ let fold = Gmap.fold
 let add x y m =
   try
     let l = Gmap.find x m in
-    Gmap.add x (y::list_except y l) m
+    Gmap.add x (y::List.except y l) m
   with Not_found ->
     Gmap.add x [y] m
 
@@ -28,6 +28,6 @@ let find x m =
 
 let remove x y m =
   let l = Gmap.find x m in
-  Gmap.add x (if List.mem y l then list_subtract l [y] else l) m
+  Gmap.add x (if List.mem y l then List.subtract l [y] else l) m
 
 

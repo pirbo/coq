@@ -1,20 +1,19 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
-open Util
 open Tacexpr
 open Quote
 
 let make_cont k x =
-  let k = TacDynamic(dummy_loc, Tacinterp.tactic_in (fun _ -> k)) in
-  let x = TacDynamic(dummy_loc, Pretyping.constr_in x) in
+  let k = TacDynamic(Loc.ghost, Tacinterp.tactic_in (fun _ -> k)) in
+  let x = TacDynamic(Loc.ghost, Pretyping.constr_in x) in
   let tac = <:tactic<let cont := $k in cont $x>> in
   Tacinterp.interp tac
 

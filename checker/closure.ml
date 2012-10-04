@@ -1,11 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Pp
 open Term
@@ -28,7 +29,7 @@ let reset () =
   beta := 0; delta := 0; zeta := 0; evar := 0; iota := 0; prune := 0
 
 let stop() =
-  msgnl (str "[Reds: beta=" ++ int !beta ++ str" delta=" ++ int !delta ++
+  msg_debug (str "[Reds: beta=" ++ int !beta ++ str" delta=" ++ int !delta ++
 	 str" zeta=" ++ int !zeta ++ str" evar=" ++ int !evar ++
          str" iota=" ++ int !iota ++ str" prune=" ++ int !prune ++ str"]")
 
@@ -369,7 +370,7 @@ let rec compact_constr (lg, subs as s) c k =
   match c with
       Rel i ->
         if i < k then c,s else
-          (try Rel (k + lg - list_index (i-k+1) subs), (lg,subs)
+          (try Rel (k + lg - List.index (i-k+1) subs), (lg,subs)
           with Not_found -> Rel (k+lg), (lg+1, (i-k+1)::subs))
     | (Sort _|Var _|Meta _|Ind _|Const _|Construct _) -> c,s
     | Evar(ev,v) ->
@@ -413,7 +414,7 @@ and compact_vect s v k = compact_v [] s v k (Array.length v - 1)
 and compact_v acc s v k i =
   if i < 0 then
     let v' = Array.of_list acc in
-    if array_for_all2 (==) v v' then v,s else v',s
+    if Array.for_all2 (==) v v' then v,s else v',s
   else
     let (a',s') = compact_constr s v.(i) k in
     compact_v (a'::acc) s' v k (i-1)
@@ -647,7 +648,7 @@ let rec get_args n tys f e stk =
           let eargs = Array.sub l n (na-n) in
           (Inl (subs_cons(args,e)), Zapp eargs :: s)
         else (* more lambdas *)
-          let etys = list_skipn na tys in
+          let etys = List.skipn na tys in
           get_args (n-na) etys f (subs_cons(l,e)) s
     | _ -> (Inr {norm=Cstr;term=FLambda(n,tys,f,e)}, stk)
 

@@ -17,10 +17,12 @@ Check (nat |= nat --> nat).
 (* Check that first non empty definition at an empty level can be of any
    associativity *)
 
-Definition marker := O.
+Module Type v1.
 Notation "x +1" := (S x) (at level 8, left associativity).
-Reset marker.
+End v1.
+Module Type v2.
 Notation "x +1" := (S x) (at level 8, right associativity).
+End v2.
 
 (* Check that empty levels (here 8 and 2 in pattern) are added in the
    right order *)
@@ -86,3 +88,16 @@ Notation "'FOO' x" := (S x) (at level 40).
 Goal (2 ++++ 3) = 5.
 reflexivity.
 Abort.
+
+(* Check correct failure handling when a non-constructor notation is
+   used in cases pattern (bug #2724 in 8.3 and 8.4beta) *)
+
+Notation "'FORALL'  x .. y , P" := (forall x, .. (forall y, P) ..)
+  (at level 200, x binder, y binder, right associativity) : type_scope.
+
+Fail Check fun x => match x with S (FORALL x, _) => 0 end.
+
+(* Bug #2708: don't check for scope of variables used as binder *)
+
+Parameter traverse : (nat -> unit) -> (nat -> unit).
+Notation traverse_var f l := (traverse (fun l => f l) l).

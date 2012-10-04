@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -19,9 +19,7 @@ open Termops
 open Inductiveops
 open Recordops
 open Namegen
-open Summary
-open Libnames
-open Nametab
+open Globnames
 open Miniml
 open Table
 open Mlutil
@@ -71,7 +69,7 @@ type flag = info * scheme
 (*s [flag_of_type] transforms a type [t] into a [flag].
   Really important function. *)
 
-let rec flag_of_type env t =
+let rec flag_of_type env t : flag =
   let t = whd_betadeltaiota env none t in
   match kind_of_term t with
     | Prod (x,t,c) -> flag_of_type (push_rel (x,None,t) env) c
@@ -195,7 +193,7 @@ let parse_ind_args si args relmax =
 
 let oib_equal o1 o2 =
   id_ord o1.mind_typename o2.mind_typename = 0 &&
-  list_equal eq_rel_declaration o1.mind_arity_ctxt o2.mind_arity_ctxt &&
+  List.equal eq_rel_declaration o1.mind_arity_ctxt o2.mind_arity_ctxt &&
   begin match o1.mind_arity, o2.mind_arity with
   | Monomorphic {mind_user_arity=c1; mind_sort=s1},
     Monomorphic {mind_user_arity=c2; mind_sort=s2} ->
@@ -204,14 +202,14 @@ let oib_equal o1 o2 =
   o1.mind_consnames = o2.mind_consnames
 
 let mib_equal m1 m2 =
-  array_equal oib_equal m1.mind_packets m1.mind_packets &&
+  Array.equal oib_equal m1.mind_packets m1.mind_packets &&
   m1.mind_record = m2.mind_record &&
   m1.mind_finite = m2.mind_finite &&
   m1.mind_ntypes = m2.mind_ntypes &&
-  list_equal eq_named_declaration m1.mind_hyps m2.mind_hyps &&
+  List.equal eq_named_declaration m1.mind_hyps m2.mind_hyps &&
   m1.mind_nparams = m2.mind_nparams &&
   m1.mind_nparams_rec = m2.mind_nparams_rec &&
-  list_equal eq_rel_declaration m1.mind_params_ctxt m2.mind_params_ctxt &&
+  List.equal eq_rel_declaration m1.mind_params_ctxt m2.mind_params_ctxt &&
   m1.mind_constraints = m2.mind_constraints
 
 (*S Extraction of a type. *)
@@ -335,7 +333,7 @@ and extract_type_scheme env db c p =
       | _ ->
           let rels = fst (splay_prod env none (type_of env c)) in
           let env = push_rels_assum rels env in
-          let eta_args = List.rev_map mkRel (interval 1 p) in
+          let eta_args = List.rev_map mkRel (List.interval 1 p) in
           extract_type env db 0 (lift p c) eta_args
 
 
@@ -441,7 +439,7 @@ and extract_ind env kn = (* kn is supposed to be in long form *)
 	  | _ -> []
 	in
 	let field_names =
-	  list_skipn mib.mind_nparams (names_prod mip0.mind_user_lc.(0)) in
+	  List.skipn mib.mind_nparams (names_prod mip0.mind_user_lc.(0)) in
 	assert (List.length field_names = List.length typ);
 	let projs = ref Cset.empty in
 	let mp,d,_ = repr_mind kn in
@@ -676,7 +674,7 @@ and extract_cst_app env mle mlt kn args =
   let mla =
     if not magic1 then
       try
-	let l,l' = list_chop (projection_arity (ConstRef kn)) mla in
+	let l,l' = List.chop (projection_arity (ConstRef kn)) mla in
 	if l' <> [] then (List.map (fun _ -> MLexn "Proj Args") l) @ l'
 	else mla
       with _ -> mla
@@ -699,7 +697,7 @@ and extract_cst_app env mle mlt kn args =
     (* Partially applied function with some logical arg missing.
        We complete via eta and expunge logical args. *)
     let ls' = ls-la in
-    let s' = list_skipn la s in
+    let s' = List.skipn la s in
     let mla = (List.map (ast_lift ls') mla) @ (eta_args_sign ls' s') in
     let e = anonym_or_dummy_lams (mlapp head mla) s' in
     put_magic_if magic2 (remove_n_lams (List.length optdummy) e)
@@ -721,7 +719,7 @@ and extract_cons_app env mle mlt (((kn,i) as ip,j) as cp) args =
   let oi = mi.ind_packets.(i) in
   let nb_tvars = List.length oi.ip_vars
   and types = List.map (expand env) oi.ip_types.(j-1) in
-  let list_tvar = List.map (fun i -> Tvar i) (interval 1 nb_tvars) in
+  let list_tvar = List.map (fun i -> Tvar i) (List.interval 1 nb_tvars) in
   let type_cons = type_recomp (types, Tglob (IndRef ip, list_tvar)) in
   let type_cons = instantiation (nb_tvars, type_cons) in
   (* Then, the usual variables [s], [ls], [la], ... *)
@@ -731,7 +729,7 @@ and extract_cons_app env mle mlt (((kn,i) as ip,j) as cp) args =
   let la = List.length args in
   assert (la <= ls + params_nb);
   let la' = max 0 (la - params_nb) in
-  let args' = list_lastn la' args in
+  let args' = List.lastn la' args in
   (* Now, we build the expected type of the constructor *)
   let metas = List.map new_meta args' in
   (* If stored and expected types differ, then magic! *)
@@ -760,7 +758,7 @@ and extract_cons_app env mle mlt (((kn,i) as ip,j) as cp) args =
     then put_magic_if (magic2 && not magic1) (head mla)
     else (* [ params_nb <= la <= ls + params_nb ] *)
       let ls' = params_nb + ls - la in
-      let s' = list_lastn ls' s in
+      let s' = List.lastn ls' s in
       let mla = (List.map (ast_lift ls') mla) @ (eta_args_sign ls' s') in
       put_magic_if magic2 (anonym_or_dummy_lams (head mla) s')
 
@@ -835,7 +833,7 @@ and extract_fix env mle i (fi,ti,ci as recd) mlt =
   let metas = Array.map new_meta fi in
   metas.(i) <- mlt;
   let mle = Array.fold_left Mlenv.push_type mle metas in
-  let ei = array_map2 (extract_maybe_term env mle) metas ci in
+  let ei = Array.map2 (extract_maybe_term env mle) metas ci in
   MLfix (i, Array.map id_of_name fi, ei)
 
 (*S ML declarations. *)
@@ -843,14 +841,14 @@ and extract_fix env mle i (fi,ti,ci as recd) mlt =
 (* [decomp_lams_eta env c t] finds the number [n] of products in the type [t],
    and decompose the term [c] in [n] lambdas, with eta-expansion if needed. *)
 
-let rec decomp_lams_eta_n n m env c t =
+let decomp_lams_eta_n n m env c t =
   let rels = fst (splay_prod_n env none n t) in
   let rels = List.map (fun (id,_,c) -> (id,c)) rels in
   let rels',c = decompose_lam c in
   let d = n - m in
   (* we'd better keep rels' as long as possible. *)
-  let rels = (list_firstn d rels) @ rels' in
-  let eta_args = List.rev_map mkRel (interval 1 d) in
+  let rels = (List.firstn d rels) @ rels' in
+  let eta_args = List.rev_map mkRel (List.interval 1 d) in
   rels, applist (lift d c,eta_args)
 
 (* Let's try to identify some situation where extracted code
@@ -861,7 +859,7 @@ let rec gentypvar_ok c = match kind_of_term c with
   | App (c,v) ->
       (* if all arguments are variables, these variables will
 	 disappear after extraction (see [empty_s] below) *)
-      array_for_all isRel v && gentypvar_ok c
+      Array.for_all isRel v && gentypvar_ok c
   | Cast (c,_,_) -> gentypvar_ok c
   | _ -> false
 
@@ -888,7 +886,7 @@ let extract_std_constant env kn body typ =
     and m = nb_lam body in
     if n <= m then decompose_lam_n n body
     else
-      let s,s' = list_chop m s in
+      let s,s' = List.chop m s in
       if List.for_all ((=) Keep) s' &&
 	(lang () = Haskell || sign_kind s <> UnsafeLogicalSig)
       then decompose_lam_n m body
@@ -897,7 +895,7 @@ let extract_std_constant env kn body typ =
   (* Should we do one eta-expansion to avoid non-generalizable '_a ? *)
   let rels, c =
     let n = List.length rels in
-    let s,s' = list_chop n s in
+    let s,s' = List.chop n s in
     let k = sign_kind s in
     let empty_s = (k = EmptySig || k = SafeLogicalSig) in
     if lang () = Ocaml && empty_s && not (gentypvar_ok c)
@@ -906,8 +904,8 @@ let extract_std_constant env kn body typ =
     else rels,c
   in
   let n = List.length rels in
-  let s = list_firstn n s in
-  let l,l' = list_chop n l in
+  let s = List.firstn n s in
+  let l,l' = List.chop n l in
   let t' = type_recomp (l',t') in
   (* The initial ML environment. *)
   let mle = List.fold_left Mlenv.push_std_type Mlenv.empty l in
@@ -922,6 +920,19 @@ let extract_std_constant env kn body typ =
   let trm = handle_exn (ConstRef kn) n (fun i -> fst (List.nth rels (i-1))) trm
   in
   trm, type_expunge_from_sign env s t
+
+(* Extracts the type of an axiom, honors the Extraction Implicit declaration. *)
+let extract_axiom env kn typ =
+  reset_meta_count ();
+  (* The short type [t] (i.e. possibly with abbreviations). *)
+  let t = snd (record_constant_type env kn (Some typ)) in
+  (* The real type [t']: without head products, expanded, *)
+  (* and with [Tvar] translated to [Tvar'] (not instantiable). *)
+  let l,_ = type_decomp (expand env (var2var' t)) in
+  let s = List.map (type2sign env) l in
+  (* Check for user-declared implicit information *)
+  let s = sign_with_implicits (ConstRef kn) s in
+  type_expunge_from_sign env s t
 
 let extract_fixpoint env vkn (fi,ti,ci) =
   let n = Array.length vkn in
@@ -959,8 +970,8 @@ let extract_constant env kn cb =
     in Dtype (r, vl, t)
   in
   let mk_ax () =
-    let t = snd (record_constant_type env kn (Some typ)) in
-    Dterm (r, MLaxiom, type_expunge env t)
+    let t = extract_axiom env kn typ in
+    Dterm (r, MLaxiom, t)
   in
   let mk_def c =
     let e,t = extract_std_constant env kn c typ in
@@ -1042,9 +1053,9 @@ let logical_decl = function
   | Dterm (_,MLdummy,Tdummy _) -> true
   | Dtype (_,[],Tdummy _) -> true
   | Dfix (_,av,tv) ->
-      (array_for_all ((=) MLdummy) av) &&
-      (array_for_all isDummy tv)
-  | Dind (_,i) -> array_for_all (fun ip -> ip.ip_logical) i.ind_packets
+      (Array.for_all ((=) MLdummy) av) &&
+      (Array.for_all isDummy tv)
+  | Dind (_,i) -> Array.for_all (fun ip -> ip.ip_logical) i.ind_packets
   | _ -> false
 
 (*s Is a [ml_spec] logical ? *)
@@ -1052,5 +1063,5 @@ let logical_decl = function
 let logical_spec = function
   | Stype (_, [], Some (Tdummy _)) -> true
   | Sval (_,Tdummy _) -> true
-  | Sind (_,i) -> array_for_all (fun ip -> ip.ip_logical) i.ind_packets
+  | Sind (_,i) -> Array.for_all (fun ip -> ip.ip_logical) i.ind_packets
   | _ -> false

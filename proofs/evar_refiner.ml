@@ -1,18 +1,16 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Names
-open Term
 open Evd
 open Evarutil
-open Sign
-open Refiner
 
 (******************************************)
 (* Instantiation of existential variables *)
@@ -40,10 +38,10 @@ let w_refine (evk,evi) (ltac_var,rawc) sigma =
     error "Instantiate called on already-defined evar";
   let env = Evd.evar_env evi in
   let sigma',typed_c =
-    try Pretyping.Default.understand_ltac true sigma env ltac_var
-	  (Pretyping.OfType (Some evi.evar_concl)) rawc
+    try Pretyping.understand_ltac ~resolve_classes:true true 
+      sigma env ltac_var (Pretyping.OfType (Some evi.evar_concl)) rawc
     with _ ->
-      let loc = Glob_term.loc_of_glob_constr rawc in
+      let loc = Glob_ops.loc_of_glob_constr rawc in
       user_err_loc
         (loc,"",Pp.str ("Instance is not well-typed in the environment of " ^
 			string_of_existential evk))

@@ -1,30 +1,34 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Pp
-open Pcoq
 open Genarg
 open Extraargs
 open Mod_subst
 open Names
 open Tacexpr
-open Glob_term
+open Glob_ops
 open Tactics
+open Errors
 open Util
 open Evd
 open Equality
-open Compat
+open Misctypes
 
 (**********************************************************************)
-(* replace, discriminate, injection, simplify_eq                      *)
+(* admit, replace, discriminate, injection, simplify_eq               *)
 (* cutrewrite, dependent rewrite                                      *)
+
+TACTIC EXTEND admit
+  [ "admit" ] -> [ admit_as_an_axiom ]
+END
 
 let replace_in_clause_maybe_by (sigma1,c1) c2 in_hyp tac =
   Refiner.tclWITHHOLES false
@@ -60,7 +64,7 @@ END
 
 let induction_arg_of_quantified_hyp = function
   | AnonHyp n -> ElimOnAnonHyp n
-  | NamedHyp id -> ElimOnIdent (Util.dummy_loc,id)
+  | NamedHyp id -> ElimOnIdent (Loc.ghost,id)
 
 (* Versions *_main must come first!! so that "1" is interpreted as a
    ElimOnAnonHyp and not as a "constr", and "id" is interpreted as a
@@ -225,24 +229,17 @@ let rewrite_star clause orient occs (sigma,c) (tac : glob_tactic_expr option) =
   Refiner. tclWITHHOLES false
     (general_rewrite_ebindings_clause clause orient occs ?tac:tac' true true (c,NoBindings)) sigma true
 
-let occurrences_of = function
-  | n::_ as nl when n < 0 -> (false,List.map abs nl)
-  | nl ->
-      if List.exists (fun n -> n < 0) nl then
-	error "Illegal negative occurrence number.";
-      (true,nl)
-
 TACTIC EXTEND rewrite_star
 | [ "rewrite" "*" orient(o) open_constr(c) "in" hyp(id) "at" occurrences(occ) by_arg_tac(tac) ] ->
     [ rewrite_star (Some id) o (occurrences_of occ) c tac ]
 | [ "rewrite" "*" orient(o) open_constr(c) "at" occurrences(occ) "in" hyp(id) by_arg_tac(tac) ] ->
     [ rewrite_star (Some id) o (occurrences_of occ) c tac ]
 | [ "rewrite" "*" orient(o) open_constr(c) "in" hyp(id) by_arg_tac(tac) ] ->
-    [ rewrite_star (Some id) o Termops.all_occurrences c tac ]
+    [ rewrite_star (Some id) o Locus.AllOccurrences c tac ]
 | [ "rewrite" "*" orient(o) open_constr(c) "at" occurrences(occ) by_arg_tac(tac) ] ->
     [ rewrite_star None o (occurrences_of occ) c tac ]
 | [ "rewrite" "*" orient(o) open_constr(c) by_arg_tac(tac) ] ->
-    [ rewrite_star None o Termops.all_occurrences c tac ]
+    [ rewrite_star None o Locus.AllOccurrences c tac ]
     END
 
 (**********************************************************************)
@@ -250,7 +247,7 @@ TACTIC EXTEND rewrite_star
 
 let add_rewrite_hint name ort t lcsr =
   let env = Global.env() and sigma = Evd.empty in
-  let f c = Topconstr.constr_loc c, Constrintern.interp_constr sigma env c, ort, t in
+  let f c = Constrexpr_ops.constr_loc c, Constrintern.interp_constr sigma env c, ort, t in
   add_rew_rules name (List.map f lcsr)
 
 VERNAC COMMAND EXTEND HintRewrite
@@ -335,18 +332,17 @@ VERNAC COMMAND EXTEND DeriveInversionClear
   -> [ add_inversion_lemma_exn na c s false inv_clear_tac ]
 
 | [ "Derive" "Inversion_clear" ident(na) "with" constr(c) ]
-  -> [ add_inversion_lemma_exn na c (Glob_term.GProp Term.Null) false inv_clear_tac ]
+  -> [ add_inversion_lemma_exn na c GProp false inv_clear_tac ]
 END
 
 open Term
-open Glob_term
 
 VERNAC COMMAND EXTEND DeriveInversion
 | [ "Derive" "Inversion" ident(na) "with" constr(c) "Sort" sort(s) ]
   -> [ add_inversion_lemma_exn na c s false inv_tac ]
 
 | [ "Derive" "Inversion" ident(na) "with" constr(c) ]
-  -> [ add_inversion_lemma_exn na c (GProp Null) false inv_tac ]
+  -> [ add_inversion_lemma_exn na c GProp false inv_tac ]
 
 | [ "Derive" "Inversion" ident(na) hyp(id) ]
   -> [ inversion_lemma_from_goal 1 na id Term.prop_sort false inv_tac ]
@@ -390,7 +386,6 @@ TACTIC EXTEND evar
 | [ "evar" constr(typ) ] -> [ let_evar Anonymous typ ]
 END
 
-open Tacexpr
 open Tacticals
 
 TACTIC EXTEND instantiate
@@ -404,8 +399,6 @@ END
 (** Nijmegen "step" tactic for setoid rewriting                       *)
 
 open Tactics
-open Tactics
-open Libnames
 open Glob_term
 open Summary
 open Libobject
@@ -553,8 +546,13 @@ let subst_var_with_hole occ tid t =
   let rec substrec = function
     | GVar (_,id) as x -> 
         if id = tid 
-        then (decr occref; if !occref = 0 then x
-                           else (incr locref; GHole (make_loc (!locref,0),Evd.QuestionMark(Evd.Define true))))
+        then
+	  (decr occref;
+	   if !occref = 0 then x
+           else
+	     (incr locref;
+	      GHole (Loc.make_loc (!locref,0),
+		     Evar_kinds.QuestionMark(Evar_kinds.Define true))))
         else x
     | c -> map_glob_constr_left_to_right substrec c in
   let t' = substrec t
@@ -565,9 +563,13 @@ let subst_hole_with_term occ tc t =
   let locref = ref 0 in
   let occref = ref occ in
   let rec substrec = function
-    | GHole (_,Evd.QuestionMark(Evd.Define true)) -> 
-        decr occref; if !occref = 0 then tc
-                     else (incr locref; GHole (make_loc (!locref,0),Evd.QuestionMark(Evd.Define true)))
+    | GHole (_,Evar_kinds.QuestionMark(Evar_kinds.Define true)) ->
+        decr occref;
+        if !occref = 0 then tc
+        else
+	  (incr locref;
+	   GHole (Loc.make_loc (!locref,0),
+		  Evar_kinds.QuestionMark(Evar_kinds.Define true)))
     | c -> map_glob_constr_left_to_right substrec c
   in
   substrec t
@@ -587,10 +589,10 @@ let hResolve id c occ t gl =
   let t_raw = Detyping.detype true env_ids env_names t in 
   let rec resolve_hole t_hole =
     try 
-      Pretyping.Default.understand sigma env t_hole
+      Pretyping.understand sigma env t_hole
     with 
     | Loc.Exc_located (loc,Pretype_errors.PretypeError (_,_,Pretype_errors.UnsolvableImplicit _)) ->
-        resolve_hole (subst_hole_with_term (fst (unloc loc)) c_raw t_hole)
+        resolve_hole (subst_hole_with_term (fst (Loc.unloc loc)) c_raw t_hole)
   in
   let t_constr = resolve_hole (subst_var_with_hole occ id t_raw) in
   let t_constr_type = Retyping.get_type_of env sigma t_constr in
@@ -614,9 +616,6 @@ END
 (**
    hget_evar
 *)
-
-open Evar_refiner
-open Sign
 
 let hget_evar n gl =
   let sigma = project gl in
@@ -646,7 +645,7 @@ exception Found of tactic
 
 let rewrite_except h g =
   tclMAP (fun id -> if id = h then tclIDTAC else 
-      tclTRY (Equality.general_rewrite_in true Termops.all_occurrences true true id (mkVar h) false))
+      tclTRY (Equality.general_rewrite_in true Locus.AllOccurrences true true id (mkVar h) false))
     (Tacmach.pf_ids_of_hyps g) g
 
 
@@ -667,14 +666,14 @@ let  mkCaseEq a  : tactic =
          [Hiddentac.h_generalize [mkApp(delayed_force refl_equal, [| type_of_a; a|])];
           (fun g2 ->
 	    change_in_concl None
-	     (Tacred.pattern_occs [((false,[1]), a)] (Tacmach.pf_env g2) Evd.empty (Tacmach.pf_concl g2))
+	     (Tacred.pattern_occs [Locus.OnlyOccurrences [1], a] (Tacmach.pf_env g2) Evd.empty (Tacmach.pf_concl g2))
 		  g2);
 	  simplest_case a] g);;
 
 
 let case_eq_intros_rewrite x g =
   let n = nb_prod (Tacmach.pf_concl g) in
-  Pp.msgnl (Printer.pr_lconstr x); 
+  (* Pp.msgnl (Printer.pr_lconstr x); *)
   tclTHENLIST [
       mkCaseEq x;
       (fun g -> 
@@ -693,7 +692,7 @@ let rec find_a_destructable_match t =
 	  (* TODO check there is no rel n. *)
 	  raise (Found (Tacinterp.eval_tactic(<:tactic<destruct x>>)))
 	else
-	  let _ = Pp.msgnl (Printer.pr_lconstr x)  in
+	  (* let _ = Pp.msgnl (Printer.pr_lconstr x)  in *)
 	  raise (Found (case_eq_intros_rewrite x))
     | _ -> iter_constr find_a_destructable_match t
 	
@@ -705,8 +704,8 @@ let destauto t =
 
 let destauto_in id g = 
   let ctype = Tacmach.pf_type_of g (mkVar id) in
-  Pp.msgnl (Printer.pr_lconstr (mkVar id)); 
-  Pp.msgnl (Printer.pr_lconstr (ctype)); 
+(*  Pp.msgnl (Printer.pr_lconstr (mkVar id)); *)
+(*  Pp.msgnl (Printer.pr_lconstr (ctype)); *)
   destauto ctype g
 
 TACTIC EXTEND destauto
@@ -746,9 +745,9 @@ let rec has_evar x =
     | Fix ((_, tr)) | CoFix ((_, tr)) ->
       has_evar_prec tr
 and has_evar_array x =
-  array_exists has_evar x
+  Array.exists has_evar x
 and has_evar_prec (_, ts1, ts2) =
-  array_exists has_evar ts1 || array_exists has_evar ts2
+  Array.exists has_evar ts1 || Array.exists has_evar ts2
 
 TACTIC EXTEND has_evar
 | [ "has_evar" constr(x) ] ->
@@ -762,6 +761,12 @@ TACTIC EXTEND is_hyp
     | _ -> tclFAIL 0 (str "Not a variable or hypothesis") ]
 END
 
+TACTIC EXTEND is_fix
+| [ "is_fix" constr(x) ] ->
+  [ match kind_of_term x with
+    | Fix _ -> Tacticals.tclIDTAC
+    | _ -> Tacticals.tclFAIL 0 (Pp.str "not a fix definition") ]
+END;;
 
 (* Command to grab the evars left unresolved at the end of a proof. *)
 (* spiwack: I put it in extratactics because it is somewhat tied with
@@ -770,6 +775,5 @@ END
 VERNAC COMMAND EXTEND GrabEvars
 [ "Grab" "Existential" "Variables" ] ->
   [ let p = Proof_global.give_me_the_proof () in
-    Proof.V82.grab_evars p;
-    Flags.if_verbose (fun () -> Pp.msg (Printer.pr_open_subgoals ())) () ]
+    Proof.V82.grab_evars p ]
 END

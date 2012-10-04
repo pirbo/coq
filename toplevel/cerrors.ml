@@ -1,24 +1,23 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Compat
 open Pp
-open Util
+open Errors
 open Indtypes
 open Type_errors
 open Pretype_errors
 open Indrec
 
 let print_loc loc =
-  if loc = dummy_loc then
+  if loc = Loc.ghost then
     (str"<unknown>")
   else
-    let loc = unloc loc in
+    let loc = Loc.unloc loc in
     (int (fst loc) ++ str"-" ++ int (snd loc))
 
 let guill s = "\""^s^"\""
@@ -33,7 +32,7 @@ exception EvaluatedError of std_ppcmds * exn option
 let explain_exn_default = function
   (* Basic interaction exceptions *)
   | Stream.Error txt -> hov 0 (str ("Syntax error: " ^ txt ^ "."))
-  | Token.Error txt ->  hov 0 (str ("Syntax error: " ^ txt ^ "."))
+  | Compat.Token.Error txt ->  hov 0 (str ("Syntax error: " ^ txt ^ "."))
   | Lexer.Error.E err -> hov 0 (str (Lexer.Error.to_string err))
   | Sys_error msg -> hov 0 (str ("System error: " ^ guill msg))
   | Out_of_memory -> hov 0 (str "Out of memory.")
@@ -42,7 +41,12 @@ let explain_exn_default = function
   | Sys.Break -> hov 0 (fnl () ++ str "User interrupt.")
   (* Meta-exceptions *)
   | Loc.Exc_located (loc,exc) ->
-      hov 0 ((if loc = dummy_loc then (mt ())
+      hov 0 ((if loc = Loc.ghost then (mt ())
+               else (str"At location " ++ print_loc loc ++ str":" ++ fnl ()))
+               ++ Errors.print_no_anomaly exc)
+  | Compat.Exc_located (loc, exc) ->
+      let loc = Compat.to_coqloc loc in
+      hov 0 ((if loc = Loc.ghost then (mt ())
                else (str"At location " ++ print_loc loc ++ str":" ++ fnl ()))
                ++ Errors.print_no_anomaly exc)
   | EvaluatedError (msg,None) -> msg
@@ -111,6 +115,9 @@ let rec process_vernac_interp_error = function
         Some (process_vernac_interp_error exc))
   | Loc.Exc_located (loc,exc) ->
       Loc.Exc_located (loc,process_vernac_interp_error exc)
+  | Compat.Exc_located (loc, exc) ->
+      let loc = Compat.to_coqloc loc in
+      Loc.Exc_located (loc, process_vernac_interp_error exc)
   | exc ->
       exc
 

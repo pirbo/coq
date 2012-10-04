@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -23,6 +23,7 @@
    Inductive Constructions (CIC) terms together with constructors,
    destructors, iterators and basic functions *)
 
+open Errors
 open Util
 open Pp
 open Names
@@ -264,6 +265,7 @@ let destMeta c = match kind_of_term c with
   | _ -> invalid_arg "destMeta"
 
 let isMeta c = match kind_of_term c with Meta _ -> true | _ -> false
+let isMetaOf mv c = match kind_of_term c with Meta mv' -> mv = mv' | _ -> false
 
 (* Destructs a variable *)
 let destVar c = match kind_of_term c with
@@ -322,6 +324,7 @@ let isCast c = match kind_of_term c with Cast _ -> true | _ -> false
 
 (* Tests if a de Bruijn index *)
 let isRel c = match kind_of_term c with Rel _ -> true | _ -> false
+let isRelN n c = match kind_of_term c with Rel n' -> n = n' | _ -> false
 
 (* Tests if a variable *)
 let isVar c = match kind_of_term c with Var _ -> true | _ -> false
@@ -426,7 +429,7 @@ let rec under_casts f c = match kind_of_term c with
 (******************************************************************)
 
 (* flattens application lists throwing casts in-between *)
-let rec collapse_appl c = match kind_of_term c with
+let collapse_appl c = match kind_of_term c with
   | App (f,cl) ->
       let rec collapse_rec f cl2 =
         match kind_of_term (strip_outer_cast f) with
@@ -460,10 +463,10 @@ let fold_constr f acc c = match kind_of_term c with
   | Evar (_,l) -> Array.fold_left f acc l
   | Case (_,p,c,bl) -> Array.fold_left f (f (f acc p) c) bl
   | Fix (_,(lna,tl,bl)) ->
-      let fd = array_map3 (fun na t b -> (na,t,b)) lna tl bl in
+      let fd = Array.map3 (fun na t b -> (na,t,b)) lna tl bl in
       Array.fold_left (fun acc (na,t,b) -> f (f acc t) b) acc fd
   | CoFix (_,(lna,tl,bl)) ->
-      let fd = array_map3 (fun na t b -> (na,t,b)) lna tl bl in
+      let fd = Array.map3 (fun na t b -> (na,t,b)) lna tl bl in
       Array.fold_left (fun acc (na,t,b) -> f (f acc t) b) acc fd
 
 (* [iter_constr f c] iters [f] on the immediate subterms of [c]; it is
@@ -569,17 +572,17 @@ let compare_constr f t1 t2 =
   | _, App (c2,l2) when isCast c2 -> f t1 (mkApp (pi1 (destCast c2),l2))
   | App (c1,l1), App (c2,l2) ->
     Array.length l1 = Array.length l2 &&
-      f c1 c2 && array_for_all2 f l1 l2
-  | Evar (e1,l1), Evar (e2,l2) -> e1 = e2 & array_for_all2 f l1 l2
+      f c1 c2 && Array.for_all2 f l1 l2
+  | Evar (e1,l1), Evar (e2,l2) -> e1 = e2 & Array.for_all2 f l1 l2
   | Const c1, Const c2 -> eq_constant c1 c2
   | Ind c1, Ind c2 -> eq_ind c1 c2
   | Construct c1, Construct c2 -> eq_constructor c1 c2
   | Case (_,p1,c1,bl1), Case (_,p2,c2,bl2) ->
-      f p1 p2 & f c1 c2 & array_for_all2 f bl1 bl2
+      f p1 p2 & f c1 c2 & Array.for_all2 f bl1 bl2
   | Fix (ln1,(_,tl1,bl1)), Fix (ln2,(_,tl2,bl2)) ->
-      ln1 = ln2 & array_for_all2 f tl1 tl2 & array_for_all2 f bl1 bl2
+      ln1 = ln2 & Array.for_all2 f tl1 tl2 & Array.for_all2 f bl1 bl2
   | CoFix(ln1,(_,tl1,bl1)), CoFix(ln2,(_,tl2,bl2)) ->
-      ln1 = ln2 & array_for_all2 f tl1 tl2 & array_for_all2 f bl1 bl2
+      ln1 = ln2 & Array.for_all2 f tl1 tl2 & Array.for_all2 f bl1 bl2
   | _ -> false
 
 (*******************************)
@@ -615,9 +618,9 @@ let constr_ord_int f t1 t2 =
 	((f =? f) ==? f) b1 b2 t1 t2 c1 c2
     | App (c1,l1), _ when isCast c1 -> f (mkApp (pi1 (destCast c1),l1)) t2
     | _, App (c2,l2) when isCast c2 -> f t1 (mkApp (pi1 (destCast c2),l2))
-    | App (c1,l1), App (c2,l2) -> (f =? (array_compare f)) c1 c2 l1 l2
+    | App (c1,l1), App (c2,l2) -> (f =? (Array.compare f)) c1 c2 l1 l2
     | Evar (e1,l1), Evar (e2,l2) ->
-	((-) =? (array_compare f)) e1 e2 l1 l2
+	((-) =? (Array.compare f)) e1 e2 l1 l2
     | Const c1, Const c2 -> kn_ord (canonical_con c1) (canonical_con c2)
     | Ind (spx, ix), Ind (spy, iy) ->
 	let c = ix - iy in if c = 0 then kn_ord (canonical_mind spx) (canonical_mind spy) else c
@@ -626,12 +629,12 @@ let constr_ord_int f t1 t2 =
 	  (let c = ix - iy in if c = 0 then kn_ord (canonical_mind spx) (canonical_mind spy) else c)
 	else c
     | Case (_,p1,c1,bl1), Case (_,p2,c2,bl2) ->
-	((f =? f) ==? (array_compare f)) p1 p2 c1 c2 bl1 bl2
+	((f =? f) ==? (Array.compare f)) p1 p2 c1 c2 bl1 bl2
     | Fix (ln1,(_,tl1,bl1)), Fix (ln2,(_,tl2,bl2)) ->
-	((Pervasives.compare =? (array_compare f)) ==? (array_compare f))
+	((Pervasives.compare =? (Array.compare f)) ==? (Array.compare f))
 	ln1 ln2 tl1 tl2 bl1 bl2
     | CoFix(ln1,(_,tl1,bl1)), CoFix(ln2,(_,tl2,bl2)) ->
-	((Pervasives.compare =? (array_compare f)) ==? (array_compare f))
+	((Pervasives.compare =? (Array.compare f)) ==? (Array.compare f))
 	ln1 ln2 tl1 tl2 bl1 bl2
     | t1, t2 -> Pervasives.compare t1 t2
 
@@ -649,7 +652,7 @@ type strategy = types option
 type named_declaration = identifier * constr option * types
 type rel_declaration = name * constr option * types
 
-let map_named_declaration f (id, v, ty) = (id, Option.map f v, f ty)
+let map_named_declaration f (id, (v : strategy), ty) = (id, Option.map f v, f ty)
 let map_rel_declaration = map_named_declaration
 
 let fold_named_declaration f (_, v, ty) a = f ty (Option.fold_right f v a)
@@ -825,7 +828,6 @@ let subst1 lam = substl [lam]
 let substnl_decl laml k = map_rel_declaration (substnl laml k)
 let substl_decl laml = substnl_decl laml 0
 let subst1_decl lam = substl_decl [lam]
-let substnl_named laml k = map_named_declaration (substnl laml k)
 let substl_named_decl = substl_decl
 let subst1_named_decl = subst1_decl
 
@@ -1233,9 +1235,12 @@ let equals_constr t1 t2 =
 (** Note that the following Make has the side effect of creating
     once and for all the table we'll use for hash-consing all constr *)
 
-module H = Hashtbl_alt.Make(struct type t = constr let equals = equals_constr end)
+module HashsetTerm = Hashset.Make(struct type t = constr let equal = equals_constr end)
 
-open Hashtbl_alt.Combine
+let term_table = HashsetTerm.create 19991
+(* The associative table to hashcons terms. *)
+
+open Hashset.Combine
 
 (* [hcons_term hash_consing_functions constr] computes an hash-consed
    representation for [constr] using [hash_consing_functions] on
@@ -1317,7 +1322,7 @@ let hcons_term (sh_sort,sh_ci,sh_construct,sh_ind,sh_con,sh_na,sh_id) =
     let (y, h) = hash_term t in
     (* [h] must be positive. *)
     let h = h land 0x3FFFFFFF in
-    (H.may_add_and_get h y, h)
+    (HashsetTerm.repr h y term_table, h)
 
   in
   (* Make sure our statically allocated Rels (1 to 16) are considered
@@ -1366,7 +1371,7 @@ module Hsorts =
     struct
       type t = sorts
       type u = universe -> universe
-      let hash_sub huniv = function
+      let hashcons huniv = function
           Prop c -> Prop c
         | Type u -> Type (huniv u)
       let equal s1 s2 =
@@ -1382,7 +1387,7 @@ module Hcaseinfo =
     struct
       type t = case_info
       type u = inductive -> inductive
-      let hash_sub hind ci = { ci with ci_ind = hind ci.ci_ind }
+      let hashcons hind ci = { ci with ci_ind = hind ci.ci_ind }
       let equal ci ci' =
 	ci.ci_ind == ci'.ci_ind &&
 	ci.ci_npar = ci'.ci_npar &&
@@ -1391,8 +1396,8 @@ module Hcaseinfo =
       let hash = Hashtbl.hash
     end)
 
-let hcons_sorts = Hashcons.simple_hcons Hsorts.f hcons_univ
-let hcons_caseinfo = Hashcons.simple_hcons Hcaseinfo.f hcons_ind
+let hcons_sorts = Hashcons.simple_hcons Hsorts.generate hcons_univ
+let hcons_caseinfo = Hashcons.simple_hcons Hcaseinfo.generate hcons_ind
 
 let hcons_constr =
   hcons_term

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -95,12 +95,12 @@ let partitionne s =
 *)
 let add_hist le =
    let n = List.length le in
-   let i=ref 0 in
+   let i = ref 0 in
    List.map (fun (ie,s) ->
-              let h =ref [] in
-              for k=1 to (n-(!i)-1) do pop r0 h; done;
+              let h = ref [] in
+              for _k = 1 to (n - (!i) - 1) do pop r0 h; done;
               pop r1 h;
-              for k=1 to !i do pop r0 h; done;
+              for _k = 1 to !i do pop r0 h; done;
               i:=!i+1;
               {coef=ie;hist=(!h);strict=s})
              le
@@ -151,7 +151,7 @@ let deduce1 s =
 let deduce lie =
    let n = List.length (fst (List.hd lie)) in
    let lie=ref (add_hist lie) in
-   for i=1 to n-1 do
+   for _i = 1 to n - 1 do
       lie:= deduce1 !lie;
    done;
    !lie

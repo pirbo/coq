@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -38,11 +38,18 @@ let record_print = ref true
 
 (* Compatibility mode *)
 
-type compat_version = V8_2 | V8_3
-let compat_version = ref None
-let version_strictly_greater v =
-  match !compat_version with None -> true | Some v' -> v'>v
+(* Current means no particular compatibility consideration.
+   For correct comparisons, this constructor should remain the last one. *)
+
+type compat_version = V8_2 | V8_3 | Current
+let compat_version = ref Current
+let version_strictly_greater v = !compat_version > v
 let version_less_or_equal v = not (version_strictly_greater v)
+
+let pr_version = function
+  | V8_2 -> "8.2"
+  | V8_3 -> "8.3"
+  | Current -> "current"
 
 (* Translate *)
 let beautify = ref false
@@ -62,9 +69,22 @@ let verbosely f x = without_option silent f x
 let if_silent f x = if !silent then f x
 let if_verbose f x = if not !silent then f x
 
+(* Use terminal color *)
+let term_color = ref false
+let make_term_color b = term_color := b
+let is_term_color () = !term_color
+
 let auto_intros = ref true
 let make_auto_intros flag = auto_intros := flag
 let is_auto_intros () = version_strictly_greater V8_2 && !auto_intros
+
+(** [program_cmd] indicates that the current command is a Program one.
+    [program_mode] tells that Program mode has been activated, either
+    globally via [Set Program] or locally via the Program command prefix. *)
+
+let program_cmd = ref false
+let program_mode = ref false
+let is_program_mode () = !program_mode
 
 let hash_cons_proofs = ref true
 
@@ -88,17 +108,6 @@ let add_unsafe s = unsafe_set := Stringset.add s !unsafe_set
 let is_unsafe s = Stringset.mem s !unsafe_set
 
 (* Flags for external tools *)
-
-let subst_command_placeholder s t =
-  let buff = Buffer.create (String.length s + String.length t) in
-  let i = ref 0 in
-  while (!i < String.length s) do
-    if s.[!i] = '%' & !i+1 < String.length s & s.[!i+1] = 's'
-    then (Buffer.add_string buff t;incr i)
-    else Buffer.add_char buff s.[!i];
-    incr i
-  done;
-  Buffer.contents buff
 
 let browser_cmd_fmt =
  try

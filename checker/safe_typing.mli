@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -19,9 +19,9 @@ type compiled_library
 
 val set_engagement : Declarations.engagement -> unit
 val import         :
-  System.physical_path -> compiled_library -> Digest.t -> unit
+  CUnix.physical_path -> compiled_library -> Digest.t -> unit
 val unsafe_import  :
-  System.physical_path -> compiled_library -> Digest.t -> unit
+  CUnix.physical_path -> compiled_library -> Digest.t -> unit
 
 (** Store the body of modules' opaque constants inside a table. 
 

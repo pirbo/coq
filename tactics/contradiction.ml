@@ -1,27 +1,26 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Errors
 open Term
-open Proof_type
 open Hipattern
 open Tacmach
 open Tacticals
 open Tactics
 open Coqlib
 open Reductionops
-open Glob_term
+open Misctypes
 
 (* Absurd *)
 
 let absurd c gls =
   let env = pf_env gls and sigma = project gls in
-  let _,j = Coercion.Default.inh_coerce_to_sort dummy_loc env
+  let _,j = Coercion.inh_coerce_to_sort Loc.ghost env
     (Evd.create_goal_evar_defs sigma) (Retyping.get_judgment_of env sigma c) in
   let c = j.Environ.utj_val in
   (tclTHENS

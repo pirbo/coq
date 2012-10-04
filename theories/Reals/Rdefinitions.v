@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -21,7 +21,7 @@ Delimit Scope R_scope with R.
 (* Automatically open scope R_scope for arguments of type R *)
 Bind Scope R_scope with R.
 
-Open Local Scope R_scope.
+Local Open Scope R_scope.
 
 Parameter R0 : R.
 Parameter R1 : R.

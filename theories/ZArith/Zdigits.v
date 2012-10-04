@@ -1,7 +1,7 @@
 (* -*- coding: utf-8 -*- *)
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -64,7 +64,7 @@ Section ENCODING_VALUE.
 
 (** We compute the binary value via a Horner scheme.
     Computation stops at the vector length without checks.
-    We define a function Zmod2 similar to Zdiv2 returning the
+    We define a function Zmod2 similar to Z.div2 returning the
     quotient of division z=2q+r with 0<=r<=1.
     The two's complement value is also computed via a Horner scheme
     with Zmod2, the parameter is the size minus one.
@@ -88,16 +88,16 @@ Section ENCODING_VALUE.
 
 
   Lemma Zmod2_twice :
-    forall z:Z, z = (2 * Zmod2 z + bit_value (Zeven.Zodd_bool z))%Z.
+    forall z:Z, z = (2 * Zmod2 z + bit_value (Z.odd z))%Z.
   Proof.
-    destruct z; simpl in |- *.
+    destruct z; simpl.
     trivial.
 
-    destruct p; simpl in |- *; trivial.
+    destruct p; simpl; trivial.
 
-    destruct p; simpl in |- *.
-    destruct p as [p| p| ]; simpl in |- *.
-    rewrite <- (Pdouble_minus_one_o_succ_eq_xI p); trivial.
+    destruct p; simpl.
+    destruct p as [p| p| ]; simpl.
+    rewrite <- (Pos.pred_double_succ p); trivial.
 
     trivial.
 
@@ -113,15 +113,15 @@ Section ENCODING_VALUE.
     simple induction n; intros.
     exact Bnil.
 
-    exact (Bcons (Zeven.Zodd_bool H0) n0 (H (Zeven.Zdiv2 H0))).
+    exact (Bcons (Z.odd H0) n0 (H (Z.div2 H0))).
   Defined.
 
   Lemma Z_to_two_compl : forall n:nat, Z -> Bvector (S n).
   Proof.
     simple induction n; intros.
-    exact (Bcons (Zeven.Zodd_bool H) 0 Bnil).
+    exact (Bcons (Z.odd H) 0 Bnil).
 
-    exact (Bcons (Zeven.Zodd_bool H0) (S n0) (H (Zmod2 H0))).
+    exact (Bcons (Z.odd H0) (S n0) (H (Zmod2 H0))).
   Defined.
 
 End ENCODING_VALUE.
@@ -145,17 +145,17 @@ Section Z_BRIC_A_BRAC.
       (z >= 0)%Z ->
       Z_to_binary (S n) (bit_value b + 2 * z) = Bcons b n (Z_to_binary n z).
   Proof.
-    destruct b; destruct z; simpl in |- *; auto.
+    destruct b; destruct z; simpl; auto.
     intro H; elim H; trivial.
   Qed.
 
   Lemma binary_value_pos :
     forall (n:nat) (bv:Bvector n), (binary_value n bv >= 0)%Z.
   Proof.
-    induction bv as [| a n v IHbv]; simpl in |- *.
+    induction bv as [| a n v IHbv]; simpl.
     omega.
 
-    destruct a; destruct (binary_value n v); simpl in |- *; auto.
+    destruct a; destruct (binary_value n v); simpl; auto.
     auto with zarith.
   Qed.
 
@@ -174,34 +174,34 @@ Section Z_BRIC_A_BRAC.
   Proof.
     destruct b; destruct z as [| p| p]; auto.
     destruct p as [p| p| ]; auto.
-    destruct p as [p| p| ]; simpl in |- *; auto.
-    intros; rewrite (Psucc_o_double_minus_one_eq_xO p); trivial.
+    destruct p as [p| p| ]; simpl; auto.
+    intros; rewrite (Pos.succ_pred_double p); trivial.
   Qed.
 
   Lemma Z_to_binary_Sn_z :
     forall (n:nat) (z:Z),
       Z_to_binary (S n) z =
-      Bcons (Zeven.Zodd_bool z) n (Z_to_binary n (Zeven.Zdiv2 z)).
+      Bcons (Z.odd z) n (Z_to_binary n (Z.div2 z)).
   Proof.
     intros; auto.
   Qed.
 
   Lemma Z_div2_value :
     forall z:Z,
-      (z >= 0)%Z -> (bit_value (Zeven.Zodd_bool z) + 2 * Zeven.Zdiv2 z)%Z = z.
+      (z >= 0)%Z -> (bit_value (Z.odd z) + 2 * Z.div2 z)%Z = z.
   Proof.
     destruct z as [| p| p]; auto.
     destruct p; auto.
     intro H; elim H; trivial.
   Qed.
 
-  Lemma Pdiv2 : forall z:Z, (z >= 0)%Z -> (Zeven.Zdiv2 z >= 0)%Z.
+  Lemma Pdiv2 : forall z:Z, (z >= 0)%Z -> (Z.div2 z >= 0)%Z.
   Proof.
     destruct z as [| p| p].
     auto.
 
     destruct p; auto.
-    simpl in |- *; intros; omega.
+    simpl; intros; omega.
 
     intro H; elim H; trivial.
   Qed.
@@ -209,10 +209,10 @@ Section Z_BRIC_A_BRAC.
   Lemma Zdiv2_two_power_nat :
     forall (z:Z) (n:nat),
       (z >= 0)%Z ->
-      (z < two_power_nat (S n))%Z -> (Zeven.Zdiv2 z < two_power_nat n)%Z.
+      (z < two_power_nat (S n))%Z -> (Z.div2 z < two_power_nat n)%Z.
   Proof.
     intros.
-    cut (2 * Zeven.Zdiv2 z < 2 * two_power_nat n)%Z; intros.
+    cut (2 * Z.div2 z < 2 * two_power_nat n)%Z; intros.
     omega.
 
     rewrite <- two_power_nat_S.
@@ -225,23 +225,23 @@ Section Z_BRIC_A_BRAC.
   Lemma Z_to_two_compl_Sn_z :
     forall (n:nat) (z:Z),
       Z_to_two_compl (S n) z =
-      Bcons (Zeven.Zodd_bool z) (S n) (Z_to_two_compl n (Zmod2 z)).
+      Bcons (Z.odd z) (S n) (Z_to_two_compl n (Zmod2 z)).
   Proof.
     intros; auto.
   Qed.
 
   Lemma Zeven_bit_value :
-    forall z:Z, Zeven.Zeven z -> bit_value (Zeven.Zodd_bool z) = 0%Z.
+    forall z:Z, Zeven.Zeven z -> bit_value (Z.odd z) = 0%Z.
   Proof.
-    destruct z; unfold bit_value in |- *; auto.
+    destruct z; unfold bit_value; auto.
     destruct p; tauto || (intro H; elim H).
     destruct p; tauto || (intro H; elim H).
   Qed.
 
   Lemma Zodd_bit_value :
-    forall z:Z, Zeven.Zodd z -> bit_value (Zeven.Zodd_bool z) = 1%Z.
+    forall z:Z, Zeven.Zodd z -> bit_value (Z.odd z) = 1%Z.
   Proof.
-    destruct z; unfold bit_value in |- *; auto.
+    destruct z; unfold bit_value; auto.
     intros; elim H.
     destruct p; tauto || (intros; elim H).
     destruct p; tauto || (intros; elim H).
@@ -310,7 +310,7 @@ Section COHERENT_VALUE.
       (z < two_power_nat n)%Z -> binary_value n (Z_to_binary n z) = z.
   Proof.
     induction n as [| n IHn].
-    unfold two_power_nat, shift_nat in |- *; simpl in |- *; intros; omega.
+    unfold two_power_nat, shift_nat; simpl; intros; omega.
 
     intros; rewrite Z_to_binary_Sn_z.
     rewrite binary_value_Sn.
@@ -328,7 +328,7 @@ Section COHERENT_VALUE.
       (z < two_power_nat n)%Z -> two_compl_value n (Z_to_two_compl n z) = z.
   Proof.
     induction n as [| n IHn].
-    unfold two_power_nat, shift_nat in |- *; simpl in |- *; intros.
+    unfold two_power_nat, shift_nat; simpl; intros.
     assert (z = (-1)%Z \/ z = 0%Z). omega.
     intuition; subst z; trivial.
 

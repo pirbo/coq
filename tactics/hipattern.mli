@@ -1,12 +1,11 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
 open Names
 open Term
 open Sign
@@ -52,13 +51,13 @@ val is_non_recursive_type         : testing_function
 
 (** Non recursive type with no indices and exactly one argument for each
    constructor; canonical definition of n-ary disjunction if strict *)
-val match_with_disjunction : ?strict:bool -> (constr * constr list) matching_function
-val is_disjunction         : ?strict:bool -> testing_function
+val match_with_disjunction : ?strict:bool -> ?onlybinary:bool -> (constr * constr list) matching_function
+val is_disjunction         : ?strict:bool -> ?onlybinary:bool -> testing_function
 
 (** Non recursive tuple (one constructor and no indices) with no inner
    dependencies; canonical definition of n-ary conjunction if strict *)
-val match_with_conjunction : ?strict:bool -> (constr * constr list) matching_function
-val is_conjunction         : ?strict:bool -> testing_function
+val match_with_conjunction : ?strict:bool -> ?onlybinary:bool -> (constr * constr list) matching_function
+val is_conjunction         : ?strict:bool -> ?onlybinary:bool -> testing_function
 
 (** Non recursive tuple, possibly with inner dependencies *)
 val match_with_record      : (constr * constr list) matching_function

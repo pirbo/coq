@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -79,5 +79,5 @@ Qed.
 
 Lemma Zpower_alt_Ppow p q : (Zpos p)^^(Zpos q) = Zpos (p^q).
 Proof.
- now rewrite Zpower_equiv, Z.pow_Zpos.
+ now rewrite Zpower_equiv, Pos2Z.inj_pow.
 Qed.

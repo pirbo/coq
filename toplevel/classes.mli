@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -14,11 +14,11 @@ open Evd
 open Environ
 open Nametab
 open Mod_subst
-open Topconstr
-open Util
+open Constrexpr
 open Typeclasses
 open Implicit_quantifiers
 open Libnames
+open Globnames
 
 (** Errors *)
 
@@ -39,7 +39,7 @@ val declare_instance_constant :
   int option -> (** priority *)
   bool -> (** globality *)
   Impargs.manual_explicitation list -> (** implicits *)
-  ?hook:(Libnames.global_reference -> unit) ->
+  ?hook:(Globnames.global_reference -> unit) ->
   identifier -> (** name *)
   Term.constr -> (** body *)
   Term.types -> (** type *)
@@ -53,7 +53,7 @@ val new_instance :
   constr_expr option ->
   ?generalize:bool ->
   ?tac:Proof_type.tactic  ->
-  ?hook:(Libnames.global_reference -> unit) ->
+  ?hook:(Globnames.global_reference -> unit) ->
   int option ->
   identifier
 
@@ -67,7 +67,9 @@ val id_of_class : typeclass -> identifier
 
 (** Context command *)
 
-val context : local_binder list -> unit
+(** returns [false] if, for lack of section, it declares an assumption
+    (unless in a module type). *)
+val context : local_binder list -> bool
 
 (** Forward ref for refine *)
 

@@ -1,31 +1,29 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
 open Term
 open Termops
 open Namegen
-open Sign
 open Environ
 open Evd
 open Reduction
 open Reductionops
-open Glob_term
-open Pattern
 open Tacred
 open Pretype_errors
 open Evarutil
 open Unification
 open Mod_subst
-open Coercion.Default
+open Misctypes
 
 (* Abbreviations *)
 
@@ -274,7 +272,7 @@ let clenv_unify_meta_types ?(flags=default_unify_flags) clenv =
 
 let clenv_unique_resolver ?(flags=default_unify_flags) clenv gl =
   let concl = Goal.V82.concl clenv.evd (sig_it gl) in
-  if isMeta (fst (whd_stack clenv.evd clenv.templtyp.rebus)) then
+  if isMeta (fst (whd_nored_stack clenv.evd clenv.templtyp.rebus)) then
     clenv_unify CUMUL ~flags (clenv_type clenv) concl
       (clenv_unify_meta_types ~flags clenv)
   else
@@ -318,7 +316,7 @@ let clenv_pose_metas_as_evars clenv dep_mvs =
       if occur_meta ty then fold clenv (mvs@[mv])
       else
 	let (evd,evar) =
-	  new_evar clenv.evd (cl_env clenv) ~src:(dummy_loc,GoalEvar) ty in
+	  new_evar clenv.evd (cl_env clenv) ~src:(Loc.ghost,Evar_kinds.GoalEvar) ty in
 	let clenv = clenv_assign mv evar {clenv with evd=evd} in
 	fold clenv mvs in
   fold clenv dep_mvs
@@ -398,7 +396,7 @@ let clenv_independent clenv =
   List.filter (fun mv -> not (Metaset.mem mv deps)) mvs
 
 let check_bindings bl =
-  match list_duplicates (List.map pi2 bl) with
+  match List.duplicates (List.map pi2 bl) with
     | NamedHyp s :: _ ->
 	errorlabstrm ""
 	  (str "The variable " ++ pr_id s ++
@@ -427,7 +425,7 @@ let error_already_defined b =
           (str "Position " ++ int n ++ str" already defined.")
 
 let clenv_unify_binding_type clenv c t u =
-  if isMeta (fst (whd_stack clenv.evd u)) then
+  if isMeta (fst (whd_nored_stack clenv.evd u)) then
     (* Not enough information to know if some subtyping is needed *)
     CoerceToType, clenv, c
   else
@@ -466,7 +464,7 @@ exception NoSuchBinding
 
 let clenv_constrain_last_binding c clenv =
   let all_mvs = collect_metas clenv.templval.rebus in
-  let k = try list_last all_mvs with Failure _ -> raise NoSuchBinding in
+  let k = try List.last all_mvs with Failure _ -> raise NoSuchBinding in
   clenv_assign_binding clenv k c
 
 let error_not_right_number_missing_arguments n =
@@ -500,8 +498,8 @@ let make_clenv_binding_gen hyps_only n env sigma (c,t) = function
       let clause = mk_clenv_from_env env sigma n (c,t) in
       clenv_constrain_dep_args hyps_only largs clause
   | ExplicitBindings lbind ->
-      let clause = mk_clenv_from_env env sigma n 
-	(c,rename_bound_vars_as_displayed [] t) 
+      let clause = mk_clenv_from_env env sigma n
+	(c,rename_bound_vars_as_displayed [] [] t)
       in clenv_match_args lbind clause
   | NoBindings ->
       mk_clenv_from_env env sigma n (c,t)

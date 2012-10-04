@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -109,7 +109,7 @@ let build_branches_type env (mind,_ as _ind) mib mip params dep p =
      a 0) et les lambda correspondant aux realargs *)
   let build_one_branch i cty =
     let typi = type_constructor mind mib cty params in
-    let decl,indapp = Term.decompose_prod typi in
+    let decl,indapp = decompose_prod_assum typi in
     let ind,cargs = find_rectype_a env indapp in
     let nparams = Array.length params in
     let carity = snd (rtbl.(i)) in
@@ -182,7 +182,7 @@ and nf_stk env c t stk  =
       let (mind,_ as ind),allargs = find_rectype_a env t in
       let (mib,mip) = Inductive.lookup_mind_specif env ind in
       let nparams = mib.mind_nparams in
-      let params,realargs = Util.array_chop nparams allargs in
+      let params,realargs = Util.Array.chop nparams allargs in
       let pT =
 	hnf_prod_applist env (type_of_ind env ind) (Array.to_list params) in
       let pT = whd_betadeltaiota env pT in
@@ -193,11 +193,8 @@ and nf_stk env c t stk  =
       let bsw = branch_of_switch (nb_rel env) sw in
       let mkbranch i (n,v) =
 	let decl,codom = btypes.(i) in
-	let env =
-	  List.fold_right
-	    (fun (name,t) env -> push_rel (name,None,t) env) decl env in
-	let b = nf_val env v codom in
-	compose_lam decl b
+	let b = nf_val (push_rel_context decl env) v codom in
+	it_mkLambda_or_LetIn b decl
       in
       let branchs = Array.mapi mkbranch bsw in
       let tcase = build_case_type dep p realargs c in
@@ -267,7 +264,7 @@ and nf_fix env f =
   let ft = Array.map (fun v -> nf_val env v crazy_type) vt in
   let name = Array.init ndef (fun _ -> (Name (id_of_string "Ffix"))) in
   let env = push_rec_types (name,ft,ft) env in
-  let fb = Util.array_map2 (fun v t -> nf_fun env v t) vb ft in
+  let fb = Util.Array.map2 (fun v t -> nf_fun env v t) vb ft in
   mkFix ((rec_args,init),(name,ft,fb))
 
 and nf_fix_app env f vargs =
@@ -285,7 +282,7 @@ and nf_cofix env cf =
   let cft = Array.map (fun v -> nf_val env v crazy_type) vt in
   let name = Array.init ndef (fun _ -> (Name (id_of_string "Fcofix"))) in
   let env = push_rec_types (name,cft,cft) env in
-  let cfb = Util.array_map2 (fun v t -> nf_val env v t) vb cft in
+  let cfb = Util.Array.map2 (fun v t -> nf_val env v t) vb cft in
   mkCoFix (init,(name,cft,cfb))
 
 let cbv_vm env c t  =

@@ -1,39 +1,30 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
 open Pp
+open Errors
 open Util
 open Names
 open Nameops
 open Term
 open Termops
 open Namegen
-open Global
-open Sign
 open Environ
 open Inductiveops
 open Printer
-open Reductionops
 open Retyping
 open Tacmach
-open Proof_type
-open Evar_refiner
 open Clenv
-open Tactics
 open Tacticals
 open Tactics
 open Elim
 open Equality
-open Typing
-open Pattern
-open Matching
-open Glob_term
-open Genarg
+open Misctypes
 open Tacexpr
 
 let collect_meta_variables c =
@@ -120,7 +111,7 @@ let make_inv_predicate env sigma indf realargs id status concl =
   let nhyps = rel_context_length hyps in
   let env' = push_rel_context hyps env in
   let realargs' = List.map (lift nhyps) realargs in
-  let pairs = list_map_i (compute_eqn env' sigma nhyps) 0 realargs' in
+  let pairs = List.map_i (compute_eqn env' sigma nhyps) 0 realargs' in
   (* Now the arity is pushed, and we need to construct the pairs
    * ai,mkRel(n-i+1) *)
   (* Now, we can recurse down this list, for each ai,(mkRel k) whether to
@@ -189,7 +180,7 @@ let make_inv_predicate env sigma indf realargs id status concl =
    and introduces generalized hypotheis.
    Precondition: t=(mkVar id) *)
 
-let rec dependent_hyps id idlist gl =
+let dependent_hyps id idlist gl =
   let rec dep_rec =function
     | [] -> []
     | (id1,_,_)::l ->
@@ -206,8 +197,6 @@ let split_dep_and_nodep hyps gl =
     (fun (id,_,_ as d) (l1,l2) ->
        if var_occurs_in_pf gl id then (d::l1,l2) else (l1,d::l2))
     hyps ([],[])
-
-open Coqlib
 
 (* Computation of dids is late; must have been done in rewrite_equations*)
 (* Will keep generalizing and introducing back and forth... *)
@@ -294,7 +283,7 @@ let rec tclMAP_i n tacfun = function
       if n=0 then error "Too many names."
       else tclTHEN (tacfun (Some a)) (tclMAP_i (n-1) tacfun l)
 
-let remember_first_eq id x = if !x = no_move then x := MoveAfter id
+let remember_first_eq id x = if !x = MoveLast then x := MoveAfter id
 
 (* invariant: ProjectAndApply is responsible for erasing the clause
    which it is given as input
@@ -321,7 +310,7 @@ let projectAndApply thin id eqname names depids gls =
       [(if names <> [] then clear [id] else tclIDTAC);
        (tclMAP_i neqns (fun idopt ->
 	 tclTRY (tclTHEN
-	   (intro_move idopt no_move)
+	   (intro_move idopt MoveLast)
 	   (* try again to substitute and if still not a variable after *)
 	   (* decomposition, arbitrarily try to rewrite RL !? *)
 	   (tclTRY (onLastHypId (substHypIfVariable (subst_hyp false))))))
@@ -352,7 +341,7 @@ let rewrite_equations_gene othin neqns ba gl =
                         (onLastHypId
                            (fun id ->
                               tclTRY
-			        (projectAndApply thin id (ref no_move)
+			        (projectAndApply thin id (ref MoveLast)
 				  [] depids))));
                  onHyps (compose List.rev (afterHyp last)) bring_hyps;
                  onHyps (afterHyp last)
@@ -406,7 +395,7 @@ let rewrite_equations othin neqns names ba gl =
   let names = List.map (get_names true) names in
   let (depids,nodepids) = split_dep_and_nodep ba.assums gl in
   let rewrite_eqns =
-    let first_eq = ref no_move in
+    let first_eq = ref MoveLast in
     match othin with
       | Some thin ->
           tclTHENSEQ
@@ -415,12 +404,12 @@ let rewrite_equations othin neqns names ba gl =
 	     tclMAP_i neqns (fun o ->
 	       let idopt,names = extract_eqn_names o in
                (tclTHEN
-		 (intro_move idopt no_move)
+		 (intro_move idopt MoveLast)
 		 (onLastHypId (fun id ->
 		   tclTRY (projectAndApply thin id first_eq names depids)))))
 	       names;
 	     tclMAP (fun (id,_,_) gl ->
-	       intro_move None (if thin then no_move else !first_eq) gl)
+	       intro_move None (if thin then MoveLast else !first_eq) gl)
 	       nodepids;
 	     tclMAP (fun (id,_,_) -> tclTRY (clear [id])) depids]
       | None -> tclIDTAC
@@ -479,7 +468,7 @@ let raw_inversion inv_kind id status names gl =
         (fun id ->
            (tclTHEN
               (apply_term (mkVar id)
-                 (list_tabulate (fun _ -> Evarutil.mk_new_meta()) neqns))
+                 (List.tabulate (fun _ -> Evarutil.mk_new_meta()) neqns))
               reflexivity))])
   gl
 

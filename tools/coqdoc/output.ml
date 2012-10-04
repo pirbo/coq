@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -29,23 +29,27 @@ let build_table l =
 
 let is_keyword =
   build_table
-    [ "AddPath"; "Axiom"; "Abort"; "Chapter"; "Check"; "Coercion"; "CoFixpoint";
+    [ "About"; "AddPath"; "Axiom"; "Abort"; "Chapter"; "Check"; "Coercion"; "Compute"; "CoFixpoint";
       "CoInductive"; "Corollary"; "Defined"; "Definition"; "End"; "Eval"; "Example";
-      "Export"; "Fact"; "Fix"; "Fixpoint"; "Global"; "Grammar"; "Goal"; "Hint";
+      "Export"; "Fact"; "Fix"; "Fixpoint"; "Function"; "Generalizable"; "Global"; "Grammar";
+      "Guarded"; "Goal"; "Hint"; "Debug"; "On";
       "Hypothesis"; "Hypotheses";
-      "Resolve"; "Unfold"; "Immediate"; "Extern"; "Implicit"; "Import"; "Inductive";
+      "Resolve"; "Unfold"; "Immediate"; "Extern"; "Constructors"; "Rewrite";
+      "Implicit"; "Import"; "Inductive";
       "Infix"; "Lemma"; "Let"; "Load"; "Local"; "Ltac";
       "Module"; "Module Type"; "Declare Module"; "Include";
-      "Mutual"; "Parameter"; "Parameters"; "Print"; "Proof"; "Proof with"; "Qed";
-      "Record"; "Recursive"; "Remark"; "Require"; "Save"; "Scheme";
+      "Mutual"; "Parameter"; "Parameters"; "Print"; "Printing"; "All"; "Proof"; "Proof with"; "Qed";
+      "Record"; "Recursive"; "Remark"; "Require"; "Save"; "Scheme"; "Assumptions"; "Axioms"; "Universes";
       "Induction"; "for"; "Sort"; "Section"; "Show"; "Structure"; "Syntactic"; "Syntax"; "Tactic"; "Theorem";
+      "Search"; "SearchAbout"; "SearchRewrite";
       "Set"; "Types"; "Undo"; "Unset"; "Variable"; "Variables"; "Context";
       "Notation"; "Reserved Notation"; "Tactic Notation";
       "Delimit"; "Bind"; "Open"; "Scope"; "Inline";
       "Implicit Arguments"; "Add"; "Strict";
       "Typeclasses"; "Instance"; "Global Instance"; "Class"; "Instantiation";
-      "subgoal";
-      "Opaque"; "Transparent";
+      "subgoal"; "subgoals"; "vm_compute";
+      "Opaque"; "Transparent"; "Time";
+      "Extraction"; "Extract";
       (* Program *)
       "Program Definition"; "Program Example"; "Program Fixpoint"; "Program Lemma";
       "Obligation"; "Obligations"; "Solve"; "using"; "Next Obligation"; "Next";
@@ -53,14 +57,20 @@ let is_keyword =
       (*i (* coq terms *) *)
       "forall"; "match"; "as"; "in"; "return"; "with"; "end"; "let"; "fun";
       "if"; "then"; "else"; "Prop"; "Set"; "Type"; ":="; "where"; "struct"; "wf"; "measure";
+      "fix"; "cofix";
       (* Ltac *)
-      "before"; "after"
+      "before"; "after"; "constr"; "ltac"; "goal"; "context"; "beta"; "delta"; "iota"; "zeta";
+      (* Notations *)
+      "level"; "associativity"; "no"
        ]
 
 let is_tactic =
   build_table
     [ "intro"; "intros"; "apply"; "rewrite"; "refine"; "case"; "clear"; "injection";
-      "elimtype"; "progress"; "setoid_rewrite";
+      "elimtype"; "progress"; "setoid_rewrite"; "left"; "right"; "constructor"; 
+      "econstructor"; "decide equality"; "abstract"; "exists"; "cbv"; "simple destruct";
+      "info"; "fourier"; "field"; "specialize"; "evar"; "solve"; "instanciate";
+      "quote"; "eexact"; "autorewrite";
       "destruct"; "destruction"; "destruct_call"; "dependent"; "elim"; "extensionality";
       "f_equal"; "generalize"; "generalize_eqs"; "generalize_eqs_vars"; "induction"; "rename"; "move"; "omega";
       "set"; "assert"; "do"; "repeat";
@@ -69,8 +79,10 @@ let is_tactic =
       "reflexivity"; "symmetry"; "transitivity";
       "replace"; "setoid_replace"; "inversion"; "inversion_clear";
       "pattern"; "intuition"; "congruence"; "fail"; "fresh";
-      "trivial"; "exact"; "tauto"; "firstorder"; "ring";
-      "clapply"; "program_simpl"; "program_simplify"; "eapply"; "auto"; "eauto" ]
+      "trivial"; "tauto"; "firstorder"; "ring";
+      "clapply"; "program_simpl"; "program_simplify"; "eapply"; "auto"; "eauto";
+      "change"; "fold"; "hnf"; "lazy"; "simple"; "eexists"; "debug"; "idtac"; "first"; "type of"; "pose";
+      "eval"; "instantiate"; "until" ]
 
 (*s Current Coq module *)
 
@@ -114,9 +126,12 @@ let initialize_texmacs () =
 
 let token_tree_texmacs = ref (initialize_texmacs ())
 
+let token_tree_latex = ref Tokens.empty_ttree
+let token_tree_html = ref Tokens.empty_ttree
+
 let initialize_tex_html () =
   let if_utf8 = if !Cdglobals.utf8 then fun x -> Some x else fun _ -> None in
-    List.fold_right (fun (s,l,l') (tt,tt') ->
+  let (tree_latex, tree_html) = List.fold_right (fun (s,l,l') (tt,tt') ->
       (Tokens.ttree_add tt s l,
        match l' with None -> tt' | Some l' -> Tokens.ttree_add tt' s l'))
       [ "*" ,  "\\ensuremath{\\times}", if_utf8 "×";
@@ -139,10 +154,9 @@ let initialize_tex_html () =
 	"Π", "\\ensuremath{\\Pi}", if_utf8 "Π";
 	"λ", "\\ensuremath{\\lambda}", if_utf8 "λ";
 	(* "fun", "\\ensuremath{\\lambda}" ? *)
-      ] (Tokens.empty_ttree,Tokens.empty_ttree)
-
-let token_tree_latex = ref (fst (initialize_tex_html ()))
-let token_tree_html = ref (snd (initialize_tex_html ()))
+      ] (Tokens.empty_ttree,Tokens.empty_ttree) in
+  token_tree_latex := tree_latex;
+  token_tree_html  := tree_html
 
 let add_printing_token s (t1,t2) =
   (match t1 with None -> () | Some t1 ->
@@ -261,6 +275,12 @@ module Latex = struct
 	| '^' | '~' as c ->
 	    Buffer.add_char buff '\\'; Buffer.add_char buff c;
 	    Buffer.add_string buff "{}"
+        | '\'' ->
+            if i < String.length s - 1 && s.[i+1] = '\'' then begin
+              Buffer.add_char buff '\''; Buffer.add_char buff '{';
+              Buffer.add_char buff '}'
+            end else
+              Buffer.add_char buff '\''
 	| c ->
 	    Buffer.add_char buff c
       done;
@@ -282,9 +302,23 @@ module Latex = struct
 
   let stop_latex_math () = output_char '$'
 
-  let start_verbatim () = printf "\\begin{verbatim}"
+  let start_quote () = output_char '`'; output_char '`'
+  let stop_quote () = output_char '\''; output_char '\''
+    
+  let start_verbatim inline = 
+    if inline then printf "\\texttt{"
+    else printf "\\begin{verbatim}"
 
-  let stop_verbatim () = printf "\\end{verbatim}\n"
+  let stop_verbatim inline =
+    if inline then printf "}"
+    else printf "\\end{verbatim}\n"
+
+  let url addr name = 
+    printf "%s\\footnote{\\url{%s}}"
+      (match name with
+       | None -> ""
+       | Some n -> n)
+      addr
 
   let indentation n =
     if n == 0 then
@@ -342,13 +376,22 @@ module Latex = struct
     | Some ref -> reference s ref
     | None -> if issymbchar then output_string s else printf "\\coqdocvar{%s}" s
 
+  let last_was_in = ref false
+
   let sublexer c loc =
-    let tag =
-      try Some (Index.find (get_module false) loc) with Not_found -> None
-    in
-    Tokens.output_tagged_symbol_char tag c
+    if c = '*' && !last_was_in then begin
+      Tokens.flush_sublexer ();
+      output_char '*'
+    end else begin
+      let tag =
+        try Some (Index.find (get_module false) loc) with Not_found -> None
+      in
+      Tokens.output_tagged_symbol_char tag c
+    end;
+    last_was_in := false
 
   let initialize () =
+    initialize_tex_html ();
     Tokens.token_tree := token_tree_latex;
     Tokens.outfun := output_sublexer_string
 
@@ -357,7 +400,11 @@ module Latex = struct
   let translate s =
     match Tokens.translate s with Some s -> s | None -> escaped s
 
+  let keyword s loc = 
+    printf "\\coqdockw{%s}" (translate s)
+
   let ident s loc =
+    last_was_in := s = "in";
     try
       let tag = Index.find (get_module false) loc in
       reference (translate s) tag
@@ -519,7 +566,7 @@ module Html = struct
           printf "<h1 class=\"libtitle\">%s %s</h1>\n\n" ln (get_module true)
     end
 
-  let indentation n = for i = 1 to n do printf "&nbsp;" done
+  let indentation n = for _i = 1 to n do printf "&nbsp;" done
 
   let line_break () = printf "<br/>\n"
 
@@ -559,8 +606,22 @@ module Html = struct
   let start_latex_math () = ()
   let stop_latex_math () = ()
 
-  let start_verbatim () = printf "<pre>"
-  let stop_verbatim () = printf "</pre>\n"
+  let start_quote () = char '"'
+  let stop_quote () = start_quote ()
+
+  let start_verbatim inline = 
+    if inline then printf "<tt>"
+    else printf "<pre>"
+
+  let stop_verbatim inline = 
+    if inline then printf "</tt>" 
+    else printf "</pre>\n"
+
+  let url addr name = 
+    printf "<a href=\"%s\">%s</a>" addr 
+      (match name with
+       | Some n -> n
+       | None -> addr)
 
   let module_ref m s =
     match find_module m with
@@ -609,11 +670,15 @@ module Html = struct
     Tokens.output_tagged_symbol_char tag c
 
   let initialize () =
+    initialize_tex_html();
     Tokens.token_tree := token_tree_html;
     Tokens.outfun := output_sublexer_string
 
   let translate s =
     match Tokens.translate s with Some s -> s | None -> escaped s
+
+  let keyword s loc = 
+    printf "<span class=\"id\" type=\"keyword\">%s</span>" (translate s)
 
   let ident s loc =
     if is_keyword s then begin
@@ -915,19 +980,28 @@ module TeXmacs = struct
 
   let stop_latex_math () = output_char '>'
 
-  let start_verbatim () = in_doc := true; printf "<\\verbatim>"
+  let start_verbatim inline = in_doc := true; printf "<\\verbatim>"
+  let stop_verbatim inline = in_doc := false; printf "</verbatim>"
 
-  let stop_verbatim () = in_doc := false; printf "</verbatim>"
+  let url addr name = 
+    printf "%s<\\footnote><\\url>%s</url></footnote>" addr
+      (match name with
+       | None -> ""
+       | Some n -> n)
+
+  let start_quote () = output_char '`'; output_char '`'
+  let stop_quote () = output_char '\''; output_char '\''
 
   let indentation n = ()
 
-  let ident_true s =
-    if is_keyword s then begin
-      printf "<kw|"; raw_ident s; printf ">"
-    end else begin
-      raw_ident s
-    end
+  let keyword s =
+    printf "<kw|"; raw_ident s; printf ">"
 
+  let ident_true s =
+    if is_keyword s then keyword s
+    else raw_ident s
+
+  let keyword s loc = keyword s
   let ident s _ = if !in_doc then ident_true s else raw_ident s
 
   let output_sublexer_string doescape issymbchar tag s =
@@ -1042,13 +1116,21 @@ module Raw = struct
   let start_latex_math () = ()
   let stop_latex_math () = ()
 
-  let start_verbatim () = ()
+  let start_verbatim inline = ()
+  let stop_verbatim inline = ()
 
-  let stop_verbatim () = ()
+  let url addr name = 
+    match name with
+    | Some n -> printf "%s (%s)" n addr
+    | None -> printf "%s" addr
+
+  let start_quote () = printf "\""
+  let stop_quote () = printf "\""
 
   let indentation n =
-      for i = 1 to n do printf " " done
+      for _i = 1 to n do printf " " done
 
+  let keyword s loc = raw_ident s
   let ident s loc = raw_ident s
 
   let sublexer c l = char c
@@ -1162,6 +1244,7 @@ let rule = select Latex.rule Html.rule TeXmacs.rule Raw.rule
 
 let nbsp = select Latex.nbsp Html.nbsp TeXmacs.nbsp Raw.nbsp
 let char = select Latex.char Html.char TeXmacs.char Raw.char
+let keyword = select Latex.keyword Html.keyword TeXmacs.keyword Raw.keyword
 let ident = select Latex.ident Html.ident TeXmacs.ident Raw.ident
 let sublexer = select Latex.sublexer Html.sublexer TeXmacs.sublexer Raw.sublexer
 let initialize = select Latex.initialize Html.initialize TeXmacs.initialize Raw.initialize
@@ -1189,12 +1272,20 @@ let start_verbatim =
   select Latex.start_verbatim Html.start_verbatim TeXmacs.start_verbatim Raw.start_verbatim
 let stop_verbatim =
   select Latex.stop_verbatim Html.stop_verbatim TeXmacs.stop_verbatim Raw.stop_verbatim
-let verbatim_char =
-  select output_char Html.char TeXmacs.char Raw.char
+let verbatim_char inline =
+  select (if inline then Latex.char else output_char) Html.char TeXmacs.char Raw.char
 let hard_verbatim_char = output_char
 
+let url = 
+  select Latex.url Html.url TeXmacs.url Raw.url
+
+let start_quote =
+  select Latex.start_quote Html.start_quote TeXmacs.start_quote Raw.start_quote
+let stop_quote =
+  select Latex.stop_quote Html.stop_quote TeXmacs.stop_quote Raw.stop_quote
+
 let inf_rule_dumb assumptions (midsp,midln,midnm) conclusions = 
-  start_verbatim ();
+  start_verbatim false;
   let dumb_line = 
        function (sp,ln) -> (String.iter char ((String.make sp ' ') ^ ln);
                             char '\n')
@@ -1204,7 +1295,7 @@ let inf_rule_dumb assumptions (midsp,midln,midnm) conclusions =
                                 | Some s -> " " ^ s 
                                 | None -> ""));
      List.iter dumb_line conclusions);
-  stop_verbatim ()
+  stop_verbatim false
 
 let inf_rule = select inf_rule_dumb Html.inf_rule inf_rule_dumb inf_rule_dumb
 

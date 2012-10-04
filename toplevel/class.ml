@@ -1,29 +1,24 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
+open Errors
 open Util
 open Pp
 open Names
-open Nameops
 open Term
 open Termops
-open Inductive
-open Declarations
 open Entries
 open Environ
-open Inductive
-open Lib
 open Classops
 open Declare
-open Libnames
+open Globnames
 open Nametab
 open Decl_kinds
-open Safe_typing
 
 let strength_min l = if List.mem Local l then Local else Global
 
@@ -38,7 +33,6 @@ type coercion_error_kind =
   | NoTarget
   | WrongTarget of cl_typ * cl_typ
   | NotAClass of global_reference
-  | NotEnoughClassArgs of cl_typ
 
 exception CoercionError of coercion_error_kind
 
@@ -65,8 +59,6 @@ let explain_coercion_error g = function
   | NotAClass ref ->
       (str "Type of " ++ Printer.pr_global ref ++
          str " does not end with a sort")
-  | NotEnoughClassArgs cl ->
-      (str"Wrong number of parameters for " ++ pr_class cl)
 
 (* Verifications pour l'ajout d'une classe *)
 
@@ -157,6 +149,10 @@ let prods_of t =
 let strength_of_cl = function
   | CL_CONST kn -> Global
   | CL_SECVAR id -> Local
+  | _ -> Global
+
+let strength_of_global = function
+  | VarRef _ -> Local
   | _ -> Global
 
 let get_strength stre ref cls clt =
@@ -255,7 +251,7 @@ let add_new_coercion_core coef stre source target isid =
   in
   check_source (Some cls);
   if not (uniform_cond (llp-ind) lvs) then
-    raise (CoercionError NotUniform);
+    msg_warning (explain_coercion_error coef NotUniform);
   let clt =
     try
       get_target tg ind
@@ -293,9 +289,8 @@ let try_add_new_coercion_with_source ref stre ~source =
 
 let add_coercion_hook stre ref =
   try_add_new_coercion ref stre;
-  Flags.if_verbose message
-    (string_of_qualid (shortest_qualid_of_global Idset.empty ref)
-    ^ " is now a coercion")
+  Flags.if_verbose msg_info
+    (pr_global_env Idset.empty ref ++ str " is now a coercion")
 
 let add_subclass_hook stre ref =
   let cl = class_of_global ref in

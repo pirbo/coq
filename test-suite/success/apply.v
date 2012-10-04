@@ -8,8 +8,8 @@ Qed.
 
 Require Import ZArith.
 Goal (forall x y z, ~ z <= 0 -> x * z < y * z -> x <= y)%Z.
-intros; apply Znot_le_gt, Zgt_lt in H.
-apply Zmult_lt_reg_r, Zlt_le_weak in H0; auto.
+intros; apply Znot_le_gt, Z.gt_lt in H.
+apply Zmult_lt_reg_r, Z.lt_le_incl in H0; auto.
 Qed.
 
 (* Test application under tuples *)
@@ -97,13 +97,14 @@ Qed.
 
 (* Check use of unification of bindings types in specialize *)
 
+Module Type Test.
 Variable P : nat -> Prop.
 Variable L : forall (l : nat), P l -> P l.
 Goal P 0 -> True.
 intros.
 specialize L with (1:=H).
 Abort.
-Reset P.
+End Test.
 
 (* Two examples that show that hnf_constr is used when unifying types
    of bindings (a simplification of a script from Field_Theory) *)
@@ -265,7 +266,7 @@ Qed.
   (* This works because unfold calls clos_norm_flags which calls nf_evar *)
 
 Lemma eapply_evar_unfold : let x:=O in O=x -> 0=O.
-intros x H; eapply trans_equal;
+intros x H; eapply eq_trans;
 [apply H | unfold x;match goal with |- ?x = ?x => reflexivity end].
 Qed.
 
@@ -415,3 +416,17 @@ apply mapfuncomp.
 Abort.
 
 End A.
+
+(* Check "with" clauses refer to names as they are printed *)
+
+Definition hide p := forall n:nat, p = n.
+
+Goal forall n, (forall n, n=0) -> hide n -> n=0.
+unfold hide.
+intros n H H'.
+(* H is displayed as (forall n, n=0) *)
+apply H with (n:=n).
+Undo.
+(* H' is displayed as (forall n0, n=n0) *)
+apply H' with (n0:=0).
+Qed.

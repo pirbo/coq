@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,8 +9,7 @@
 open Term
 open Summary
 open Libobject
-open Libnames
-open Names
+open Globnames
 (*
  * Module construction
  *)
@@ -23,16 +22,16 @@ let reduce c = c
 
 module TypeDnet = Term_dnet.Make
   (struct
-     type t = Libnames.global_reference
+     type t = Globnames.global_reference
      let compare = RefOrdered.compare
-     let subst s gr = fst (Libnames.subst_global s gr)
+     let subst s gr = fst (Globnames.subst_global s gr)
      let constr_of = Global.type_of_global
    end)
   (struct let reduce = reduce
 	  let direction = false
    end)
 
-type result = Libnames.global_reference * (constr*existential_key) * Termops.subst
+type result = Globnames.global_reference * (constr*existential_key) * Termops.subst
 
 let all_types = ref TypeDnet.empty
 let defined_types = ref TypeDnet.empty

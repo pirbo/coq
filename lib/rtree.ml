@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -100,16 +100,16 @@ let rec map f t = match t with
   | Node (a,sons) -> Node (f a, Array.map (map f) sons)
   | Rec(j,defs) -> Rec (j, Array.map (map f) defs)
 
-let rec smartmap f t = match t with
+let smartmap f t = match t with
     Param _ -> t
   | Node (a,sons) ->
-      let a'=f a and sons' = Util.array_smartmap (map f) sons in
+      let a'=f a and sons' = Util.Array.smartmap (map f) sons in
 	if a'==a && sons'==sons then
 	  t
 	else
 	  Node (a',sons')
   | Rec(j,defs) ->
-      let defs' = Util.array_smartmap (map f) defs in
+      let defs' = Util.Array.smartmap (map f) defs in
 	if defs'==defs then
 	  t
 	else
@@ -134,7 +134,7 @@ let is_infinite t = fold
   (fun seen t is_inf ->
     seen ||
     (match t with
-        Node(_,v) -> array_exists is_inf v
+        Node(_,v) -> Array.exists is_inf v
       | Param _ -> false
       | _ -> assert false))
   t
@@ -154,7 +154,7 @@ let compare_rtree f = fold2
     else if b > 0 then true
     else match expand t1, expand t2 with
         Node(_,v1), Node(_,v2) when Array.length v1 = Array.length v2 ->
-          array_for_all2 cmp v1 v2
+          Array.for_all2 cmp v1 v2
       | _ -> false)
 
 let eq_rtree cmp t1 t2 =
@@ -173,11 +173,11 @@ let rec pp_tree prl t =
     | Node(lab,[||]) -> hov 2 (str"("++prl lab++str")")
     | Node(lab,v) ->
         hov 2 (str"("++prl lab++str","++brk(1,0)++
-               Util.prvect_with_sep Util.pr_comma (pp_tree prl) v++str")")
+               prvect_with_sep pr_comma (pp_tree prl) v++str")")
     | Rec(i,v) ->
         if Array.length v = 0 then str"Rec{}"
         else if Array.length v = 1 then
           hov 2 (str"Rec{"++pp_tree prl v.(0)++str"}")
         else
           hov 2 (str"Rec{"++int i++str","++brk(1,0)++
-                 Util.prvect_with_sep Util.pr_comma (pp_tree prl) v++str"}")
+                 prvect_with_sep pr_comma (pp_tree prl) v++str"}")

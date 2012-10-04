@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -82,6 +82,7 @@ let set_depth_boxes v =
 let get_margin () = Some (Format.pp_get_margin !std_ft ())
 let set_margin v =
   let v = match v with None -> default_margin | Some v -> v in
+  Format.pp_set_margin Format.str_formatter v;
   Format.pp_set_margin !std_ft v;
   Format.pp_set_margin !deep_ft v
 

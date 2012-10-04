@@ -1,12 +1,12 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-open Util
+open Loc
 open Pp
 open Names
 open Term
@@ -77,30 +77,12 @@ type lemma_possible_guards = Proof_global.lemma_possible_guards
 val start_proof :
   identifier -> goal_kind -> named_context_val -> constr ->
   ?init_tac:tactic -> ?compute_guard:lemma_possible_guards -> 
-  declaration_hook -> unit
+  unit declaration_hook -> unit
 
 (** [restart_proof ()] restarts the current focused proof from the beginning
    or fails if no proof is focused *)
 
 val restart_proof : unit -> unit
-
-(** {6 ... } *)
-(** [resume_last_proof ()] focus on the last unfocused proof or fails
-   if there is no suspended proofs *)
-
-val resume_last_proof : unit -> unit
-
-(** [resume_proof name] focuses on the proof of name [name] or
-   raises [NoSuchProof] if no proof has name [name]. 
-
-    It doesn't [suspend_proof ()] before. *)
-
-val resume_proof : identifier located -> unit
-
-(** [suspend_proof ()] unfocuses the current focused proof or
-   failed with [UserError] if no proof is currently focused *)
-
-val suspend_proof : unit -> unit
 
 (** {6 ... } *)
 (** [cook_proof opacity] turns the current proof (assumed completed) into
@@ -111,7 +93,7 @@ val suspend_proof : unit -> unit
 val cook_proof : (Proof.proof -> unit) ->
   identifier *
     (Entries.definition_entry * lemma_possible_guards * goal_kind *
-     declaration_hook)
+     unit declaration_hook)
 
 (** To export completed proofs to xml *)
 val set_xml_cook_proof : (goal_kind * Proof.proof -> unit) -> unit
@@ -135,7 +117,7 @@ val get_current_goal_context : unit -> Evd.evar_map * env
 (** [current_proof_statement] *)
 
 val current_proof_statement :
-  unit -> identifier * goal_kind * types * declaration_hook
+  unit -> identifier * goal_kind * types * unit declaration_hook
 
 (** {6 ... } *)
 (** [get_current_proof_name ()] return the name of the current focused
@@ -143,7 +125,9 @@ val current_proof_statement :
 
 val get_current_proof_name : unit -> identifier
 
-(** [get_all_proof_names ()] returns the list of all pending proof names *)
+(** [get_all_proof_names ()] returns the list of all pending proof names.
+    The first name is the current proof, the other names may come in
+    any order. *)
 
 val get_all_proof_names : unit -> identifier list
 
@@ -177,7 +161,7 @@ val by : tactic -> unit
    UserError if no proof is focused or if there is no such [n]th
    existential variable *)
 
-val instantiate_nth_evar_com : int -> Topconstr.constr_expr -> unit
+val instantiate_nth_evar_com : int -> Constrexpr.constr_expr -> unit
 
 (** [build_by_tactic typ tac] returns a term of type [typ] by calling [tac] *)
 

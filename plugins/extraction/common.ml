@@ -1,6 +1,6 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
@@ -9,23 +9,20 @@
 open Pp
 open Util
 open Names
-open Term
-open Declarations
 open Namegen
 open Nameops
 open Libnames
+open Globnames
 open Table
 open Miniml
 open Mlutil
-open Modutil
-open Mod_subst
 
 let string_of_id id =
   let s = Names.string_of_id id in
   for i = 0 to String.length s - 2 do
     if s.[i] = '_' && s.[i+1] = '_' then warning_id s
   done;
-  ascii_of_ident s
+  Unicode.ascii_of_ident s
 
 let is_mp_bound = function MPbound _ -> true | _ -> false
 
@@ -197,7 +194,7 @@ let empty_env () = [], get_global_ids ()
 let mktable autoclean =
   let h = Hashtbl.create 97 in
   if autoclean then register_cleanup (fun () -> Hashtbl.clear h);
-  (Hashtbl.add h, Hashtbl.find h, fun () -> Hashtbl.clear h)
+  (Hashtbl.replace h, Hashtbl.find h, fun () -> Hashtbl.clear h)
 
 (* We might have built [global_reference] whose canonical part is
    inaccurate. We must hence compare only the user part,
@@ -352,7 +349,7 @@ let rec mp_renaming_fun mp = match mp with
   | MPfile _ ->
       assert (modular ()); (* see [at_toplevel] above *)
       assert (get_phase () = Pre);
-      let current_mpfile = (list_last (get_visible ())).mp in
+      let current_mpfile = (List.last (get_visible ())).mp in
       if mp <> current_mpfile then mpfiles_add mp;
       [string_of_modfile mp]
 
@@ -499,7 +496,7 @@ let fstlev_ks k = function
 let pp_ocaml_local k prefix mp rls olab =
   (* what is the largest prefix of [mp] that belongs to [visible]? *)
   assert (k <> Mod || mp <> prefix); (* mp as whole module isn't in itself *)
-  let rls' = list_skipn (mp_length prefix) rls in
+  let rls' = List.skipn (mp_length prefix) rls in
   let k's = fstlev_ks k rls' in
   (* Reference r / module path mp is of the form [<prefix>.s.<...>]. *)
   if not (visible_clash prefix k's) then dottify rls'

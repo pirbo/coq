@@ -1,31 +1,28 @@
 (************************************************************************)
 (*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2010     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2012     *)
 (*   \VV/  **************************************************************)
 (*    //   *      This file is distributed under the terms of the       *)
 (*         *       GNU Lesser General Public License Version 2.1        *)
 (************************************************************************)
 
-(*i camlp4deps: "parsing/grammar.cma" i*)
+(*i camlp4deps: "grammar/grammar.cma" i*)
 
 open Flags
 open Pp
-open Util
-open System
+open Errors
 open Names
 open Term
-open Environ
 open Glob_term
 open Libnames
+open Globnames
 open Nametab
 open Detyping
 open Constrintern
 open Dischargedhypsmap
-open Command
 open Pfedit
-open Refiner
 open Tacmach
-open Syntax_def
+open Misctypes
 
 (* Coq interface to the Whelp query engine developed at
    the University of Bologna *)
@@ -94,8 +91,8 @@ let url_paren f l = url_char '('; f l; url_char ')'
 let url_bracket f l = url_char '['; f l; url_char ']'
 
 let whelp_of_glob_sort = function
-  | GProp Null -> "Prop"
-  | GProp Pos -> "Set"
+  | GProp -> "Prop"
+  | GSet -> "Set"
   | GType _ -> "Type"
 
 let uri_int n = Buffer.add_string b (string_of_int n)
@@ -163,7 +160,7 @@ let rec uri_of_constr c =
   | GLetIn (_,na,b,c) ->
       url_string "let "; url_of_name na; url_string "\\def ";
       uri_of_constr b; url_string " in "; uri_of_constr c
-  | GCast (_,c, CastConv (_,t)) ->
+  | GCast (_,c, (CastConv t|CastVM t)) ->
       uri_of_constr c; url_string ":"; uri_of_constr t
   | GRec _ | GIf _ | GLetTuple _ | GCases _ ->
       error "Whelp does not support pattern-matching and (co-)fixpoint."
@@ -176,8 +173,8 @@ let make_string f x = Buffer.reset b; f x; Buffer.contents b
 
 let send_whelp req s =
   let url = make_whelp_request req s in
-  let command = subst_command_placeholder browser_cmd_fmt url in
-  let _ = run_command (fun x -> x) print_string command in ()
+  let command = Util.subst_command_placeholder browser_cmd_fmt url in
+  let _ = CUnix.run_command (fun x -> x) print_string command in ()
 
 let whelp_constr req c =
   let c = detype false [whelm_special] [] c in
