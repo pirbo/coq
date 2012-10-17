@@ -1227,14 +1227,7 @@ let error_cannot_recognize ref =
     (str "Cannot recognize a statement based on " ++
      Nametab.pr_global_env Id.Set.empty ref ++ str".")
 
-let reduce_to_ref_gen allow_product env sigma ref t =
-  if isIndRef ref then
-    let ((mind,u),t) = reduce_to_ind_gen allow_product env sigma t in
-    begin match ref with
-    | IndRef mind' when eq_ind mind mind' -> t
-    | _ -> error_cannot_recognize ref
-    end
-  else
+let reduce_to_symbol_gen allow_product env sigma symbols t =
   (* lazily reduces to match the head of [t] with the expected [ref] *)
   let rec elimrec env t l =
     let c, _ = decompose_appvect (Reductionops.whd_nored sigma t) in
@@ -1242,20 +1235,34 @@ let reduce_to_ref_gen allow_product env sigma ref t =
       | Prod (n,ty,t') ->
           if allow_product then
 	    elimrec (push_rel (n,None,t) env) t' ((n,None,ty)::l)
-          else
-            error_cannot_recognize ref
+          else raise Not_found
       | _ ->
 	  try
-	    if eq_gr (global_of_constr c) ref
-	    then it_mkProd_or_LetIn t l
-	    else raise Not_found
+	    let data = symbols c in
+	    (data, it_mkProd_or_LetIn t l)
 	  with Not_found ->
           try
 	    let t' = nf_betaiota sigma (one_step_reduce env sigma t) in
             elimrec env t' l
-          with NotStepReducible -> error_cannot_recognize ref
+          with NotStepReducible -> raise Not_found
   in
   elimrec env t []
 
+let reduce_to_ref_gen allow_product env sigma ref t =
+  if isIndRef ref then
+    let (mind,t) = reduce_to_ind_gen allow_product env sigma t in
+      if IndRef (fst mind) <> ref then
+      error_cannot_recognize ref
+    else
+      t
+  else
+    try
+      snd(reduce_to_symbol_gen  allow_product env sigma
+	    (fun c -> if global_of_constr c <> ref then raise Not_found)
+	    t)
+    with Not_found ->
+      error_cannot_recognize ref
+
+let reduce_to_quantified_symbol x = reduce_to_symbol_gen true x
 let reduce_to_quantified_ref = reduce_to_ref_gen true
 let reduce_to_atomic_ref = reduce_to_ref_gen false

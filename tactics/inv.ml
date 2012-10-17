@@ -28,6 +28,7 @@ open Equality
 open Misctypes
 open Tacexpr
 open Proofview.Notations
+open Coqlib
 
 let clear hyps = Proofview.V82.tactic (clear hyps)
 
@@ -116,9 +117,8 @@ let make_inv_predicate env evd indf realargs id status concl =
 	    let sigma, res = make_iterated_tuple env' !evd ai (xi,ti) in
 	      evd := sigma; res
 	in
-        let eq_term = eqdata.Coqlib.eq in
-	let eq = Evarutil.evd_comb1 (Evd.fresh_global env) evd eq_term in
-        let eqn = applist (eq,[eqnty;lhs;rhs]) in
+        let eqd = Coqlib.find_equality None in
+        let eqn = applist (eqd.eq_data.eq ,[eqnty;lhs;rhs]) in
         let eqns = (Anonymous, lift n eqn) :: eqns in
         let refl_term = eqdata.Coqlib.refl in
 	let refl_term = Evarutil.evd_comb1 (Evd.fresh_global env) evd refl_term in

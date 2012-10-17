@@ -172,7 +172,7 @@ let search_pattern gopt pat mods =
 
 (** SearchRewrite *)
 
-let eq = Coqlib.glob_eq
+let eq = Coqlib.Std.glob_eq
 
 let rewrite_pat1 pat =
   PApp (PRef eq, [| PMeta None; pat; PMeta None |])

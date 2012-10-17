@@ -256,7 +256,7 @@ let match_with_equation t =
      PolymorphicLeibnizEq(args.(0),args.(1),args.(2)))
   with Not_found ->
     (match kind_of_term hdapp with
-      | Ind ind ->
+      | Ind (ind,_) ->
 	if IndRef ind = Std.glob_jmeq then
 	  Some (Std.build_coq_jmeq_data()),hdapp,
 	  HeterogenousEq(args.(0),args.(1),args.(2),args.(3))

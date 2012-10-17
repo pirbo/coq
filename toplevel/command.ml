@@ -792,7 +792,7 @@ let fix_sub_ref = make_ref fixsub_module "Fix_sub"
 let measure_on_R_ref = make_ref fixsub_module "MR"
 let well_founded = init_constant ["Init"; "Wf"] "well_founded"
 let mkSubset name typ prop =
-  mkApp (Universes.constr_of_global (delayed_force build_sigma).typ,
+  mkApp ((delayed_force Std.build_sigma).typ,
 	 [| typ; mkLambda (name, typ, prop) |])
 let sigT = Lazy.lazy_from_fun build_sigma_type
 
@@ -807,8 +807,8 @@ let rec telescope = function
 	List.fold_left
 	  (fun (ty, tys, (k, constr)) (n, b, t) ->
 	    let pred = mkLambda (n, t, ty) in
-	    let ty = Universes.constr_of_global (Lazy.force sigT).typ in
-	    let intro = Universes.constr_of_global (Lazy.force sigT).intro in
+	    let ty = (Lazy.force sigT).typ in
+	    let intro = (Lazy.force sigT).intro in
 	    let sigty = mkApp (ty, [|t; pred|]) in
 	    let intro = mkApp (intro, [|lift k t; lift k pred; mkRel k; constr|]) in
 	      (sigty, pred :: tys, (succ k, intro)))
@@ -816,8 +816,8 @@ let rec telescope = function
       in
       let (last, subst) = List.fold_right2
 	(fun pred (n, b, t) (prev, subst) ->
-	  let p1 = Universes.constr_of_global (Lazy.force sigT).proj1 in
-	  let p2 = Universes.constr_of_global (Lazy.force sigT).proj2 in
+	  let p1 = (Lazy.force sigT).proj1 in
+	  let p2 = (Lazy.force sigT).proj2 in
 	  let proj1 = applistc p1 [t; pred; prev] in
 	  let proj2 = applistc p2 [t; pred; prev] in
 	    (lift 1 proj2, (n, Some proj1, t) :: subst))
@@ -883,7 +883,7 @@ let build_wellfounded (recname,n,bl,arityc,body) r measure notation =
   in
   let intern_bl = wfarg 1 :: [arg] in
   let _intern_env = push_rel_context intern_bl env in
-  let proj = (*FIXME*)Universes.constr_of_global (delayed_force build_sigma).Coqlib.proj1 in
+  let proj = (*FIXME*)(delayed_force Std.build_sigma).Coqlib.proj1 in
   let wfargpred = mkLambda (Name argid', argtyp, wf_rel_fun (mkRel 1) (mkRel 3)) in
   let projection = (* in wfarg :: arg :: before *)
     mkApp (proj, [| argtyp ; wfargpred ; mkRel 1 |])
@@ -896,7 +896,7 @@ let build_wellfounded (recname,n,bl,arityc,body) r measure notation =
   let intern_fun_binder = (Name (add_suffix recname "'"), None, intern_fun_arity_prod) in
   let curry_fun =
     let wfpred = mkLambda (Name argid', argtyp, wf_rel_fun (mkRel 1) (mkRel (2 * len + 4))) in
-    let intro = (*FIXME*)Universes.constr_of_global (delayed_force build_sigma).Coqlib.intro in
+    let intro = (*FIXME*)(delayed_force Std.build_sigma).Coqlib.intro in
     let arg = mkApp (intro, [| argtyp; wfpred; lift 1 make; mkRel 1 |]) in
     let app = mkApp (mkRel (2 * len + 2 (* recproof + orig binders + current binders *)), [| arg |]) in
     let rcurry = mkApp (rel, [| measure; lift len measure |]) in

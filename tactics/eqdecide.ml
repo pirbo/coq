@@ -81,7 +81,7 @@ let solveNoteqBranch side =
 (* Constructs the type {c1=c2}+{~c1=c2} *)
 
 let make_eq () =
-(*FIXME*) Universes.constr_of_global (Coqlib.build_coq_eq ())
+(*FIXME*) Universes.constr_of_global (Coqlib.Std.build_coq_eq ())
 
 let mkDecideEqGoal eqonleft op rectype c1 c2 =
   let equality    = mkApp(make_eq(), [|rectype; c1; c2|]) in
