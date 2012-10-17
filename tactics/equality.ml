@@ -283,8 +283,8 @@ let jmeq_same_dom gl = function
 
 let find_elim hdcncl lft2rgt dep cls ot gl =
   let inccl = Option.is_empty cls in
-  if (is_global Coqlib.glob_eq hdcncl ||
-      (is_global Coqlib.glob_jmeq hdcncl &&
+  if (is_global Coqlib.Std.glob_eq hdcncl ||
+      (is_global Coqlib.Std.glob_jmeq hdcncl &&
 	 jmeq_same_dom gl ot)) && not dep
     || Flags.version_less_or_equal Flags.V8_2
   then
@@ -562,7 +562,7 @@ let replace_using_leibniz clause c1 c2 l2r unsafe try_prove_eq_opt =
   let get_type_of = pf_apply get_type_of gl in
   let t1 = get_type_of c1
   and t2 = get_type_of c2 in
-  let evd = 
+  let evd =
     if unsafe then Some (Proofview.Goal.sigma gl)
     else
       try Some (Evarconv.the_conv_x (Proofview.Goal.env gl) t1 t2 (Proofview.Goal.sigma gl))
@@ -572,10 +572,9 @@ let replace_using_leibniz clause c1 c2 l2r unsafe try_prove_eq_opt =
   | None ->
     tclFAIL 0 (str"Terms do not have convertible types.")
   | Some evd ->
-    let e = build_coq_eq () in
-    let sym = build_coq_eq_sym () in
-    Tacticals.New.pf_constr_of_global sym (fun sym ->
-    Tacticals.New.pf_constr_of_global e (fun e ->
+     let {eq_data=eq} = Coqlib.find_equality None in
+     Tacticals.New.pf_constr_of_global eq.sym (fun sym ->
+	Tacticals.New.pf_constr_of_global eq.eq (fun e ->
     let eq = applist (e, [t1;c1;c2]) in
     tclTHENLAST
       (replace_core clause l2r eq)
@@ -835,12 +834,12 @@ let construct_discriminator env sigma dirn c sort =
   let (indp,_) = dest_ind_family indf in
   let ind, _ = check_privacy env indp in
   let (mib,mip) = lookup_mind_specif env ind in
-  let (true_0,false_0,sort_0) = build_coq_True(),build_coq_False(),Prop Null in
+  let log = Coqlib.find_logic None in
   let deparsign = make_arity_signature env true indf in
-  let p = it_mkLambda_or_LetIn (mkSort sort_0) deparsign in
+  let p = it_mkLambda_or_LetIn (mkSort log.log_bottom_sort) deparsign in
   let cstrs = get_constructors env indf in
   let build_branch i =
-    let endpt = if Int.equal i dirn then true_0 else false_0 in
+    let endpt = if Int.equal i dirn then log.log_True else log.log_False in
     it_mkLambda_or_LetIn endpt cstrs.(i-1).cs_args in
   let brl =
     List.map build_branch(List.interval 1 (Array.length mip.mind_consnames)) in
@@ -896,8 +895,8 @@ let ind_scheme_of_eq lbeq =
 
 
 let discrimination_pf env sigma e (t,t1,t2) discriminator lbeq =
-  let i            = build_coq_I () in
-  let absurd_term  = build_coq_False () in
+  let i            = log.log_I in
+  let absurd_term  = log.log_False in
   let eq_elim, eff = ind_scheme_of_eq lbeq in
   let sigma, eq_elim = Evd.fresh_global env sigma eq_elim in
     sigma, (applist (eq_elim, [t;t1;mkNamedLambda e t discriminator;i;t2]), absurd_term),
@@ -1235,7 +1234,7 @@ let inject_if_homogenous_dependent_pair ty =
   try
     let eq,u,(t,t1,t2) = find_this_eq_data_decompose gl ty in
     (* fetch the informations of the  pair *)
-    let ceq = Universes.constr_of_global Coqlib.glob_eq in
+    let ceq = Universes.constr_of_global eq.eq in (* TODO : Requires eq to be monomorphic *)
     let sigTconstr () = (Coqlib.build_sigma_type()).Coqlib.typ in
     let existTconstr () = (Coqlib.build_sigma_type()).Coqlib.intro in
     (* check whether the equality deals with dep pairs or not *)
@@ -1568,10 +1567,10 @@ let unfold_body x =
   end
   end
 
-let restrict_to_eq_and_identity eq = (* compatibility *)
-  if not (is_global glob_eq eq) &&
-    not (is_global glob_identity eq) 
-  then raise Constr_matching.PatternMatchingFailure
+let restrict_to_declared_eq eq = (* compatibility *)
+  try ignore (find_equality (Some eq))
+  with Not_found ->
+    raise Constr_matching.PatternMatchingFailure
 
 exception FoundHyp of (Id.t * constr * bool)
 
@@ -1686,7 +1685,7 @@ let subst_all ?(flags=default_subst_tactic_flags ()) () =
       try
         let lbeq,u,(_,x,y) = find_eq_data_decompose c in
         let eq = Universes.constr_of_global_univ (lbeq.eq,u) in
-        if flags.only_leibniz then restrict_to_eq_and_identity eq;
+        if flags.only_leibniz then restrict_to_declared_eq eq;
         match kind_of_term x, kind_of_term y with
         | Var z, _ | _, Var z when not (is_evaluable env (EvalVarRef z))  ->
             Some hyp
@@ -1732,7 +1731,7 @@ let subst_all ?(flags=default_subst_tactic_flags ()) () =
     try
       let lbeq,u,(_,x,y) = find_eq_data_decompose c in
       let eq = Universes.constr_of_global_univ (lbeq.eq,u) in
-      if flags.only_leibniz then restrict_to_eq_and_identity eq;
+      if flags.only_leibniz then restrict_to_declared_eq eq;
       (* J.F.: added to prevent failure on goal containing x=x as an hyp *)
       if Term.eq_constr x y then failwith "caught";
       match kind_of_term x with Var x -> x | _ ->

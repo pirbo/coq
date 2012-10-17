@@ -72,7 +72,7 @@ let tt = constr_of_global Coqlib.glob_true
 
 let ff = constr_of_global Coqlib.glob_false
 
-let eq = constr_of_global Coqlib.glob_eq
+let eq = constr_of_global Coqlib.Std.glob_eq
 
 let sumbool = Coqlib.build_coq_sumbool
 
@@ -604,7 +604,7 @@ repeat ( apply andb_prop in z;let z1:= fresh "Z" in destruct z as [z1 z]).
                         | App (c,ca) -> (
                           match (kind_of_term c) with
                           | Ind (indeq, u) ->
-                              if eq_gr (IndRef indeq) Coqlib.glob_eq
+                              if eq_gr (IndRef indeq) Coqlib.Std.glob_eq
                               then
                                 Tacticals.New.tclTHEN
                                   (do_replace_bl bl_scheme_key ind
@@ -771,7 +771,7 @@ let _ = lb_scheme_kind_aux := fun () -> lb_scheme_kind
 (* Decidable equality *)
 
 let check_not_is_defined () =
-  try ignore (Coqlib.build_coq_not ())
+  try ignore (Coqlib.Std.build_coq_not ())
   with e when Errors.noncritical e -> raise (UndefinedCst "not")
 
 (* {n=m}+{n<>m}  part  *)
@@ -822,7 +822,7 @@ let compute_dec_goal ind lnamesparrec nparrec =
         create_input (
           mkNamedProd n (mkFullInd ind (2*nparrec)) (
             mkNamedProd m (mkFullInd ind (2*nparrec+1)) (
-              mkApp(sumbool(),[|eqnm;mkApp (Coqlib.build_coq_not(),[|eqnm|])|])
+              mkApp(sumbool(),[|eqnm;mkApp (Coqlib.Std.build_coq_not(),[|eqnm|])|])
           )
         )
       )
@@ -894,7 +894,7 @@ let compute_dec_tact ind lnamesparrec nparrec =
             let freshH3 = fresh_id (Id.of_string "H") gl in
             Tacticals.New.tclTHENLIST [
 	      simplest_right ;
-              Proofview.V82.tactic (unfold_constr (Lazy.force Coqlib.coq_not_ref));
+              Proofview.V82.tactic (unfold_constr (Lazy.force Coqlib.Std.coq_not_ref));
               intro;
               Equality.subst_all ();
               assert_by (Name freshH3)

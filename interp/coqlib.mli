@@ -80,11 +80,46 @@ val path_of_false : constructor
 val glob_true : global_reference
 val glob_false : global_reference
 
+val build_coq_False : constr delayed
 
-(** Equality *)
-val glob_eq : global_reference
-val glob_identity : global_reference
-val glob_jmeq : global_reference
+(*************)
+(** A generic notion of logic *)
+
+type coq_logic = {
+  (** The False proposition *)
+  log_False : constr;
+
+  (** The True proposition and its unique proof *)
+  log_True : constr;
+  log_I : constr;
+
+  (** The "minimal sort" containing both True and False *)
+  log_bottom_sort : sorts;
+
+  (** Negation *)
+  log_not : constr;
+
+  (** Conjunction *)
+  log_and : constr;
+  log_conj : constr;
+  log_iff : constr;
+  log_iff_left : constr;
+  log_iff_right : constr;
+
+  (** Disjunction *)
+  log_or : constr;
+
+  (** Existential quantifier *)
+  log_ex : constr
+}
+
+(** Declare a logic. The constr is a "key" to search the
+    logic corresponding to (for instance) the type of its
+    propositions. *)
+type logic_id = sorts_family
+val declare_logic : ?default:bool -> logic_id -> coq_logic -> unit
+val find_logic : logic_id option -> coq_logic
+
 
 (** {6 ... } *)
 (** Constructions and patterns related to Coq initial state are unknown
@@ -102,15 +137,15 @@ val build_bool_type : coq_bool_data delayed
 
 (** {6 For Equality tactics } *)
 type coq_sigma_data = {
-  proj1 : global_reference;
-  proj2 : global_reference;
-  elim  : global_reference;
-  intro : global_reference;
-  typ   : global_reference }
+  proj1 : constr;
+  proj2 : constr;
+  elim  : constr;
+  intro : constr;
+  typ   : constr }
 
 val build_sigma_set : coq_sigma_data delayed
 val build_sigma_type : coq_sigma_data delayed
-val build_sigma : coq_sigma_data delayed
+val coq_existT_ref : global_reference lazy_t
 
 (* val build_sigma_type_in : Environ.env -> coq_sigma_data Univ.in_universe_context_set *)
 (* val build_sigma_in : Environ.env -> coq_sigma_data Univ.in_universe_context_set *)
@@ -128,16 +163,6 @@ type coq_eq_data = {
   trans: global_reference;
   congr: global_reference }
 
-val build_coq_eq_data : coq_eq_data delayed
-
-val build_coq_identity_data : coq_eq_data delayed
-val build_coq_jmeq_data : coq_eq_data delayed
-
-val build_coq_eq       : global_reference delayed (** = [(build_coq_eq_data()).eq] *)
-val build_coq_eq_refl  : global_reference delayed (** = [(build_coq_eq_data()).refl] *)
-val build_coq_eq_sym   : global_reference delayed (** = [(build_coq_eq_data()).sym] *)
-val build_coq_f_equal2 : global_reference delayed
-
 (** Data needed for discriminate and injection *)
 
 type coq_inversion_data = {
@@ -148,15 +173,50 @@ type coq_inversion_data = {
 			 f params = f args *)
 }
 
-val build_coq_inversion_eq_data : coq_inversion_data delayed
-val build_coq_inversion_identity_data : coq_inversion_data delayed
-val build_coq_inversion_jmeq_data : coq_inversion_data delayed
-val build_coq_inversion_eq_true_data : coq_inversion_data delayed
+type coq_equality = {
+  eq_logic : coq_logic;
+  eq_data : coq_eq_data;
+  eq_inv : coq_inversion_data option
+}
+
+(** Equalities are identified by the connective (eq,identity,etc.) *)
+type equality_id = constr
+val declare_equality : ?default:bool -> equality_id -> coq_equality -> unit
+val find_equality : equality_id option -> coq_equality
+
 
 (** Specif *)
 val build_coq_sumbool : constr delayed
 
 (** {6 ... } *)
+
+module Std : sig
+
+(** Equality *)
+val glob_eq : global_reference
+val glob_identity : global_reference
+val glob_jmeq : global_reference
+
+(** Sigma (sig and sigS) *)
+val build_sigma : coq_sigma_data delayed
+val build_sigma_set : coq_sigma_data delayed
+
+
+val build_coq_eq_data : coq_eq_data delayed
+val build_coq_identity_data : coq_eq_data delayed
+val build_coq_jmeq_data : coq_eq_data delayed
+
+val build_coq_eq       : constr delayed (** = [(build_coq_eq_data()).eq] *)
+val build_coq_eq_refl  : constr delayed (** = [(build_coq_eq_data()).refl] *)
+val build_coq_eq_sym   : constr delayed (** = [(build_coq_eq_data()).sym] *)
+val build_coq_f_equal2 : constr delayed
+
+
+val build_coq_inversion_eq_data : coq_inversion_data delayed
+val build_coq_inversion_identity_data : coq_inversion_data delayed
+val build_coq_inversion_jmeq_data : coq_inversion_data delayed
+val build_coq_inversion_eq_true_data : coq_inversion_data delayed
+
 (** Connectives 
    The False proposition *)
 val build_coq_False : constr delayed
@@ -187,7 +247,6 @@ val coq_identity_ref : global_reference lazy_t
 val coq_jmeq_ref : global_reference lazy_t
 val coq_eq_true_ref : global_reference lazy_t
 val coq_existS_ref : global_reference lazy_t
-val coq_existT_ref : global_reference lazy_t
 val coq_exist_ref : global_reference lazy_t
 val coq_not_ref : global_reference lazy_t
 val coq_False_ref : global_reference lazy_t
@@ -196,3 +255,5 @@ val coq_sig_ref : global_reference lazy_t
 
 val coq_or_ref : global_reference lazy_t
 val coq_iff_ref : global_reference lazy_t
+
+end

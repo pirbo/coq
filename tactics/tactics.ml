@@ -2283,7 +2283,7 @@ let letin_tac_gen with_eq (id,depdecls,lastlhyp,ccl,c) ty =
             | IntroAnonymous -> new_fresh_id [id] (add_prefix "Heq" id) gl
             | IntroFresh heq_base -> new_fresh_id [id] heq_base gl
             | IntroIdentifier id -> id in
-          let eqdata = build_coq_eq_data () in
+          let eqdata = Std.build_coq_eq_data () in
           let args = if lr then [t;mkVar id;c] else [t;c;mkVar id]in
           let sigma, eq = Evd.fresh_global env sigma eqdata.eq in
           let sigma, refl = Evd.fresh_global env sigma eqdata.refl in
@@ -2330,7 +2330,7 @@ let mkletin_goal env sigma store with_eq dep (id,lastlhyp,ccl,c) ty =
           if List.mem id (ids_of_named_context (named_context env)) then
             user_err_loc (loc,"",pr_id id ++ str" is already used.");
           id in
-      let eqdata = build_coq_eq_data () in
+      let eqdata = Std.build_coq_eq_data () in
       let args = if lr then [t;mkVar id;c] else [t;c;mkVar id]in
       let sigma, eq = Evd.fresh_global env sigma eqdata.eq in
       let sigma, refl = Evd.fresh_global env sigma eqdata.refl in
@@ -3050,8 +3050,8 @@ let error_ind_scheme s =
 
 let glob = Universes.constr_of_global
 
-let coq_eq = lazy (glob (Coqlib.build_coq_eq ()))
-let coq_eq_refl = lazy (glob (Coqlib.build_coq_eq_refl ()))
+let coq_eq = Lazy.lazy_from_fun Coqlib.Std.build_coq_eq
+let coq_eq_refl = lazy ((Coqlib.Std.build_coq_eq_data ()).Coqlib.refl)
 
 let coq_heq = lazy (Coqlib.coq_constant "mkHEq" ["Logic";"JMeq"] "JMeq")
 let coq_heq_refl = lazy (Coqlib.coq_constant "mkHEq" ["Logic";"JMeq"] "JMeq_refl")

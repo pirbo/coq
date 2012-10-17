@@ -16,9 +16,9 @@ open Misctypes
 
 (* Absurd *)
 
-let mk_absurd_proof t =
+let mk_absurd_proof log t =
   let id = Namegen.default_dependent_ident in
-  mkLambda (Names.Name id,mkApp(build_coq_not (),[|t|]),
+  mkLambda (Names.Name id,mkApp(log.log_not,[|t|]),
     mkLambda (Names.Name id,t,mkApp (mkRel 2,[|mkRel 1|])))
 
 let absurd c =
@@ -28,10 +28,11 @@ let absurd c =
     let j = Retyping.get_judgment_of env sigma c in
     let sigma, j = Coercion.inh_coerce_to_sort Loc.ghost env sigma j in
     let t = j.Environ.utj_val in
+    let log = Coqlib.find_logic (family_of_sort j.Environ.utj_type) in
     Tacticals.New.tclTHENLIST [
       Proofview.Unsafe.tclEVARS sigma;
-      elim_type (build_coq_False ());
-      Simple.apply (mk_absurd_proof t)
+      elim_type (log.log_False);
+      Simple.apply (mk_absurd_proof log t)
     ]
   end
 
