@@ -18,6 +18,7 @@ open Printer
 open Libnames
 open Globnames
 open Nametab
+open Coqlib
 
 type filter_function = global_reference -> env -> constr -> bool
 type display_function = global_reference -> env -> constr -> unit

@@ -55,14 +55,10 @@ val check_required_library : string list -> unit
 (** Modules *)
 val prelude_module : DirPath.t
 
-val logic_module : DirPath.t
-val logic_module_name : string list
+val logic_type_module : DirPath.t
+val logic_name : string list
 
 val logic_type_module : DirPath.t
-
-val jmeq_module : DirPath.t
-val jmeq_module_name : string list
-
 val datatypes_module_name : string list
 
 (** Natural numbers *)
@@ -79,8 +75,6 @@ val path_of_true : constructor
 val path_of_false : constructor
 val glob_true : global_reference
 val glob_false : global_reference
-
-val build_coq_False : constr delayed
 
 (*************)
 (** A generic notion of logic *)
@@ -116,9 +110,8 @@ type coq_logic = {
 (** Declare a logic. The constr is a "key" to search the
     logic corresponding to (for instance) the type of its
     propositions. *)
-type logic_id = sorts_family
-val declare_logic : ?default:bool -> logic_id -> coq_logic -> unit
-val find_logic : logic_id option -> coq_logic
+type logic_id = sorts
+val find_logic : Environ.env -> logic_id option -> coq_logic
 val search_logic : (coq_logic -> bool) -> coq_logic list
 
 
@@ -177,13 +170,13 @@ type coq_inversion_data = {
 type coq_equality = {
   eq_logic : coq_logic;
   eq_data : coq_eq_data;
-  eq_inv : coq_inversion_data option
+  eq_inv : coq_inversion_data delayed
 }
 
 (** Equalities are identified by the connective (eq,identity,etc.) *)
 type equality_id = constr
-val declare_equality : ?default:bool -> equality_id -> coq_equality -> unit
-val find_equality : equality_id option -> coq_equality
+
+val find_equality : Environ.env -> equality_id option -> coq_equality
 val search_equality : (coq_equality -> bool) -> coq_equality list
 
 (** Specif *)
@@ -192,6 +185,9 @@ val build_coq_sumbool : constr delayed
 (** {6 ... } *)
 
 module Std : sig
+
+val logic_module : dir_path
+val logic_module_name : string list
 
 (** Equality *)
 val glob_eq : global_reference

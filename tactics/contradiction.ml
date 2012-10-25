@@ -16,7 +16,6 @@ open Misctypes
 
 (* Absurd *)
 
-
 let mk_absurd_proof log t =
   let id = Namegen.default_dependent_ident in
   mkLambda (Names.Name id,mkApp(log.log_not,[|t|]),
@@ -29,7 +28,9 @@ let absurd c =
     let j = Retyping.get_judgment_of env sigma c in
     let sigma, j = Coercion.inh_coerce_to_sort Loc.ghost env sigma j in
     let t = j.Environ.utj_val in
-    let log = Coqlib.find_logic (Some(family_of_sort j.Environ.utj_type)) in
+  let log =
+    try Coqlib.find_logic env (Some(j.Environ.utj_type)) (* propositional suffices *)
+    with Not_found -> error "Cannot find logic for this type of propositions" in
     Tacticals.New.tclTHENLIST [
       Proofview.Unsafe.tclEVARS sigma;
       elim_type (log.log_False);

@@ -104,7 +104,7 @@ let make_inv_predicate env evd indf realargs id status concl =
   (* Now, we can recurse down this list, for each ai,(mkRel k) whether to
      push <Ai>(mkRel k)=ai (when   Ai is closed).
    In any case, we carry along the rest of pairs *)
-  let eqdata = Coqlib.build_coq_eq_data () in
+  let eqd = Coqlib.find_equality env None in
   let rec build_concl eqns args n = function
     | [] -> it_mkProd concl eqns, Array.rev_of_list args
     | ai :: restlist ->
@@ -117,10 +117,9 @@ let make_inv_predicate env evd indf realargs id status concl =
 	    let sigma, res = make_iterated_tuple env' !evd ai (xi,ti) in
 	      evd := sigma; res
 	in
-        let eqd = Coqlib.find_equality None in
         let eqn = applist (eqd.eq_data.eq ,[eqnty;lhs;rhs]) in
         let eqns = (Anonymous, lift n eqn) :: eqns in
-        let refl_term = eqdata.Coqlib.refl in
+        let refl_term = eqd.eq_data.refl in
 	let refl_term = Evarutil.evd_comb1 (Evd.fresh_global env) evd refl_term in
         let refl = mkApp (refl_term, [|eqnty; rhs|]) in
 	let _ = Evarutil.evd_comb1 (Typing.type_of env) evd refl in

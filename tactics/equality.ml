@@ -572,7 +572,7 @@ let replace_using_leibniz clause c1 c2 l2r unsafe try_prove_eq_opt =
   | None ->
     tclFAIL 0 (str"Terms do not have convertible types.")
   | Some evd ->
-     let {eq_data=eq} = Coqlib.find_equality None in
+     let {eq_data=eq} = Coqlib.find_equality (pf_env gl) None in
      Tacticals.New.pf_constr_of_global eq.sym (fun sym ->
 	Tacticals.New.pf_constr_of_global eq.eq (fun e ->
     let eq = applist (e, [t1;c1;c2]) in
@@ -819,7 +819,7 @@ let descend_then env sigma head dirn =
    constructs a case-split on [headval], with the [dirn]-th branch
    giving [True], and all the rest giving False. *)
 
-let construct_discriminator env sigma dirn c sort =
+let construct_discriminator logic env sigma dirn c sort =
   let IndType(indf,_) =
     try find_rectype env sigma (get_type_of env sigma c)
     with Not_found ->
@@ -834,25 +834,24 @@ let construct_discriminator env sigma dirn c sort =
   let (indp,_) = dest_ind_family indf in
   let ind, _ = check_privacy env indp in
   let (mib,mip) = lookup_mind_specif env ind in
-  let log = Coqlib.find_logic None in
   let deparsign = make_arity_signature env true indf in
-  let p = it_mkLambda_or_LetIn (mkSort log.log_bottom_sort) deparsign in
+  let p = it_mkLambda_or_LetIn (mkSort logic.log_bottom_sort) deparsign in
   let cstrs = get_constructors env indf in
   let build_branch i =
-    let endpt = if Int.equal i dirn then log.log_True else log.log_False in
+    let endpt = if Int.equal i dirn then logic.log_True else logic.log_False in
     it_mkLambda_or_LetIn endpt cstrs.(i-1).cs_args in
   let brl =
     List.map build_branch(List.interval 1 (Array.length mip.mind_consnames)) in
   let ci = make_case_info env ind RegularStyle in
   mkCase (ci, p, c, Array.of_list brl)
 
-let rec build_discriminator env sigma dirn c sort = function
-  | [] -> construct_discriminator env sigma dirn c sort
+let rec build_discriminator logic env sigma dirn c sort = function
+  | [] -> construct_discriminator logic env sigma dirn c sort
   | ((sp,cnum),argnum)::l ->
       let (cnum_nlams,cnum_env,kont) = descend_then env sigma c cnum in
       let newc = mkRel(cnum_nlams-argnum) in
-      let subval = build_discriminator cnum_env sigma dirn newc sort l  in
-      kont subval (build_coq_False (),mkSort (Prop Null))
+      let subval = build_discriminator logic cnum_env sigma dirn newc sort l  in
+      kont subval (logic.log_False,mkSort logic.log_bottom_sort)
 
 (* Note: discrimination could be more clever: if some elimination is
    not allowed because of a large impredicative constructor in the
@@ -895,9 +894,10 @@ let ind_scheme_of_eq lbeq =
 
 
 let discrimination_pf env sigma e (t,t1,t2) discriminator lbeq =
-  let i            = log.log_I in
-  let absurd_term  = log.log_False in
-  let eq_elim, eff = ind_scheme_of_eq lbeq in
+  let logic = lbeq.eq_logic in
+  let i           = logic.log_I in
+  let absurd_term = logic.log_False in
+  let eq_elim, eff = ind_scheme_of_eq lbeq.eq_data in
   let sigma, eq_elim = Evd.fresh_global env sigma eq_elim in
     sigma, (applist (eq_elim, [t;t1;mkNamedLambda e t discriminator;i;t2]), absurd_term),
     eff
@@ -916,9 +916,10 @@ let apply_on_clause (f,t) clause =
 let discr_positions env sigma (lbeq,eqn,(t,t1,t2)) eq_clause cpath dirn sort =
   let e = next_ident_away eq_baseid (ids_of_context env) in
   let e_env = push_named (e,None,t) env in
+  let log = lbeq.eq_logic in
   let discriminator =
-    build_discriminator e_env sigma dirn (mkVar e) sort cpath in
-  let sigma,(pf, absurd_term), eff = 
+    build_discriminator log e_env sigma dirn (mkVar e) sort cpath in
+  let sigma,(pf, absurd_term), eff =
     discrimination_pf env sigma e (t,t1,t2) discriminator lbeq in
   let pf_ty = mkArrow eqn absurd_term in
   let absurd_clause = apply_on_clause (pf,pf_ty) eq_clause in
@@ -1290,7 +1291,7 @@ let inject_at_positions env sigma l2r (eq,_,(t,t1,t2)) eq_clause posns tac =
       (* arbitrarily take t1' as the injector default value *)
       let sigma, (injbody,resty) = build_injector e_env !evdref t1' (mkVar e) cpath in
       let injfun = mkNamedLambda e t injbody in
-      let sigma,congr = Evd.fresh_global env sigma eq.congr in
+      let sigma,congr = Evd.fresh_global env sigma eq.eq_data.congr in
       let pf = applist(congr,[t;resty;injfun;t1;t2]) in
       let sigma, pf_typ = Typing.type_of env sigma pf in
       let inj_clause = apply_on_clause (pf,pf_typ) eq_clause in
@@ -1568,7 +1569,7 @@ let unfold_body x =
   end
 
 let restrict_to_declared_eq eq = (* compatibility *)
-  try ignore (find_equality (Some eq))
+  try ignore (find_equality (Global.env()) (Some eq))
   with Not_found ->
     raise Constr_matching.PatternMatchingFailure
 
@@ -1730,7 +1731,7 @@ let subst_all ?(flags=default_subst_tactic_flags ()) () =
   let test (_,c) =
     try
       let lbeq,u,(_,x,y) = find_eq_data_decompose c in
-      let eq = Universes.constr_of_global_univ (lbeq.eq,u) in
+      let eq = Universes.constr_of_global_univ (lbeq.eq_data.eq,u) in
       if flags.only_leibniz then restrict_to_declared_eq eq;
       (* J.F.: added to prevent failure on goal containing x=x as an hyp *)
       if Term.eq_constr x y then failwith "caught";

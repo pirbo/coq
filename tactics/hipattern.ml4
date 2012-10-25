@@ -252,15 +252,16 @@ let match_with_equation t =
   if not (isApp t) then raise NoEquationFound;
   let (hdapp,args) = destApp t in
   try
-    (Some (Coqlib.find_equality (Some hdapp)).eq_data, hdapp,
+    (Some (Coqlib.find_equality (Global.env()) (Some hdapp)), hdapp,
      PolymorphicLeibnizEq(args.(0),args.(1),args.(2)))
   with Not_found ->
     (match kind_of_term hdapp with
       | Ind (ind,_) ->
+(*TODO: restore jmeq
 	if IndRef ind = Std.glob_jmeq then
 	  Some (Std.build_coq_jmeq_data()),hdapp,
 	  HeterogenousEq(args.(0),args.(1),args.(2),args.(3))
-	else
+	else*)
           let (mib,mip) = Global.lookup_inductive ind in
           let constr_types = mip.mind_nf_lc in
           let nconstr = Array.length mip.mind_consnames in
@@ -376,11 +377,12 @@ let rec first_match matcher = function
 
 let find_eq_data eqn = (* fails with PatternMatchingFailure *)
   let (hd,args) = decompose_app eqn in
-  let jmeq = Coqlib.Std.build_coq_jmeq_data () in
+(*TODO: restore jmeq
+  let jmeq = Coqlib.Std.build_coq_jmeq_data () in*)
   match args with
-      [t;x;t';x'] when hd = jmeq.eq -> (jmeq,HeterogenousEq (t,x,t',x'))
+(*      [t;x;t';x'] when hd = jmeq.eq -> (jmeq,HeterogenousEq (t,x,t',x'))*)
     | [t;x;y] ->
-      (try ((find_equality(Some hd)).eq_data,PolymorphicLeibnizEq (t,x,y))
+      (try (find_equality (Global.env()) (Some hd),PolymorphicLeibnizEq (t,x,y))
        with Not_found -> raise PatternMatchingFailure)
 (*	 error "Cannot find a declared equality for this equation"*)
     | _ -> anomaly "find_eq_data: an eq pattern should match 3 or 4 terms"
