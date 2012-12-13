@@ -208,7 +208,7 @@ Qed.
 
 Global Instance prop_logic : logic_kind Prop := fun x => x.
 Global Instance prop_propositional : propositional_logic
-  True False Prop iff and or not
+  iff and or not True False Prop 
   I
   (fun A B => @proj1 (A->B) (B->A)) (fun A B:Prop => @proj2 (A->B)(B->A))
   conj.
@@ -279,6 +279,9 @@ Section universal_quantification.
 End universal_quantification.
 
 Global Instance prop_fo_logic : first_order_logic ex.
+
+(** Declaring the full_logic instance *)
+Global Instance prop_full_logic : full_logic prop_propositional prop_fo_logic.
 
 (** * Equality *)
 
@@ -518,7 +521,7 @@ Defined.
 
 Global Instance prop_eq_logic : equational_logic (@eq) (@eq_refl) (@eq_sym) (@eq_trans).
 
-Global Instance prop_full_eq_logic : full_eq_logic prop_propositional prop_fo_logic prop_eq_logic.
+Global Instance prop_full_eq_logic : full_eq_logic prop_propositional prop_fo_logic prop_eq_logic | 1.
 
 (* Aliases *)
 

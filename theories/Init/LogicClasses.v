@@ -19,8 +19,10 @@ Local Generalizable All Variables.
 Class logic_kind (X:Type) := prop_to_type : X->Type.
 Local Notation T := (@prop_to_type _ _).
 Class propositional_logic `{L:logic_kind X}
-  (* connectives *)
-  (True False:X) (trivial_kind:Type) (iff and or:X->X->X) (not:X->X)
+  (* Propositional connectives *)
+  (iff and or:X->X->X) (not:X->X)
+  (* (trivial is a sort containing propositions True and False) *)
+  (True False:X) (trivial_kind:Type)
   (* Intro/elim rules (the or-elim and ex-falso might be restricted at some
      point) *)
 (*  (T:=@prop_to_type X L) BUG: this is considered as an arg! *)
@@ -49,7 +51,8 @@ Class full_eq_logic
 End LogicClasses.
 
 (* By default an eq logic can be deduced from its components *)
-Existing Instances Build_full_logic Build_full_eq_logic.
+Existing Instances Build_full_logic Build_full_eq_logic | 10.
+
 (*
 Class default_logic :=
   { kind : Type ;

@@ -131,7 +131,7 @@ let make_inv_predicate env evd indf realargs id status concl =
   let _ = Evarutil.evd_comb1 (Typing.type_of env) evd predicate in
   (* OK - this predicate should now be usable by res_elimination_then to
      do elimination on the conclusion. *)
-  predicate, args
+  (eqd,predicate,neqns)
 
 (* The result of the elimination is a bunch of goals like:
 
@@ -331,18 +331,18 @@ let remember_first_eq id x = if !x == MoveLast then x := MoveAfter id
    If it can discriminate then the goal is proved, if not tries to use it as
    a rewrite rule. It erases the clause which is given as input *)
 
-let projectAndApply as_mode thin avoid id eqname names depids =
+let projectAndApply eqd thin id eqname names depids gls =
   let subst_hyp l2r id =
     tclTHEN (tclTRY(rewriteInConcl l2r (mkVar id)))
       (if thin then clear [id] else (remember_first_eq id eqname; tclIDTAC))
   in
-  let substHypIfVariable tac id =
-    Proofview.Goal.nf_enter begin fun gl ->
-    (** We only look at the type of hypothesis "id" *)
-    let hyp = pf_nf_evar gl (pf_get_hyp_typ id (Proofview.Goal.assume gl)) in
-    let (t,t1,t2) = Hipattern.dest_nf_eq gl hyp in
-    let t1 = pf_whd_betadeltaiota gl t1 in
-    let t2 = pf_whd_betadeltaiota gl t2 in
+  let substHypIfVariable tac id gls =
+    let (t,t1,t2) =
+      match destApp (pf_get_hyp_typ gls id) with
+	| (_,[|t;t1;t2|]) -> (t,t1,t2)
+	| _ -> anomaly "projectAndApply: not an well-formed equation" in
+    let t1 = pf_whd_betadeltaiota gls t1 in
+    let t2 = pf_whd_betadeltaiota gls t2 in
     match (kind_of_term t1, kind_of_term t2) with
     | Var id1, _ -> generalizeRewriteIntros as_mode (subst_hyp true id) depids id1
     | _, Var id2 -> generalizeRewriteIntros as_mode (subst_hyp false id) depids id2
@@ -372,14 +372,74 @@ let projectAndApply as_mode thin avoid id eqname names depids =
       dEqThen false (deq_trailer id)
 	(Some (None,ElimOnConstr (mkVar id,NoBindings))))
     id
+    gls
 
-let nLastDecls i tac =
-  Proofview.Goal.nf_enter (fun gl -> tac (nLastDecls gl i))
+(* Inversion qui n'introduit pas les hypotheses, afin de pouvoir les nommer
+   soi-meme (proposition de Valerie). *)
+let rewrite_equations_gene eqd othin neqns ba gl =
+  let (depids,nodepids) = split_dep_and_nodep ba.assums gl in
+  let rewrite_eqns =
+    match othin with
+      | Some thin ->
+          onLastHypId
+            (fun last ->
+              tclTHENSEQ
+                [tclDO neqns
+                     (tclTHEN intro
+                        (onLastHypId
+                           (fun id ->
+                              tclTRY
+			        (projectAndApply eqd thin id (ref MoveLast)
+				  [] depids))));
+                 onHyps (compose List.rev (afterHyp last)) bring_hyps;
+                 onHyps (afterHyp last)
+                   (compose clear ids_of_named_context)])
+      | None -> tclIDTAC
+  in
+  (tclTHENSEQ
+    [tclDO neqns intro;
+     bring_hyps nodepids;
+     clear (ids_of_named_context nodepids);
+     onHyps (compose List.rev (nLastDecls neqns)) bring_hyps;
+     onHyps (nLastDecls neqns) (compose clear ids_of_named_context);
+     rewrite_eqns;
+     tclMAP (fun (id,_,_ as d) ->
+               (tclORELSE (clear [id])
+                 (tclTHEN (bring_hyps [d]) (clear [id]))))
+       depids])
+  gl
 
 (* Introduction of the equations on arguments
    othin: discriminates Simple Inversion, Inversion and Inversion_clear
      None: the equations are introduced, but not rewritten
      Some thin: the equations are rewritten, and cleared if thin is true *)
+
+let rec get_names allow_conj (loc,pat) = match pat with
+  | IntroWildcard ->
+      error "Discarding pattern not allowed for inversion equations."
+  | IntroAnonymous | IntroForthcoming _ ->
+      error "Anonymous pattern not allowed for inversion equations."
+  | IntroFresh _ ->
+      error "Fresh pattern not allowed for inversion equations."
+  | IntroRewrite _->
+      error "Rewriting pattern not allowed for inversion equations."
+  | IntroOrAndPattern [l] ->
+      let get_name id = Option.get (fst (get_names false id)) in
+      if allow_conj then begin match l with
+      | [] -> (None, [])
+      | id :: l ->
+        let n = get_name id in
+        (Some n, n :: List.map get_name l)
+      end else
+	error"Nested conjunctive patterns not allowed for inversion equations."
+  | IntroOrAndPattern l ->
+      error "Disjunctive patterns not allowed for inversion equations."
+  | IntroIdentifier id ->
+      (Some id,[id])
+
+let extract_eqn_names = function
+  | None -> None,[]
+  | Some x -> x
 
 let rewrite_equations as_mode othin neqns names ba =
   Proofview.Goal.nf_enter begin fun gl ->
@@ -422,9 +482,11 @@ let interp_inversion_kind = function
   | FullInversion -> Some false
   | FullInversionClear -> Some true
 
-let rewrite_equations_tac as_mode othin id neqns names ba =
+let rewrite_equations_tac eqd (gene, othin) id neqns names ba =
   let othin = interp_inversion_kind othin in
-  let tac = rewrite_equations as_mode othin neqns names ba in
+  let tac =
+    if gene then rewrite_equations_gene eqd othin neqns ba
+    else rewrite_equations eqd othin neqns names ba in
   match othin with
   | Some true (* if Inversion_clear, clear the hypothesis *) ->
     tclTHEN tac (tclTRY (clear [id]))

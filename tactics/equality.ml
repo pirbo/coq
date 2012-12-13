@@ -897,10 +897,10 @@ let discrimination_pf env sigma e (t,t1,t2) discriminator lbeq =
   let logic = lbeq.eq_logic in
   let i           = logic.log_I in
   let absurd_term = logic.log_False in
-  let eq_elim, eff = ind_scheme_of_eq lbeq.eq_data in
-  let sigma, eq_elim = Evd.fresh_global env sigma eq_elim in
-    sigma, (applist (eq_elim, [t;t1;mkNamedLambda e t discriminator;i;t2]), absurd_term),
-    eff
+(*  let eq_elim     = ind_scheme_of_eq lbeq.eq_data in*)
+  (mkApp(lbeq.eq_data.ind,
+	 [|t;t1;mkNamedLambda e t discriminator;i;t2|]),
+   absurd_term)
 
 let eq_baseid = Id.of_string "e"
 
@@ -1120,8 +1120,8 @@ let sig_clausal_form env sigma sort_of_ty siglen ty dflt =
 	| Some w ->
             let w_type = unsafe_type_of env sigma w in
             if Evarconv.e_cumul env evdref w_type a then
-	      let exist_term = Evarutil.evd_comb1 (Evd.fresh_global env) evdref sigdata.intro in
-              applist(exist_term,[a;p_i_minus_1;w;tuple_tail])
+	      let { intro = exist_term } = find_sigma_data sort_of_ty in
+              applist(exist_term,[w_type;p_i_minus_1;w;tuple_tail])
             else
               error "Cannot solve a unification problem."
 	| None -> anomaly (Pp.str "Not enough components to build the dependent tuple")
