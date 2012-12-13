@@ -1921,10 +1921,11 @@ let interp ?proof locality poly c =
       vernac_identity_coercion locality poly local id s t
 
   (* Type classes *)
-  | VernacInstance (abst, sup, inst, props, pri) ->
-      vernac_instance abst locality poly sup inst props pri
-  | VernacContext sup -> vernac_context poly sup
-  | VernacDeclareInstances (ids, pri) -> vernac_declare_instances locality ids pri
+  | VernacInstance (abst, glob, sup, inst, props, pri) ->
+      vernac_instance abst glob sup inst props pri
+  | VernacContext sup -> vernac_context sup
+  | VernacDeclareInstances (glob, ids, pri) ->
+    vernac_declare_instances glob ids pri
   | VernacDeclareClass id -> vernac_declare_class id
 
   (* Solving *)

@@ -633,11 +633,11 @@ GEXTEND Gram
 	   VernacInstance (false,snd namesup,(fst namesup,expl,t),props,pri)
 
       | IDENT "Existing"; IDENT "Instance"; id = global;
-          pri = OPT [ "|"; i = natural -> i ] ->
-	  VernacDeclareInstances ([id], pri)
+	 pri = OPT [ "|"; i = natural -> i ] ->
+	 VernacDeclareInstances (not (use_section_locality ()), [id], pri)
       | IDENT "Existing"; IDENT "Instances"; ids = LIST1 global;
-          pri = OPT [ "|"; i = natural -> i ] ->
-	  VernacDeclareInstances (ids, pri)
+	 pri = OPT [ "|"; i = natural -> i ] ->
+	 VernacDeclareInstances (not (use_section_locality ()), ids, pri)
 
       | IDENT "Existing"; IDENT "Class"; is = global -> VernacDeclareClass is
 

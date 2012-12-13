@@ -62,7 +62,7 @@ let existing_instance glob g pri =
   let instance = Global.type_of_global_unsafe c in
   let _, r = decompose_prod_assum instance in
     match class_of_constr r with
-      | Some (_, ((tc,u), _)) -> add_instance (new_instance tc pri glob 
+      | Some (_, ((tc,u), _)) -> add_instance (new_instance tc pri glob
   (*FIXME*) (Flags.use_polymorphic_flag ()) c)
       | None -> user_err_loc (loc_of_reference g, "declare_instance",
 			     Pp.str "Constant does not build instances of a declared type class.")
