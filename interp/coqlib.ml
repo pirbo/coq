@@ -117,8 +117,13 @@ let has_changed check () =
   let oldv = ref None in
   fun x ->
     match !oldv with
-	None -> oldv := Some (check x); true
-      | Some ov -> not (check x = ov)
+	None ->
+	  message "cache: first";
+	  oldv := Some (check x); true
+      | Some ov ->
+	let b = not (check x = ov) in
+	if b then message "cache: outdated";
+	b
 
 
 (** Signature of a logic. Needs to be completed! *)
@@ -210,11 +215,10 @@ let find_logic env eid =
   let evd =
     match eid with
 	(* Pb: the_conv_x not only solves the specified evar, but also
-	   the sort of the logic, which might not be the sort of the equality... *)
+	   the sort of the logic, which might not be the sort of the equality.
+           So we assign th evar at a lower level. *)
 	Some k ->
 	  Evd.define (fst(destEvar inst.(kind_pos))) (mkSort k) evd
-(*	  (try Evarconv.the_conv_x env inst.(kind_pos) (mkSort k) evd
-	   with Reduction.NotConvertible -> raise Not_found)*)
       | None -> evd in
   (* Perform the proof search. We drop the solution (which contains no
      information anyway).
@@ -226,7 +230,6 @@ let find_logic env eid =
   (* Building the structure out of the raw array of arguments. *)
   build_record (Array.map (nf_evar evd) inst)
 
-(*
 let find_logic =
   let c = ref Gmap.empty in
   let eval_and_cache env lid =
@@ -241,9 +244,10 @@ let find_logic =
       eval_and_cache env lid
     else
       (try Gmap.find lid !c
-       with Not_found -> eval_and_cache env lid) in
+       with Not_found ->
+	 message("Logic cache: miss");
+	 eval_and_cache env lid) in
   cached_fun
-*)
 
 (************************************************************************)
 
@@ -411,11 +415,10 @@ let find_equality env eid =
   let evd =
     match eid with
 	(* Pb: the_conv_x not only solves the specified evar, but also
-	   the sort of the logic, which might not be the sort of the equality... *)
+	   the sort of the logic, which might not be the sort of the equality.
+           So we assign th evar at a lower level. *)
 	Some eq ->
 	  Evd.define (fst(destEvar inst.(eqpos))) eq evd
-(*	  (try Evarconv.the_conv_x env inst.(eqpos) eq evd
-	   with Reduction.NotConvertible -> raise Not_found)*)
       | None -> evd in
   (* Perform the proof search. We drop the solution (which contains no information).
      We are only interested in solving the evars argument of full_eq_logic. *)
@@ -424,22 +427,50 @@ let find_equality env eid =
   if Evd.has_undefined evd then raise Not_found;
   let args = Array.map (nf_evar evd) inst in
   (* Building the structure out of the raw array of arguments. *)
-  match args with
-      [|kind; _logic;
-	tr; fa; tkind; iff; conj; disj; neg; i; ifflr; iffrl; conjI; _propositional;
-        ex; _fo_logic;
-	eq; refl; sym; trans; _eq_logic|] ->
-      let dummy = mkProp in
-      let tkind =
-	if isSort tkind then destSort tkind else
-	  error "Instance of coq_full_logic expects a sort at field trivial_kind." in
-      {eq_logic={log_False=fa;log_True=tr;log_I=i;
-		 log_bottom_sort=tkind; log_not=neg; log_and=conj; log_conj=conjI;
-		 log_iff=iff; log_iff_left=ifflr; log_iff_right=iffrl; log_or=disj;
-		 log_ex=ex };
-       eq_data={eq=eq;ind=dummy;refl=refl;sym=sym;trans=trans;congr=dummy};
-       eq_inv=(fun()->failwith"find_equality: not implemented")}
-    | _ -> anomaly "Coqlib.find_equality: typeclass coq_full_logic has wrong arity"
+  build_record (Array.map (nf_evar evd) inst)
+
+let eq_instances =
+  lazy(let (cls,_,_,_)=Lazy.force full_logic_info in cls)
+
+let find_equality =
+  let c = ref Gmap.empty in
+  let eval_and_cache env eid =
+    (* failures are not recorded *)
+    let v = find_equality env eid in
+    c := Gmap.add eid v !c;
+    v in
+  let outdated =
+    has_changed(instances_of eq_instances)() in
+  let cached_fun env eid =
+    if outdated eid then
+      eval_and_cache env eid
+    else
+      (try Gmap.find eid !c
+       with Not_found ->
+	 msgnl(str"Eq cache: miss "++match eid with None->mt()|Some e->Termops.print_constr e);
+	 eval_and_cache env eid) in
+  cached_fun
+
+
+(* Alternative def, probably much more efficient, but not as general...
+   Also, we may have better control on which instance is tried first. *)
+let find_equality_alt eid =
+  (* Retrieve data about the 'full_eq_logic' class *)
+  let (cls,cl_ctxt,build_record,eqpos) = Lazy.force full_eq_logic_info in
+  let inst = Typeclasses.instances cls in
+  let env = Global.env() in
+  let found =
+    match eid with
+      | None -> (fun _ -> true)
+      | Some eq -> (fun args -> eq_constr args.(eqpos) eq) in
+  let rec find l =
+    match l with
+	[] -> raise Not_found
+      | i::l ->
+	let ty = Retyping.get_type_of env Evd.empty (constr_of_global (instance_impl i)) in
+	let args = snd (destApp ty) in
+	if found args then build_record args else find l in
+  find inst
 
 let search_equality found =
   CList.map_filter
