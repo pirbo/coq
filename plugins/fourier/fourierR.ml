@@ -285,10 +285,8 @@ let constant = Coqlib.gen_constant "Fourier"
 
 (* Standard library *)
 open Coqlib
-let coq_sym_eqT = lazy (Std.build_coq_eq_sym ())
-let coq_False = lazy (Std.build_coq_False ())
-let coq_not = lazy (Std.build_coq_not ())
-let coq_eq = lazy (Std.build_coq_eq ())
+let eqd = lazy (find_equality (Global.env()) None)
+let log = lazy ((Lazy.force eqd).eq_logic)
 
 (* Rdefinitions *)
 let constant_real = constant ["Reals";"Rdefinitions"]
@@ -588,7 +586,7 @@ let rec fourier () =
            in
            tac:=(Tacticals.New.tclTHENS (Proofview.V82.tactic (my_cut ineq))
                      [Tacticals.New.tclTHEN (change_concl
-			       (mkAppL [| get coq_not; ineq|]
+			       (mkAppL [| (get log).log_not; ineq|]
 				       ))
 		      (Tacticals.New.tclTHEN (apply (if sres then get coq_Rnot_lt_lt
 					       else get coq_Rnot_le_le))
@@ -607,14 +605,14 @@ let rec fourier () =
       			        [Tacticals.New.tclORELSE
                                    (* TODO : Ring.polynom []*) (Proofview.tclUNIT ())
                                    (Proofview.tclUNIT ());
-				 Tacticals.New.pf_constr_of_global (get coq_sym_eqT) (fun symeq ->
+				 Tacticals.New.pf_constr_of_global ((get eqd).eq_data.sym) (fun symeq ->
 					  (Tacticals.New.tclTHEN (apply symeq)
 						(apply (get coq_Rinv_1))))]
 
 					 )
 				]));
                        !tac1]);
-	   tac:=(Tacticals.New.tclTHENS (cut (get coq_False))
+	   tac:=(Tacticals.New.tclTHENS (cut ((get log).log_False))
 				  [Tacticals.New.tclTHEN intro (contradiction None);
 				   !tac])
       |_-> assert false) |_-> assert false

@@ -317,7 +317,7 @@ let make_eq () =
 (*FIXME*) Universes.constr_of_global (Coqlib.build_coq_eq ())
 
 let mkEq typ c1 c2 =
-  mkApp (Coqlib.Std.build_coq_eq(),[| typ; c1; c2|])
+  mkApp ((Coqlib.Std.coq_eq_equality()).Coqlib.eq_data.Coqlib.eq,[| typ; c1; c2|])
 
 
 let poseq_unsafe idunsafe cstr gl =

@@ -123,6 +123,7 @@ $(foreach S,$(VSUBSYSTEMS),$(eval $(call mkstamp,$(S))))
 #######################################################################
 
 summary_dir = echo $(1); find $(2) -name '*.log' -print0 | xargs -0 -n 1 tail -n1 | sort
+parse_opts = `sed -n -e "s/.*(\*[ \t]*Coq[ \t]\+options[ \t]*:\(.*\)\*).*/\1/p" "$(1)"`
 
 .PHONY: summary summary.log
 

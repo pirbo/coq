@@ -771,7 +771,7 @@ let _ = lb_scheme_kind_aux := fun () -> lb_scheme_kind
 (* Decidable equality *)
 
 let check_not_is_defined () =
-  try ignore (Coqlib.Std.build_coq_not ())
+  try ignore (Coqlib.find_logic (Global.env()) None)
   with e when Errors.noncritical e -> raise (UndefinedCst "not")
 
 (* {n=m}+{n<>m}  part  *)
@@ -822,7 +822,7 @@ let compute_dec_goal ind lnamesparrec nparrec =
         create_input (
           mkNamedProd n (mkFullInd ind (2*nparrec)) (
             mkNamedProd m (mkFullInd ind (2*nparrec+1)) (
-              mkApp(sumbool(),[|eqnm;mkApp (Coqlib.Std.build_coq_not(),[|eqnm|])|])
+              mkApp(sumbool(),[|eqnm;mkApp ((Coqlib.Std.coq_prop_logic()).Coqlib.log_not,[|eqnm|])|])
           )
         )
       )

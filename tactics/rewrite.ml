@@ -714,16 +714,11 @@ let default_flags = { under_lambdas = true; on_morphisms = true; }
 
 let get_opt_rew_rel = function RewPrf (rel, prf) -> Some rel | _ -> None
 
-let make_eq () =
-(*FIXME*) Universes.constr_of_global (Coqlib.build_coq_eq ())
-let make_eq_refl () =
-(*FIXME*) Universes.constr_of_global (Coqlib.build_coq_eq_refl ())
-
-let get_rew_prf r = match r.rew_prf with
+let get_rew_prf eqd r = match r.rew_prf with
   | RewPrf (rel, prf) -> rel, prf 
   | RewCast c ->
-    let rel = mkApp (make_eq (), [| r.rew_car |]) in
-      rel, mkCast (mkApp (make_eq_refl (), [| r.rew_car; r.rew_from |]),
+    let rel = mkApp (eqd.eq_data.eq, [| r.rew_car |]) in
+      rel, mkCast (mkApp (eqd.eq_data.refl, [| r.rew_car; r.rew_from |]),
 		   c, mkApp (rel, [| r.rew_from; r.rew_to |]))
 
 let poly_subrelation sort = 
@@ -775,6 +770,7 @@ let resolve_morphism env avoid oldt m ?(fnewt=fun x -> x) args args' (b,cstr) ev
     let evars, morph = new_cstr_evar evars env' app in
       evars, morph, morph, sigargs, appm, morphobjs, morphobjs'
   in
+  let eqd = find_equality (Global.env ()) None in
   let projargs, subst, evars, respars, typeargs =
     Array.fold_left2
       (fun (acc, subst, evars, sigargs, typeargs') x y ->
@@ -790,7 +786,7 @@ let resolve_morphism env avoid oldt m ?(fnewt=fun x -> x) args args' (b,cstr) ev
 		      env evars carrier relation x in
 		    [ proof ; x ; x ] @ acc, subst, evars, sigargs, x :: typeargs'
 	      | Some r ->
-		  [ snd (get_rew_prf r); r.rew_to; x ] @ acc, subst, evars, 
+		  [ snd (get_rew_prf eqd r); r.rew_to; x ] @ acc, subst, evars, 
 	      sigargs, r.rew_to :: typeargs')
 	  | None ->
 	      if not (Option.is_empty y) then 
@@ -809,11 +805,12 @@ let apply_constraint env avoid car rel prf cstr res =
   | None -> res
   | Some r -> resolve_subrelation env avoid car rel (fst cstr) prf r res
 
-let coerce env avoid cstr res = 
-  let rel, prf = get_rew_prf res in
+let coerce env eqd avoid cstr res = 
+  let rel, prf = get_rew_prf eqd res in
     apply_constraint env avoid res.rew_car rel prf cstr res
 
 let apply_rule unify loccs : int pure_strategy =
+  let eqd = find_equality (Global.env ()) None in
   let (nowhere_except_in,occs) = convert_occs loccs in
   let is_occ occ =
     if nowhere_except_in 
@@ -830,7 +827,7 @@ let apply_rule unify loccs : int pure_strategy =
 	    else if eq_constr t rew.rew_to then (occ, Identity)
 	    else
 	      let res = { rew with rew_car = ty } in
-              let rel, prf = get_rew_prf res in
+              let rel, prf = get_rew_prf eqd res in
 	      let res = Success (apply_constraint env avoid rew.rew_car rel prf cstr res) in
               (occ, res)
 
@@ -928,6 +925,7 @@ let unfold_match env sigma sk app =
 let is_rew_cast = function RewCast _ -> true | _ -> false
 
 let subterm all flags (s : 'a pure_strategy) : 'a pure_strategy =
+  let eqd = find_equality (Global.env ()) None in
   let rec aux state env avoid t ty (prop, cstr) evars =
     let cstr' = Option.map (fun c -> (ty, Some c)) cstr in
       match kind_of_term t with
@@ -1130,7 +1128,7 @@ let subterm all flags (s : 'a pure_strategy) : 'a pure_strategy =
 	  | Success r ->
 	    let case = mkCase (ci, lift 1 p, mkRel 1, Array.map (lift 1) brs) in
 	    let res = make_leibniz_proof env case ty r in
-	      state, Success (coerce env avoid (prop,cstr) res)
+	      state, Success (coerce env eqd avoid (prop,cstr) res)
 	  | Fail | Identity ->
 	    if Array.for_all (Int.equal 0) ci.ci_cstr_ndecls then
 	      let evars', eqty = app_poly_sort prop env evars coq_eq [| ty |] in
@@ -1168,7 +1166,7 @@ let subterm all flags (s : 'a pure_strategy) : 'a pure_strategy =
 	let res = 
 	  match res with
 	  | Success r ->  
-	    let rel, prf = get_rew_prf r in
+	    let rel, prf = get_rew_prf eqd r in
 	      Success (apply_constraint env avoid r.rew_car rel prf (prop,cstr) r)
 	  | Fail | Identity -> res
 	in state, res

@@ -895,7 +895,7 @@ let ind_scheme_of_eq lbeq =
 
 let discrimination_pf env sigma e (t,t1,t2) discriminator lbeq =
   let logic = lbeq.eq_logic in
-  let i           = logic.log_I in
+  let i           = logic.log_TrueI in
   let absurd_term = logic.log_False in
 (*  let eq_elim     = ind_scheme_of_eq lbeq.eq_data in*)
   (mkApp(lbeq.eq_data.ind,
@@ -1390,6 +1390,35 @@ let intro_decompe_eq tac data cl =
   end
 
 let _ = declare_intro_decomp_eq intro_decompe_eq
+
+let swap_equality_args = function
+  | MonomorphicLeibnizEq (e1,e2) -> [e2;e1]
+  | PolymorphicLeibnizEq (t,e1,e2) -> [t;e2;e1]
+  | HeterogenousEq (t1,e1,t2,e2) -> [t2;e2;t1;e1]
+  | OtherInductiveEquality ->
+    error "Cannot handle this inductive equality type"
+
+let swap_equands gls eqn =
+  let (lbeq,eq_args) = find_eq_data eqn in
+  applist(lbeq.eq_data.eq,swap_equality_args eq_args)
+
+let swapEquandsInConcl gls =
+  let (lbeq,eq_args) = find_eq_data (pf_concl gls) in
+  let sym_equal = lbeq.eq_data.sym in
+  refine
+    (applist(sym_equal,(swap_equality_args eq_args@[Evarutil.mk_new_meta()])))
+    gls
+
+(* Refine from [|- P e2] to [|- P e1] and [|- e1=e2:>t] (body is P (Rel 1)) *)
+
+let bareRevSubstInConcl lbeq body (t,e1,e2) gls =
+  (* find substitution scheme *)
+  let eq_elim = find_elim lbeq.eq_data.eq (Some false) false None [e1;e2] gls in
+  (* build substitution predicate *)
+  let p = lambda_create (pf_env gls) (t,body) in
+  (* apply substitution scheme *)
+  refine (applist(eq_elim,[t;e1;p;Evarutil.mk_new_meta();
+                           e2;Evarutil.mk_new_meta()])) gls
 
 (* [subst_tuple_term dep_pair B]
 
