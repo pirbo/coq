@@ -397,6 +397,11 @@ let pr_simple_return_type pr na po =
 let pr_proj pr pr_app a f l =
   hov 0 (pr (lproj,E) a ++ cut() ++ str ".(" ++ pr_app pr f l ++ str ")")
 
+let pr_ext pr f l =
+      hov 2 (
+	str (Extensions.to_string f) ++
+	prlist (pr_sep_com spc (pr (lapp,L))) l)
+
 let pr_appexpl pr f l =
       hov 2 (
 	str "@" ++ pr_reference f ++
@@ -471,6 +476,7 @@ let pr pr sep inherited a =
         when Id.equal var Notation_ops.ldots_var ->
       hov 0 (str ".." ++ pr spc (latom,E) t ++ spc () ++ str ".."), larg
   | CAppExpl (_,(None,f),l) -> pr_appexpl (pr mt) f l, lapp
+  | CExt (_,f,l) -> pr_ext (pr mt) f l, lapp
   | CApp (_,(Some i,f),l) ->
       let l1,l2 = List.chop i l in
       let c,l1 = List.sep_last l1 in

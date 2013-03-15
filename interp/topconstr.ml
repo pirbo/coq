@@ -101,7 +101,7 @@ let rec fold_local_binders g f n acc b = function
       f n acc b
 
 let fold_constr_expr_with_binders g f n acc = function
-  | CAppExpl (loc,(_,_),l) -> List.fold_left (f n) acc l
+  | (CAppExpl (loc,(_,_),l) | CExt (loc,_,l)) -> List.fold_left (f n) acc l
   | CApp (loc,(_,t),l) -> List.fold_left (f n) (f n acc t) (List.map fst l)
   | CProdN (_,l,b) | CLambdaN (_,l,b) -> fold_constr_expr_binders g f n acc b l
   | CLetIn (_,na,a,b) -> fold_constr_expr_binders g f n acc b [[na],default_binder_kind,a]
@@ -202,6 +202,7 @@ let map_local_binders f g e bl =
 
 let map_constr_expr_with_binders g f e = function
   | CAppExpl (loc,r,l) -> CAppExpl (loc,r,List.map (f e) l)
+  | CExt (loc,r,l) -> CExt (loc,r,List.map (f e) l)
   | CApp (loc,(p,a),l) ->
       CApp (loc,(p,f e a),List.map (fun (a,i) -> (f e a,i)) l)
   | CProdN (loc,bl,b) ->

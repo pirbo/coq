@@ -150,6 +150,8 @@ let rec constr_expr_eq e1 e2 =
     Option.equal (List.equal constr_expr_eq) c1 c2
   | CSort(_,s1), CSort(_,s2) ->
     Miscops.glob_sort_eq s1 s2
+  | CExt(_,e1,l1), CExt(_,e2,l2) ->
+    Extensions.equal e1 e2 && List.equal constr_expr_eq l1 l2
   | CCast(_,a1,(CastConv b1|CastVM b1)), CCast(_,a2,(CastConv b2|CastVM b2)) ->
       constr_expr_eq a1 a2 &&
       constr_expr_eq b1 b2
@@ -238,6 +240,7 @@ let constr_loc = function
   | CPatVar (loc,_) -> loc
   | CEvar (loc,_,_) -> loc
   | CSort (loc,_) -> loc
+  | CExt (loc,_,_) -> loc
   | CCast (loc,_,_) -> loc
   | CNotation (loc,_,_) -> loc
   | CGeneralization (loc,_,_,_) -> loc

@@ -27,7 +27,8 @@ let constr_kw =
   [ "forall"; "fun"; "match"; "fix"; "cofix"; "with"; "in"; "for";
     "end"; "as"; "let"; "if"; "then"; "else"; "return";
     "Prop"; "Set"; "Type"; ".("; "_"; "..";
-    "`{"; "`("; "{|"; "|}" ]
+    "`{"; "`("; "{|"; "|}";
+    "Irr"; "iPrf"; "iJMeq"; "isubst" ]
 
 let _ = List.iter Lexer.add_keyword constr_kw
 
@@ -182,7 +183,8 @@ GEXTEND Gram
     | "99" RIGHTA [ ]
     | "90" RIGHTA [ ]
     | "10" LEFTA
-      [ f=operconstr; args=LIST1 appl_arg -> CApp(!@loc,(None,f),args)
+      [ f=extensions; args=LIST0 NEXT -> CExt(!@loc,f,args)
+      | f=operconstr; args=LIST1 appl_arg -> CApp(!@loc,(None,f),args)
       | "@"; f=global; args=LIST0 NEXT -> CAppExpl(!@loc,(None,f),args)
       | "@"; (locid,id) = pattern_identref; args=LIST1 identref ->
           let args = List.map (fun x -> CRef (Ident x), None) args in
@@ -452,7 +454,13 @@ GEXTEND Gram
 	  (!@loc, Anonymous), false, c
     ] ]
   ;
-
+  extensions:
+    [ [ "Irr" -> Extensions.irr
+      | "iPrf" -> Extensions.iprf
+      | "iJMeq" -> Extensions.ijmeq
+      | "isubst" -> Extensions.isubst
+      ] ]
+  ;
   type_cstr:
     [ [ c=OPT [":"; c=lconstr -> c] -> (!@loc,c) ] ]
   ;

@@ -82,6 +82,7 @@ type constr_expr =
   | CPatVar of Loc.t * (bool * patvar)
   | CEvar of Loc.t * existential_key * constr_expr list option
   | CSort of Loc.t * glob_sort
+  | CExt of Loc.t * Extensions.t * constr_expr list
   | CCast of Loc.t * constr_expr * constr_expr cast_type
   | CNotation of Loc.t * notation * constr_notation_substitution
   | CGeneralization of Loc.t * binding_kind * abstraction_kind option * constr_expr

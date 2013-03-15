@@ -681,6 +681,7 @@ let rec add_args id new_args b =
   | CPatVar _ -> b
   | CEvar _ -> b
   | CSort _ -> b
+  | CExt _ -> b
   | CCast(loc,b1,b2)  ->
       CCast(loc,add_args id new_args b1,
 	    Miscops.map_cast_type (add_args id new_args) b2)

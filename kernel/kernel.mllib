@@ -3,6 +3,7 @@ Univ
 Esubst
 Sorts
 Evar
+Extensions
 Constr
 Context
 Vars
