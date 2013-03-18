@@ -126,6 +126,7 @@ let generalizable_vars_of_glob_constr ?(bound=Id.Set.empty) ?(allowed=Id.Set.emp
 	  if Id.List.mem_assoc id vs then vs
 	  else (id, loc) :: vs
 	else vs
+    | GExt (loc,f,args) -> List.fold_left (vars bound) vs args
     | GApp (loc,f,args) -> List.fold_left (vars bound) vs (f::args)
     | GLambda (loc,na,_,ty,c) | GProd (loc,na,_,ty,c) | GLetIn (loc,na,ty,c) ->
 	let vs' = vars bound vs ty in

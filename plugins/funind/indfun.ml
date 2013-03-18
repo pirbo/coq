@@ -196,6 +196,7 @@ let is_rec names =
 	  )
 	  b
     | GApp(_,f,args) -> List.exists (lookup names) (f::args)
+    | GExt(_,_,args) -> List.exists (lookup names) args
     | GCases(_,_,_,el,brl) ->
 	List.exists (fun (e,_) -> lookup names e) el ||
 	  List.exists (lookup_br names) brl

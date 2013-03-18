@@ -131,6 +131,10 @@ let change_vars =
 	  GVar(loc,new_id)
       | GEvar _ -> rt
       | GPatVar _ -> rt
+      | GExt(loc,rt',rtl) ->
+	GExt(loc,rt',
+	     List.map (change_vars mapping) rtl
+	)
       | GApp(loc,rt',rtl) ->
 	  GApp(loc,
 	       change_vars mapping rt',
@@ -367,6 +371,10 @@ let rec alpha_rt excluded rt =
 	     alpha_rt excluded f,
 	     List.map (alpha_rt excluded) args
 	    )
+    | GExt(loc,f,args) ->
+	GExt(loc,f,
+	     List.map (alpha_rt excluded) args
+	    )
   in
   new_rt
 
@@ -388,6 +396,7 @@ let is_free_in id =
     | GEvar _ -> false
     | GPatVar _ -> false
     | GApp(_,rt,rtl) -> List.exists is_free_in (rt::rtl)
+    | GExt(_,_,rtl) -> List.exists is_free_in (rtl)
     | GLambda(_,n,_,t,b) | GProd(_,n,_,t,b) | GLetIn(_,n,t,b) ->
 	let check_in_b =
 	  match n with
@@ -455,6 +464,10 @@ let replace_var_by_term x_id term =
       | GApp(loc,rt',rtl) ->
 	  GApp(loc,
 	       replace_var_by_pattern rt',
+	       List.map replace_var_by_pattern rtl
+	      )
+      | GExt(loc,rt',rtl) ->
+	  GExt(loc,rt',
 	       List.map replace_var_by_pattern rtl
 	      )
       | GLambda(_,Name id,_,_,_) when Id.compare id x_id == 0 -> rt
@@ -587,6 +600,8 @@ let ids_of_glob_constr c =
       | GVar (_,id) -> id::acc
       | GApp (loc,g,args) ->
           ids_of_glob_constr [] g @ List.flatten (List.map (ids_of_glob_constr []) args) @ acc
+      | GExt (loc,g,args) ->
+          List.rev_append (List.fold_left ids_of_glob_constr [] args) acc
       | GLambda (loc,na,k,ty,c) -> idof na :: ids_of_glob_constr [] ty @ ids_of_glob_constr [] c @ acc
       | GProd (loc,na,k,ty,c) -> idof na :: ids_of_glob_constr [] ty @ ids_of_glob_constr [] c @ acc
       | GLetIn (loc,na,b,c) -> idof na :: ids_of_glob_constr [] b @ ids_of_glob_constr [] c @ acc
@@ -614,6 +629,10 @@ let zeta_normalize =
       | GVar _ -> rt
       | GEvar _ -> rt
       | GPatVar _ -> rt
+      | GExt(loc,rt',rtl) ->
+	GExt(loc, rt',
+	     List.map zeta_normalize_term rtl
+	)
       | GApp(loc,rt',rtl) ->
 	  GApp(loc,
 	       zeta_normalize_term rt',
@@ -687,6 +706,7 @@ let expand_as =
 	      Id.Map.find id map
 	    with Not_found -> rt
 	  end
+      | GExt(loc,f,args) -> GExt(loc,f,List.map (expand_as map) args)
       | GApp(loc,f,args) -> GApp(loc,expand_as map f,List.map (expand_as map) args)
       | GLambda(loc,na,k,t,b) -> GLambda(loc,na,k,expand_as map t, expand_as map b)
       | GProd(loc,na,k,t,b) -> GProd(loc,na,k,expand_as map t, expand_as map b)

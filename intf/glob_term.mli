@@ -32,6 +32,7 @@ type glob_constr =
   | GVar of (Loc.t * Id.t)
   | GEvar of Loc.t * existential_key * glob_constr list option
   | GPatVar of Loc.t * (bool * patvar) (** Used for patterns only *)
+  | GExt of Loc.t * Extensions.t * glob_constr list
   | GApp of Loc.t * glob_constr * glob_constr list
   | GLambda of Loc.t * Name.t * binding_kind *  glob_constr * glob_constr
   | GProd of Loc.t * Name.t * binding_kind * glob_constr * glob_constr

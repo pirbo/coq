@@ -54,6 +54,7 @@ let ldots_var = Id.of_string ".."
 
 let glob_constr_of_notation_constr_with_binders loc g f e = function
   | NVar id -> GVar (loc,id)
+  | NExt (a,args) -> GExt (loc,a, List.map (f e) args)
   | NApp (a,args) -> GApp (loc,f e a, List.map (f e) args)
   | NList (x,y,iter,tail,swap) ->
       let t = f e tail in let it = f e iter in
@@ -148,6 +149,8 @@ let on_true_do b f c = if b then (f c; b) else b
 let compare_glob_constr f add t1 t2 = match t1,t2 with
   | GRef (_,r1), GRef (_,r2) -> eq_gr r1 r2
   | GVar (_,v1), GVar (_,v2) -> on_true_do (Id.equal v1 v2) add (Name v1)
+  | GExt (_,f1,l1), GExt (_,f2,l2) ->
+    Extensions.equal f1 f2 && List.for_all2eq f l1 l2
   | GApp (_,f1,l1), GApp (_,f2,l2) -> f f1 f2 && List.for_all2eq f l1 l2
   | GLambda (_,na1,bk1,ty1,c1), GLambda (_,na2,bk2,ty2,c2)
     when Name.equal na1 na2 && Constrexpr_ops.binding_kind_eq bk1 bk2 ->
@@ -165,7 +168,7 @@ let compare_glob_constr f add t1 t2 = match t1,t2 with
       | GPatVar _ | GEvar _ | GLetTuple _ | GIf _ | GCast _)
       -> error "Unsupported construction in recursive notations."
   | (GRef _ | GVar _ | GApp _ | GLambda _ | GProd _
-    | GHole _ | GSort _ | GLetIn _), _
+    | GHole _ | GSort _ | GLetIn _ | GExt _), _
       -> false
 
 let rec eq_glob_constr t1 t2 = compare_glob_constr eq_glob_constr (fun _ -> ()) t1 t2
@@ -258,6 +261,7 @@ let notation_constr_and_vars_of_glob_constr a =
 	aux' c
   and aux' = function
   | GVar (_,id) -> add_id found id; NVar id
+  | GExt (_,g,args) -> NExt (g, List.map aux args)
   | GApp (_,g,args) -> NApp (aux g, List.map aux args)
   | GLambda (_,na,bk,ty,c) -> add_name found na; NLambda (na,aux ty,aux c)
   | GProd (_,na,bk,ty,c) -> add_name found na; NProd (na,aux ty,aux c)
@@ -378,6 +382,11 @@ let rec subst_notation_constr subst bound raw =
 	  notation_constr_of_constr bound t
 
   | NVar _ -> raw
+
+  | NExt (r,rl) ->
+      let rl' = List.smartmap (subst_notation_constr subst bound) rl in
+	if rl' == rl then raw else
+	  NExt(r,rl')
 
   | NApp (r,rl) ->
       let r' = subst_notation_constr subst bound r

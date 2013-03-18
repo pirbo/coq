@@ -605,6 +605,11 @@ let rec subst_glob_constr subst raw =
   | GEvar _ -> raw
   | GPatVar _ -> raw
 
+  | GExt (loc,e,rl) ->
+      let rl' = List.smartmap (subst_glob_constr subst) rl in
+	if rl' == rl then raw else
+	  GExt(loc,e,rl')
+
   | GApp (loc,r,rl) ->
       let r' = subst_glob_constr subst r
       and rl' = List.smartmap (subst_glob_constr subst) rl in

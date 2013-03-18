@@ -162,7 +162,7 @@ let rec uri_of_constr c =
       uri_of_constr b; url_string " in "; uri_of_constr c
   | GCast (_,c, (CastConv t|CastVM t|CastNative t)) ->
       uri_of_constr c; url_string ":"; uri_of_constr t
-  | GRec _ | GIf _ | GLetTuple _ | GCases _ ->
+  | GRec _ | GIf _ | GLetTuple _ | GCases _ | GExt _ ->
       error "Whelp does not support pattern-matching and (co-)fixpoint."
   | GVar _ | GRef _ | GHole _ | GEvar _ | GSort _ | GCast (_,_, CastCoerce) ->
       anomaly (Pp.str "Written w/o parenthesis")

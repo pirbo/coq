@@ -560,6 +560,7 @@ let rec build_entry_lc env funnames avoid rt  : glob_constr build_entry_return =
 		build_entry_lc env funnames avoid (mkGApp(b,args))
 	    | GRec _ -> error "Not handled GRec"
 	    | GProd _ -> error "Cannot apply a type"
+	    | GExt _ -> error "Extension of constr has to be fully applied"
 	end (* end of the application treatement *)
 
     | GLambda(_,n,_,t,b) ->
@@ -661,6 +662,7 @@ let rec build_entry_lc env funnames avoid rt  : glob_constr build_entry_return =
 
 	end
     | GRec _ -> error "Not handled GRec"
+    | GExt _ -> error "Not handled GExt"
     | GCast(_,b,_) ->
 	build_entry_lc env funnames  avoid b
 and build_entry_lc_from_case env funname make_discr
@@ -1171,6 +1173,8 @@ let rec compute_cst_params relnames params = function
       compute_cst_params_from_app [] (params,rtl)
   | GApp(_,f,args) ->
       List.fold_left (compute_cst_params relnames) params (f::args)
+  | GExt(_,_,args) ->
+      List.fold_left (compute_cst_params relnames) params args
   | GLambda(_,_,_,t,b) | GProd(_,_,_,t,b) | GLetIn(_,_,t,b) | GLetTuple(_,_,_,t,b) ->
       let t_params = compute_cst_params relnames params t in
       compute_cst_params relnames t_params b

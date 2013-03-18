@@ -745,6 +745,8 @@ let rec extern inctx scopes vars r =
 	     in
 	     CCoFix (loc,(loc,idv.(n)),Array.to_list listdecl))
 
+  | GExt (loc,e,args) -> CExt (loc,e,List.map (extern inctx scopes vars) args)
+
   | GSort (loc,s) -> CSort (loc,extern_glob_sort s)
 
   | GHole (loc,e,_) -> CHole (loc, Some e, None) (** TODO: extern tactics. *)

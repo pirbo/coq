@@ -1455,11 +1455,7 @@ let internalize globalenv env allow_patvar lvar c =
 	intern {env with tmp_scope = None;
 		  scopes = find_delimiters_scope loc key :: env.scopes} e
     | CExt (loc, e, args) ->
-        let (f,_,args_scopes,_),args =
-	  let args = List.map (fun a -> (a,None)) args in
-	  intern_applied_reference intern env (Environ.named_context globalenv) lvar args (Ident (loc,Id.of_string (Extensions.to_string e))) in
-	GApp (loc, f, intern_args env args_scopes (List.map fst args))
-
+	GExt (loc, e, intern_args env (List.rev_map (fun _ -> None) args) args)
     | CAppExpl (loc, (isproj,ref), args) ->
         let (f,_,args_scopes,_),args =
 	  let args = List.map (fun a -> (a,None)) args in

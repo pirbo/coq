@@ -23,6 +23,7 @@ type notation_constr =
   (** Part common to [glob_constr] and [cases_pattern] *)
   | NRef of global_reference
   | NVar of Id.t
+  | NExt of Extensions.t * notation_constr list
   | NApp of notation_constr * notation_constr list
   | NHole of Evar_kinds.t * Genarg.glob_generic_argument option
   | NList of Id.t * Id.t * notation_constr * notation_constr * bool
