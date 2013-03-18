@@ -757,7 +757,7 @@ let build_proof
 	      begin
 		match kind_of_term f with
 		  | App _ -> assert false (* we have collected all the app in decompose_app *)
-		  | Var _ | Construct _ | Rel _ | Evar _ | Meta _  | Ind _ | Sort _ | Prod _ ->
+		  | Var _ | Construct _ | Rel _ | Evar _ | Meta _  | Ind _ | Sort _ | Prod _ | Ext _ ->
 		      let new_infos =
 			{ dyn_infos with
 			    info = (f,args)
@@ -806,7 +806,7 @@ let build_proof
 		      in
 		      build_proof new_finalize {dyn_infos  with info = f } g
 	      end
-	  | Fix _ | CoFix _ ->
+	  | Ext _ | Fix _ | CoFix _ ->
 	      error ( "Anonymous local (co)fixpoints are not handled yet")
 
 	  | Prod _ -> error "Prod"

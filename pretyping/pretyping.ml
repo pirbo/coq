@@ -428,8 +428,9 @@ let rec pretype resolve_tc (tycon : type_constraint) env evdref lvar t =
 	inh_conv_coerce_to_tycon loc env evdref j tycon
 
   | GExt (loc,e,args) ->
-    (* Ext(loc,e,List.map (pretype empty_tycon env evdref lvar) args) *)
+    (* mkExt(e,List.map (pretype empty_tycon env evdref lvar) args) *)
     assert false
+
   | GApp (loc,f,args) ->
       let fj = pretype empty_tycon env evdref lvar f in
       let floc = loc_of_glob_constr f in

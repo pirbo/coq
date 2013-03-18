@@ -74,6 +74,7 @@ type ('constr, 'types) kind_of_term =
   | Lambda    of Name.t * 'types * 'constr
   | LetIn     of Name.t * 'constr * 'types * 'constr
   | App       of 'constr * 'constr array
+  | Ext       of Extensions.t * 'constr array
   | Const     of constant
   | Ind       of inductive
   | Construct of constructor
@@ -197,6 +198,8 @@ let mkMeta  n =  Meta n
 (* Constructs a Variable named id *)
 let mkVar id = Var id
 
+(* Constructs a Extension of CIC ie a neutral e applied to args *)
+let mkExt (e,args) = Ext (e,args)
 
 (************************************************************************)
 (*    kind_of_term = constructions as seen by the user                 *)
@@ -224,7 +227,7 @@ let fold f acc c = match kind c with
   | Lambda (_,t,c) -> f (f acc t) c
   | LetIn (_,b,t,c) -> f (f (f acc b) t) c
   | App (c,l) -> Array.fold_left f (f acc c) l
-  | Evar (_,l) -> Array.fold_left f acc l
+  | Evar (_,l) | Ext (_,l) -> Array.fold_left f acc l
   | Case (_,p,c,bl) -> Array.fold_left f (f (f acc p) c) bl
   | Fix (_,(lna,tl,bl)) ->
     Array.fold_left2 (fun acc t b -> f (f acc t) b) acc tl bl
@@ -243,7 +246,7 @@ let iter f c = match kind c with
   | Lambda (_,t,c) -> f t; f c
   | LetIn (_,b,t,c) -> f b; f t; f c
   | App (c,l) -> f c; Array.iter f l
-  | Evar (_,l) -> Array.iter f l
+  | Evar (_,l) | Ext (_,l) -> Array.iter f l
   | Case (_,p,c,bl) -> f p; f c; Array.iter f bl
   | Fix (_,(_,tl,bl)) -> Array.iter f tl; Array.iter f bl
   | CoFix (_,(_,tl,bl)) -> Array.iter f tl; Array.iter f bl
@@ -262,7 +265,7 @@ let iter_with_binders g f n c = match kind c with
   | Lambda (_,t,c) -> f n t; f (g n) c
   | LetIn (_,b,t,c) -> f n b; f n t; f (g n) c
   | App (c,l) -> f n c; CArray.Fun1.iter f n l
-  | Evar (_,l) -> CArray.Fun1.iter f n l
+  | Evar (_,l) | Ext (_,l) -> CArray.Fun1.iter f n l
   | Case (_,p,c,bl) -> f n p; f n c; CArray.Fun1.iter f n bl
   | Fix (_,(_,tl,bl)) ->
       CArray.Fun1.iter f n tl;
@@ -308,6 +311,10 @@ let map f c = match kind c with
       let l' = Array.smartmap f l in
       if l'==l then c
       else mkEvar (e, l')
+  | Ext (e,l) ->
+      let l' = Array.smartmap f l in
+      if l'==l then c
+      else mkExt (e, l')
   | Case (ci,p,b,bl) ->
       let b' = f b in
       let p' = f p in
@@ -364,6 +371,9 @@ let map_with_binders g f l c0 = match kind c0 with
     let al' = CArray.Fun1.smartmap f l al in
     if al' == al then c0
     else mkEvar (e, al')
+  | Ext (e,al) ->
+     let al' = CArray.Fun1.smartmap f l al in
+     if al' == al then c0 else mkExt(e,al')
   | Case (ci, p, c, bl) ->
     let p' = f l p in
     let c' = f l c in
@@ -406,6 +416,7 @@ let compare_head f t1 t2 =
       f c1 c2 && Array.equal f l1 l2
   | Evar (e1,l1), Evar (e2,l2) -> Evar.equal e1 e2 && Array.equal f l1 l2
   | Const c1, Const c2 -> eq_constant c1 c2
+  | Ext (e1,l1), Ext (e2,l2) -> Extensions.equal e1 e2 && Array.equal f l1 l2
   | Ind c1, Ind c2 -> eq_ind c1 c2
   | Construct c1, Construct c2 -> eq_constructor c1 c2
   | Case (_,p1,c1,bl1), Case (_,p2,c2,bl2) ->
@@ -459,6 +470,7 @@ let constr_ord_int f t1 t2 =
     | Evar (e1,l1), Evar (e2,l2) ->
         (Evar.compare =? (Array.compare f)) e1 e2 l1 l2
     | Const c1, Const c2 -> con_ord c1 c2
+    | Ext (e1,l1), Ext (e2,l2) -> (Extensions.compare  =? (Array.compare f)) e1 e2 l1 l2
     | Ind ind1, Ind ind2 -> ind_ord ind1 ind2
     | Construct ct1, Construct ct2 -> constructor_ord ct1 ct2
     | Case (_,p1,c1,bl1), Case (_,p2,c2,bl2) ->
@@ -537,6 +549,7 @@ let hasheq t1 t2 =
     | App (c1,l1), App (c2,l2) -> c1 == c2 && array_eqeq l1 l2
     | Evar (e1,l1), Evar (e2,l2) -> Evar.equal e1 e2 && array_eqeq l1 l2
     | Const c1, Const c2 -> c1 == c2
+    | Ext (e1,l1), Ext (e2,l2) -> Extensions.equal e1 e2 && array_eqeq l1 l2
     | Ind (sp1,i1), Ind (sp2,i2) -> sp1 == sp2 && Int.equal i1 i2
     | Construct ((sp1,i1),j1), Construct ((sp2,i2),j2) ->
       sp1 == sp2 && Int.equal i1 i2 && Int.equal j1 j2
@@ -614,6 +627,10 @@ let hashcons (sh_sort,sh_ci,sh_construct,sh_ind,sh_con,sh_na,sh_id) =
 	(Evar (e,l), combinesmall 8 (combine (Evar.hash e) hl))
       | Const c ->
 	(Const (sh_con c), combinesmall 9 (Constant.hash c))
+      | Ext (e,l) ->
+	let l,hl = hash_term_array l in
+	(* since the array have been hashed in place : *)
+	(Ext(e,l), combinesmall 31 (combine (Extensions.hash e) hl))
       | Ind ind ->
 	(Ind (sh_ind ind), combinesmall 10 (ind_hash ind))
       | Construct c ->
@@ -693,6 +710,10 @@ let rec hash t =
       combinesmall 8 (combine (Evar.hash e) (hash_term_array l))
     | Const c ->
       combinesmall 9 (Constant.hash c)
+    | Ext (e,l) ->
+       let hl = hash_term_array l in
+       (* since the array have been hashed in place : *)
+       combinesmall 31 (combine (Extensions.hash e) hl)
     | Ind ind ->
       combinesmall 10 (ind_hash ind)
     | Construct c ->

@@ -38,6 +38,7 @@ struct
     | DRef    of global_reference
     | DCtx    of 't * 't (* (binding list, subterm) = Prods and LetIns *)
     | DLambda of 't * 't
+    | DExt    of Extensions.t * 't array
     | DApp    of 't * 't (* binary app *)
     | DCase   of case_info * 't * 't * 't array
     | DFix    of int array * int * 't array * 't array
@@ -56,6 +57,8 @@ struct
     | DCtx (ctx,t) -> f ctx ++ spc() ++ str "|-" ++ spc () ++ f t
     | DLambda (t1,t2) -> str "fun"++ spc() ++ f t1 ++ spc() ++ str"->" ++ spc() ++ f t2
     | DApp (t1,t2) -> f t1 ++ spc() ++ f t2
+    | DExt (t1,l) -> str ("Ext#"^Extensions.to_string t1) ++ spc() ++
+       prlist_with_sep spc f (Array.to_list l)
     | DCase (_,t1,t2,ta) -> str "case"
     | DFix _ -> str "fix"
     | DCoFix _ -> str "cofix"
@@ -74,6 +77,7 @@ struct
     | DCtx (ctx,c) -> DCtx (f ctx, f c)
     | DLambda (t,c) -> DLambda (f t, f c)
     | DApp (t,u) -> DApp (f t,f u)
+    | DExt (t,u) -> DExt (t,Array.map f u)
     | DCase (ci,p,c,bl) -> DCase (ci, f p, f c, Array.map f bl)
     | DFix (ia,i,ta,ca) ->
 	DFix (ia,i,Array.map f ta,Array.map f ca)
@@ -135,6 +139,7 @@ struct
     | DCtx (ctx,c) -> f (f acc ctx) c
     | DLambda (t,c) -> f (f acc t) c
     | DApp (t,u) -> f (f acc t) u
+    | DExt (_,u) -> Array.fold_left f acc u
     | DCase (ci,p,c,bl) -> Array.fold_left f (f (f acc p) c) bl
     | DFix (ia,i,ta,ca) ->
 	Array.fold_left f (Array.fold_left f acc ta) ca
@@ -143,7 +148,7 @@ struct
     | DCons ((t,topt),u) -> f (Option.fold_left f (f acc t) topt) u
 
   let choose f = function
-    | (DRel | DSort | DNil | DRef _) -> invalid_arg "choose"
+    | (DRel | DSort | DNil | DRef _ | DExt _) -> invalid_arg "choose"
     | DCtx (ctx,c) -> f ctx
     | DLambda (t,c) -> f t
     | DApp (t,u) -> f u
@@ -163,6 +168,7 @@ struct
 	| (DCtx (c1,t1), DCtx (c2,t2)
 	  | DApp (c1,t1), DApp (c2,t2)
 	  | DLambda (c1,t1), DLambda (c2,t2)) -> f (f acc c1 c2) t1 t2
+	| DExt (_,t1), DExt (_, t2) -> Array.fold_left2 f acc t1 t2
 	| DCase (ci,p1,c1,bl1),DCase (_,p2,c2,bl2) ->
 	    Array.fold_left2 f (f (f acc p1 p2) c1 c2) bl1 bl2
 	| DFix (ia,i,ta1,ca1), DFix (_,_,ta2,ca2) ->
@@ -183,6 +189,9 @@ struct
 	| DCtx (c1,t1), DCtx (c2,t2) -> DCtx (f c1 c2, f t1 t2)
 	| DLambda (t1,c1), DLambda (t2,c2) -> DLambda (f t1 t2, f c1 c2)
 	| DApp (t1,u1), DApp (t2,u2) -> DApp (f t1 t2,f u1 u2)
+	| DExt (e1,t1), DExt (e2, t2) ->
+	  let () = assert (Extensions.equal e1 e2) in
+	  DExt(e1, Array.map2 f t1 t2)
 	| DCase (ci,p1,c1,bl1), DCase (_,p2,c2,bl2) ->
 	    DCase (ci, f p1 p2, f c1 c2, Array.map2 f bl1 bl2)
 	| DFix (ia,i,ta1,ca1), DFix (_,_,ta2,ca2) ->
@@ -281,6 +290,7 @@ struct
     | Lambda (_,t,c) -> Term(DLambda (pat_of_constr t, pat_of_constr c))
     | (Prod (_,_,_) | LetIn(_,_,_,_))   ->
       let (ctx,c) = ctx_of_constr (Term DNil) c in Term (DCtx (ctx,c))
+    | Ext (e, args) -> Term(DExt (e, Array.map pat_of_constr args))
     | App (f,ca)     ->
       Array.fold_left (fun c a -> Term (DApp (c,a)))
         (pat_of_constr f) (Array.map pat_of_constr ca)

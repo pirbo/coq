@@ -50,6 +50,7 @@ let eval_flexible_term ts env c =
        with Not_found -> None)
   | LetIn (_,b,_,c) -> Some (subst1 b c)
   | Lambda _ -> Some c
+  | Ext (e, l) -> None
   | _ -> assert false
 
 type flex_kind_of_term =
@@ -62,6 +63,7 @@ let flex_kind_of_term ts env c sk =
     | LetIn _ | Rel _ | Const _ | Var _ ->
       Option.cata (fun x -> MaybeFlexible x) Rigid (eval_flexible_term ts env c)
     | Lambda _ when not (Option.is_empty (Stack.decomp sk)) -> MaybeFlexible c
+    | Ext _ -> Rigid
     | Evar ev -> Flexible ev
     | Lambda _ | Prod _ | Sort _ | Ind _ | Construct _ | CoFix _ -> Rigid
     | Meta _ -> Rigid
@@ -406,7 +408,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) ts env evd pbty
           let rec is_unnamed (hd, args) = match kind_of_term hd with
             | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) ->
 	      Stack.not_purely_applicative args
-            | (CoFix _|Meta _|Rel _)-> true
+            | (CoFix _|Meta _|Rel _|Ext _)-> true
             | Evar _ -> Stack.not_purely_applicative args
 	    (* false (* immediate solution without Canon Struct *)*)
             | Lambda _ -> assert (match args with [] -> true | _ -> false); true
@@ -514,6 +516,12 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) ts env evd pbty
               exact_ise_stack2 env evd (evar_conv_x ts) sk1 sk2
             else UnifFailure (evd,NotSameHead)
 
+	| Ext (e1,a1), Ext (e2,a2) ->
+	    if Extensions.equal e1 e2 then
+              exact_ise_stack2 env evd (evar_conv_x ts)
+			       (Stack.append_app a1 sk1) (Stack.append_app a2 sk2)
+            else UnifFailure (evd,NotSameHead)
+
 	| Ind sp1, Ind sp2 ->
 	    if eq_ind sp1 sp2 then
               exact_ise_stack2 env evd (evar_conv_x ts) sk1 sk2
@@ -551,9 +559,9 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) ts env evd pbty
 	  |Some (sk1',sk2'), Success i' -> evar_conv_x ts env i' CONV (Stack.zip (term1,sk1')) (Stack.zip (term2,sk2'))
 	  end
 
-	| (Ind _ | Construct _ | Sort _ | Prod _ | CoFix _ | Fix _ | Rel _ | Var _ | Const _), _ ->
+	| (Ext _ | Ind _ | Construct _ | Sort _ | Prod _ | CoFix _ | Fix _ | Rel _ | Var _ | Const _), _ ->
 	  UnifFailure (evd,NotSameHead)
-	| _, (Ind _ | Construct _ | Sort _ | Prod _ | CoFix _ | Fix _ | Rel _ | Var _ | Const _) ->
+	| _, (Ext _ | Ind _ | Construct _ | Sort _ | Prod _ | CoFix _ | Fix _ | Rel _ | Var _ | Const _) ->
 	  UnifFailure (evd,NotSameHead)
 
 	| (App _ | Cast _ | Case _), _ -> assert false

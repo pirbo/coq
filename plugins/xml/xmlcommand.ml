@@ -179,6 +179,7 @@ let find_hyps t =
     | Term.Prod (_,s,t) -> aux (aux l s) t
     | Term.Lambda (_,s,t) -> aux (aux l s) t
     | Term.LetIn (_,s,_,t) -> aux (aux l s) t
+    | Term.Ext (he,tl) -> Array.fold_left (fun i x -> aux i x) l tl
     | Term.App (he,tl) -> Array.fold_left (fun i x -> aux i x) (aux l he) tl
     | Term.Const con ->
        let hyps = (Global.lookup_constant con).Declarations.const_hyps in

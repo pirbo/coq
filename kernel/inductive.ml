@@ -766,6 +766,10 @@ let check_one_fix renv recpos def =
         | (Ind _ | Construct _) ->
             List.iter (check_rec_call renv []) l
 
+        | Ext (_,l') ->
+	  assert (List.is_empty l);
+          Array.iter (check_rec_call renv []) l'
+
         | Var id ->
             begin
               match pi2 (lookup_named id renv.env) with

@@ -64,6 +64,7 @@ type constr_pattern =
   | PEvar of existential_key * constr_pattern array
   | PRel of int
   | PApp of constr_pattern * constr_pattern array
+  | PExt of Extensions.t * constr_pattern array
   | PSoApp of patvar * constr_pattern list
   | PLambda of Name.t * constr_pattern * constr_pattern
   | PProd of Name.t * constr_pattern * constr_pattern

@@ -621,7 +621,8 @@ let rec extract_term env mle mlt c args =
     | CoFix (i,recd) ->
  	extract_app env mle mlt (extract_fix env mle i recd) args
     | Cast (c,_,_) -> extract_term env mle mlt c args
-    | Ind _ | Prod _ | Sort _ | Meta _ | Evar _ | Var _ -> assert false
+    | Ind _ | Prod _ | Sort _ | Meta _ | Evar _ | Var _ | Ext _ ->
+      assert false
 
 (*s [extract_maybe_term] is [extract_term] for usual terms, else [MLdummy] *)
 

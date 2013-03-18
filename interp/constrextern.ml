@@ -938,6 +938,7 @@ let any_any_branch =
 let rec glob_of_pat env = function
   | PRef ref -> GRef (loc,ref)
   | PVar id -> GVar (loc,id)
+  | PExt (e,l) -> GExt (loc,e,Array.map_to_list (glob_of_pat env) l)
   | PEvar (n,l) -> GEvar (loc,n,Some (Array.map_to_list (glob_of_pat env) l))
   | PRel n ->
       let id = try match lookup_name_of_rel n env with

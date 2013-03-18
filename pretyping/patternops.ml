@@ -31,6 +31,8 @@ let case_info_pattern_eq i1 i2 =
 let rec constr_pattern_eq p1 p2 = match p1, p2 with
 | PRef r1, PRef r2 -> eq_gr r1 r2
 | PVar v1, PVar v2 -> Id.equal v1 v2
+| PExt (ev1, ctx1), PExt (ev2, ctx2) ->
+  Extensions.equal ev1 ev2 && Array.equal constr_pattern_eq ctx1 ctx2
 | PEvar (ev1, ctx1), PEvar (ev2, ctx2) ->
   Evar.equal ev1 ev2 && Array.equal constr_pattern_eq ctx1 ctx2
 | PRel i1, PRel i2 ->
@@ -84,6 +86,8 @@ let rec occur_meta_pattern = function
   | PLambda (na,t,c)  -> (occur_meta_pattern t) || (occur_meta_pattern c)
   | PProd (na,t,c)  -> (occur_meta_pattern t) || (occur_meta_pattern c)
   | PLetIn (na,t,c)  -> (occur_meta_pattern t) || (occur_meta_pattern c)
+  | PExt (_,args) ->
+      Array.exists occur_meta_pattern args
   | PIf (c,c1,c2)  ->
       (occur_meta_pattern c) ||
       (occur_meta_pattern c1) || (occur_meta_pattern c2)
@@ -108,7 +112,7 @@ let rec head_pattern_bound t =
     | PEvar _ | PRel _ | PMeta _ | PSoApp _  | PSort _ | PFix _
 	-> raise BoundPattern
     (* Perhaps they were arguments, but we don't beta-reduce *)
-    | PLambda _ -> raise BoundPattern
+    | PLambda _ | PExt _ -> raise BoundPattern
     | PCoFix _ -> anomaly ~label:"head_pattern_bound" (Pp.str "not a type")
 
 let head_of_constr_reference c = match kind_of_term c with
@@ -132,6 +136,7 @@ let pattern_of_constr sigma t =
     | LetIn (na,c,_,b) -> PLetIn (na,pattern_of_constr c,pattern_of_constr b)
     | Prod (na,c,b)   -> PProd (na,pattern_of_constr c,pattern_of_constr b)
     | Lambda (na,c,b) -> PLambda (na,pattern_of_constr c,pattern_of_constr b)
+    | Ext (e, args) -> PExt (e, Array.map pattern_of_constr args)
     | App (f,a) ->
         (match
           match kind_of_term f with
@@ -178,6 +183,7 @@ let pattern_of_constr sigma t =
 
 let map_pattern_with_binders g f l = function
   | PApp (p,pl) -> PApp (f l p, Array.map (f l) pl)
+  | PExt (p,pl) -> PExt (p, Array.map (f l) pl)
   | PSoApp (n,pl) -> PSoApp (n, List.map (f l) pl)
   | PLambda (n,a,b) -> PLambda (n,f l a,f (g n l) b)
   | PProd (n,a,b) -> PProd (n,f l a,f (g n l) b)
@@ -245,6 +251,10 @@ let rec subst_pattern subst pat =
       let args' = Array.smartmap (subst_pattern subst) args in
 	if f' == f && args' == args then pat else
 	  PApp (f',args')
+  | PExt (f,args) ->
+      let args' = Array.smartmap (subst_pattern subst) args in
+	if args' == args then pat else
+	  PExt (f,args')
   | PSoApp (i,args) ->
       let args' = List.smartmap (subst_pattern subst) args in
 	if args' == args then pat else
@@ -378,6 +388,8 @@ let rec pat_of_raw metas vars = function
 	 one non-trivial branch. These facts are used in [Constrextern]. *)
       PCase (info, pred, pat_of_raw metas vars c, brs)
 
+  | GExt (_, e, args) ->
+    PExt (e, Array.of_list (List.map (pat_of_raw metas vars) args))
   | r -> err (loc_of_glob_constr r) (Pp.str "Non supported pattern.")
 
 and pats_of_glob_branches loc metas vars ind brs =

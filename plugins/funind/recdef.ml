@@ -302,6 +302,7 @@ let check_not_nested forbidden e =
       | Lambda(_,t,b) -> check_not_nested t;check_not_nested b
       | LetIn(_,v,t,b) -> check_not_nested t;check_not_nested b;check_not_nested v
       | App(f,l) -> check_not_nested f;Array.iter check_not_nested l
+      | Ext(_,l) -> Array.iter check_not_nested l
       | Const _ -> ()
       | Ind _ -> ()
       | Construct _ -> ()
@@ -411,7 +412,8 @@ let treat_case forbid_new_ids to_intros finalize_tac nb_lam e infos : tactic =
 
 let rec travel_aux jinfo continuation_tac (expr_info:constr infos) =
   match kind_of_term expr_info.info with 
-    | CoFix _ | Fix _ -> error "Function cannot treat local fixpoint or cofixpoint"
+    | CoFix _ | Fix _ | Ext _ ->
+      error "Function cannot treat local fixpoint or cofixpoint or CIC extension"
     | LetIn(na,b,t,e) -> 
       begin
 	let new_continuation_tac = 

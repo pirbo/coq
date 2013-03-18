@@ -74,6 +74,7 @@ let kind_of_head env t =
   | Construct _ | CoFix _ ->
       if b then NotImmediatelyComputableHead else ConstructorHead
   | Sort _ | Ind _ | Prod _ -> RigidHead RigidType
+  | Ext _ -> RigidHead RigidType
   | Cast (c,_,_) -> aux k l c b
   | Lambda (_,_,c) ->
     begin match l with

@@ -551,6 +551,8 @@ let rec lambda_of_constr env sigma c =
 	Levar(ev, lambda_of_constr env sigma ty)
      | Some t -> lambda_of_constr env sigma t)
 
+  | Ext _ -> invalid_arg "Nativelambda.lambda_of_constr : Ext"
+
   | Cast (c, _, _) -> lambda_of_constr env sigma c
 
   | Rel i -> Renv.get env i

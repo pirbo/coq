@@ -216,6 +216,7 @@ let build_beq_scheme kn =
         | Fix _   -> raise (EqUnknown "Fix")
         | Meta _  -> raise (EqUnknown "Meta")
         | Evar _  -> raise (EqUnknown "Evar")
+        | Ext _  -> raise (EqUnknown "Ext")
     in
       aux t
   in

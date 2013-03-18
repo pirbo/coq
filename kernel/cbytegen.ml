@@ -499,6 +499,7 @@ let rec compile_constr reloc c sz cont =
   match kind_of_term c with
   | Meta _ -> invalid_arg "Cbytegen.compile_constr : Meta"
   | Evar _ -> invalid_arg "Cbytegen.compile_constr : Evar"
+  | Ext _ -> invalid_arg "Cbytegen.compile_constr : Ext"
 
   | Cast(c,_,_) -> compile_constr reloc c sz cont
 

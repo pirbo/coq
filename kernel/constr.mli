@@ -91,6 +91,9 @@ val mkApp : constr * constr array -> constr
    The array of terms correspond to the variables introduced in the section *)
 val mkConst : constant -> constr
 
+(** Constructs a Extension of CIC ie a neutral e applied to args *)
+val mkExt : Extensions.t * constr array -> constr
+
 (** Inductive types *)
 
 (** Constructs the ith (co)inductive type of the block named kn 
@@ -169,6 +172,7 @@ type ('constr, 'types) kind_of_term =
   | Lambda    of Name.t * 'types * 'constr
   | LetIn     of Name.t * 'constr * 'types * 'constr
   | App       of 'constr * 'constr array
+  | Ext       of Extensions.t * 'constr array
   | Const     of constant
   | Ind       of inductive
   | Construct of constructor

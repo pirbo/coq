@@ -68,6 +68,9 @@ let rec pr_constr c = match kind_of_term c with
   | App (c,l) ->  hov 1
       (str"(" ++ pr_constr c ++ spc() ++
        prlist_with_sep spc pr_constr (Array.to_list l) ++ str")")
+  | Ext (c,l) ->  hov 1
+      (str("("^Extensions.to_string c) ++ spc() ++
+       prlist_with_sep spc pr_constr (Array.to_list l) ++ str")")
   | Evar (e,l) -> hov 1
       (str"Evar#" ++ int (Evar.repr e) ++ str"{" ++
        prlist_with_sep spc pr_constr (Array.to_list l) ++str"}")
@@ -319,6 +322,7 @@ let map_constr_with_named_binders g f l c = match kind_of_term c with
   | Lambda (na,t,c) -> mkLambda (na, f l t, f (g na l) c)
   | LetIn (na,b,t,c) -> mkLetIn (na, f l b, f l t, f (g na l) c)
   | App (c,al) -> mkApp (f l c, Array.map (f l) al)
+  | Ext (e,al) -> mkExt (e, Array.map (f l) al)
   | Evar (e,al) -> mkEvar (e, Array.map (f l) al)
   | Case (ci,p,c,bl) -> mkCase (ci, f l p, f l c, Array.map (f l) bl)
   | Fix (ln,(lna,tl,bl)) ->
@@ -375,6 +379,7 @@ let map_constr_with_binders_left_to_right g f l c = match kind_of_term c with
       let a = al.(Array.length al - 1) in
       let hd = f l (mkApp (c, Array.sub al 0 (Array.length al - 1))) in
       mkApp (hd, [| f l a |])
+  | Ext (e,al) -> mkExt (e, Array.map_left (f l) al)
   | Evar (e,al) -> mkEvar (e, Array.map_left (f l) al)
   | Case (ci,p,c,bl) ->
       (* In v8 concrete syntax, predicate is after the term to match! *)
@@ -415,6 +420,9 @@ let map_constr_with_full_binders g f l cstr = match kind_of_term cstr with
       let c' = f l c in
       let al' = Array.map (f l) al in
       if c==c' && Array.for_all2 (==) al al' then cstr else mkApp (c', al')
+  | Ext (e,al) ->
+      let al' = Array.map (f l) al in
+      if Array.for_all2 (==) al al' then cstr else mkExt (e, al')
   | Evar (e,al) ->
       let al' = Array.map (f l) al in
       if Array.for_all2 (==) al al' then cstr else mkEvar (e, al')
@@ -456,6 +464,7 @@ let fold_constr_with_binders g f n acc c = match kind_of_term c with
   | Lambda (_,t,c) -> f (g n) (f n acc t) c
   | LetIn (_,b,t,c) -> f (g n) (f n (f n acc b) t) c
   | App (c,l) -> Array.fold_left (f n) (f n acc c) l
+  | Ext (_,l) -> Array.fold_left (f n) acc l
   | Evar (_,l) -> Array.fold_left (f n) acc l
   | Case (_,p,c,bl) -> Array.fold_left (f n) (f n (f n acc p) c) bl
   | Fix (_,(lna,tl,bl)) ->
@@ -480,6 +489,7 @@ let iter_constr_with_full_binders g f l c = match kind_of_term c with
   | Lambda (na,t,c) -> f l t; f (g (na,None,t) l) c
   | LetIn (na,b,t,c) -> f l b; f l t; f (g (na,Some b,t) l) c
   | App (c,args) -> f l c; Array.iter (f l) args
+  | Ext (_,args) -> Array.iter (f l) args
   | Evar (_,args) -> Array.iter (f l) args
   | Case (_,p,c,bl) -> f l p; f l c; Array.iter (f l) bl
   | Fix (_,(lna,tl,bl)) ->

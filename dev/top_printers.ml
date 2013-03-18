@@ -187,6 +187,7 @@ let constr_display csr =
       ^(term_display t)^","^(term_display c)^")"
   | App (c,l) -> "App("^(term_display c)^","^(array_display l)^")\n"
   | Evar (e,l) -> "Evar("^(string_of_existential e)^","^(array_display l)^")"
+  | Ext (c,l) -> "Ext("^(Extensions.to_string c)^","^(array_display l)^")\n"
   | Const c -> "Const("^(string_of_con c)^")"
   | Ind (sp,i) ->
       "MutInd("^(string_of_mind sp)^","^(string_of_int i)^")"
@@ -262,6 +263,10 @@ let print_pure_constr csr =
   | App (c,l) ->
       print_string "(";
       box_display c;
+      Array.iter (fun x -> print_space (); box_display x) l;
+      print_string ")"
+  | Ext (c,l) ->
+      print_string ("(Ext#"^Extensions.to_string e);
       Array.iter (fun x -> print_space (); box_display x) l;
       print_string ")"
   | Evar (e,l) -> print_string "Evar#"; print_int (Evar.repr e); print_string "{";

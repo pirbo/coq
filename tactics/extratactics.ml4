@@ -783,6 +783,8 @@ let rec has_evar x =
       has_evar t1 || has_evar t2 || has_evar t3
     | App (t1, ts) ->
       has_evar t1 || has_evar_array ts
+    | Ext (t1, ts) ->
+      has_evar_array ts
     | Case (_, t1, t2, ts) ->
       has_evar t1 || has_evar t2 || has_evar_array ts
     | Fix ((_, tr)) | CoFix ((_, tr)) ->

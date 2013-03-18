@@ -72,6 +72,7 @@ type ('constr, 'types) kind_of_term = ('constr, 'types) Constr.kind_of_term =
   | Lambda    of Name.t * 'types * 'constr
   | LetIn     of Name.t * 'constr * 'types * 'constr
   | App       of 'constr * 'constr array
+  | Ext       of Extensions.t * 'constr array
   | Const     of constant
   | Ind       of inductive
   | Construct of constructor
@@ -95,6 +96,7 @@ val isEvar_or_Meta : constr -> bool
 val isSort : constr -> bool
 val isCast : constr -> bool
 val isApp : constr -> bool
+val isExt : constr -> bool
 val isLambda : constr -> bool
 val isLetIn : constr -> bool
 val isProd : constr -> bool
@@ -145,6 +147,9 @@ val destLetIn : constr -> Name.t * constr * types * constr
 
 (** Destructs an application *)
 val destApp : constr -> constr * constr array
+
+(** Destructs an extension to CIC *)
+val destExt : constr -> Extensions.t * constr array
 
 (** Obsolete synonym of destApp *)
 val destApplication : constr -> constr * constr array
@@ -396,6 +401,7 @@ val mkLambda : Name.t * types * constr -> constr
 val mkLetIn : Name.t * constr * types * constr -> constr
 val mkApp : constr * constr array -> constr
 val mkConst : constant -> constr
+val mkExt : Extensions.t * constr array -> constr
 val mkInd : inductive -> constr
 val mkConstruct : constructor -> constr
 val mkCase : case_info * constr * constr * constr array -> constr

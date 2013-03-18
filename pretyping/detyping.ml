@@ -415,6 +415,9 @@ let rec detype (isgoal:bool) avoid env t =
     | App (f,args) ->
 	GApp (dl,detype isgoal avoid env f,
               Array.map_to_list (detype isgoal avoid env) args)
+    | Ext (e,args) ->
+	GExt (dl,e,
+              Array.map_to_list (detype isgoal avoid env) args)
     | Const sp -> GRef (dl, ConstRef sp)
     | Evar (ev,cl) ->
         GEvar (dl, ev,

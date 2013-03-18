@@ -13,3 +13,5 @@ let isubst = "isubst"
 let to_string x = x
 
 let equal a b = a == b
+let compare a b = Pervasives.compare a b
+let hash a = Hashtbl.hash a

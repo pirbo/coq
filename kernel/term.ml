@@ -73,6 +73,7 @@ type ('constr, 'types) kind_of_term = ('constr, 'types) Constr.kind_of_term =
   | Lambda    of Name.t * 'types * 'constr
   | LetIn     of Name.t * 'constr * 'types * 'constr
   | App       of 'constr * 'constr array
+  | Ext       of Extensions.t * 'constr array
   | Const     of constant
   | Ind       of inductive
   | Construct of constructor
@@ -101,7 +102,7 @@ let mkMeta = Constr.mkMeta
 let mkEvar = Constr.mkEvar
 let mkSort = Constr.mkSort
 let mkProp = Constr.mkProp
-let mkSet  = Constr.mkSet 
+let mkSet  = Constr.mkSet
 let mkType = Constr.mkType
 let mkCast = Constr.mkCast
 let mkProd = Constr.mkProd
@@ -109,6 +110,7 @@ let mkLambda = Constr.mkLambda
 let mkLetIn = Constr.mkLetIn
 let mkApp = Constr.mkApp
 let mkConst = Constr.mkConst
+let mkExt = Constr.mkExt
 let mkInd = Constr.mkInd
 let mkConstruct = Constr.mkConstruct
 let mkCase = Constr.mkCase
@@ -132,6 +134,7 @@ let hash_constr = Constr.hash
 let hcons_sorts = Sorts.hcons
 let hcons_constr = Constr.hcons
 let hcons_types = Constr.hcons
+
 
 (**********************************************************************)
 (**         HERE BEGINS THE INTERESTING STUFF                         *)
@@ -257,6 +260,13 @@ let destApp c = match kind_of_term c with
 let destApplication = destApp
 
 let isApp c = match kind_of_term c with App _ -> true | _ -> false
+
+(* Destructs an application *)
+let destExt c = match kind_of_term c with
+  | Ext (f,a) -> (f, a)
+  | _ -> raise DestKO
+
+let isExt c = match kind_of_term c with Ext _ -> true | _ -> false
 
 (* Destructs a constant *)
 let destConst c = match kind_of_term c with
@@ -648,6 +658,6 @@ let kind_of_type t = match kind_of_term t with
   | Prod (na,t,c) -> ProdType (na, t, c)
   | LetIn (na,b,t,c) -> LetInType (na, b, t, c)
   | App (c,l) -> AtomicType (c, l)
-  | (Rel _ | Meta _ | Var _ | Evar _ | Const _ | Case _ | Fix _ | CoFix _ | Ind _)
+  | (Rel _ | Meta _ | Var _ | Evar _ | Const _ | Case _ | Fix _ | CoFix _ | Ind _ | Ext _)
     -> AtomicType (t,[||])
   | (Lambda _ | Construct _) -> failwith "Not a type"

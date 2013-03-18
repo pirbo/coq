@@ -486,6 +486,9 @@ let rec compact_constr (lg, subs as s) c k =
     | Evar(ev,v) ->
         let (s, v') = compact_vect s v k in
         if v==v' then s, c else s, mkEvar(ev, v')
+    | Ext(ev,v) ->
+        let (s,v') = compact_vect s v k in
+        if v==v' then s,c else s,mkExt(ev,v')
     | Cast(a,ck,b) ->
         let (s, a') = compact_constr s a k in
         let (s, b') = compact_constr s b k in
