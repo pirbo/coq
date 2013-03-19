@@ -217,6 +217,16 @@ let rec execute env evdref cstr =
 	in
 	e_judge_of_apply env evdref j jl
 
+    | Ext (e, args) ->
+      let args_j = execute_array env evdref args in
+      fst
+	(Extensions_behavior.execute_extensions
+	   (fun x y ->
+	     if Evarconv.e_cumul env evdref x y
+	     then Univ.empty_constraint
+	     else raise Reduction.NotConvertible)
+	   env e args_j)
+
     | Lambda (name,c1,c2) ->
         let j = execute env evdref c1 in
 	let var = e_type_judgment env evdref j in

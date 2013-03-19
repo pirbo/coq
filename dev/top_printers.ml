@@ -266,7 +266,7 @@ let print_pure_constr csr =
       Array.iter (fun x -> print_space (); box_display x) l;
       print_string ")"
   | Ext (c,l) ->
-      print_string ("(Ext#"^Extensions.to_string e);
+      print_string ("(Ext#"^Extensions.to_string c);
       Array.iter (fun x -> print_space (); box_display x) l;
       print_string ")"
   | Evar (e,l) -> print_string "Evar#"; print_int (Evar.repr e); print_string "{";

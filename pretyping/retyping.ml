@@ -129,6 +129,7 @@ let retype ?(polyprop=true) sigma =
     | App(f,args) ->
         strip_outer_cast
           (subst_type env sigma (type_of env f) (Array.to_list args))
+    | Ext (e,args) -> Extensions_behavior.retype e args
     | Cast (c,_, t) -> t
     | Sort _ | Prod _ -> mkSort (sort_of env cstr)
 

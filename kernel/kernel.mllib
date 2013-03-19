@@ -27,6 +27,7 @@ Closure
 Reduction
 Nativeconv
 Type_errors
+Extensions_behavior
 Modops
 Inductive
 Typeops

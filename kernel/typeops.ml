@@ -450,6 +450,11 @@ let rec execute env cstr cu =
         check_cofix env cofix;
 	(make_judge (mkCoFix cofix) fix_ty, cu1)
 
+    | Ext (e, args) ->
+      let args_j,cu' = execute_array env args cu in
+      univ_combinator cu'
+	(Extensions_behavior.execute_extensions (conv_leq false env) env e args_j)
+
     (* Partial proofs: unsupported by the kernel *)
     | Meta _ ->
 	anomaly (Pp.str "the kernel does not support metavariables")

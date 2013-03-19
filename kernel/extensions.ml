@@ -1,8 +1,3 @@
-type ('a,'b) chk =
-| WellTyped of 'b
-| TypeError
-| MoreChk of ('a -> 'b -> ('a, 'b) chk)
-
 type t = string
 
 let irr = "Irr"
