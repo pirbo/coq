@@ -349,6 +349,7 @@ let get_strcst = function
 let rec str_const c =
   match kind_of_term c with
   | Sort s -> Bstrconst (Const_sorts s)
+  | Ext _ -> Bstrconst (Const_b0 id_tag)
   | Cast(c,_,_) -> str_const c
   | App(f,args) ->
       begin
@@ -499,14 +500,13 @@ let rec compile_constr reloc c sz cont =
   match kind_of_term c with
   | Meta _ -> invalid_arg "Cbytegen.compile_constr : Meta"
   | Evar _ -> invalid_arg "Cbytegen.compile_constr : Evar"
-  | Ext _ -> invalid_arg "Cbytegen.compile_constr : Ext"
 
   | Cast(c,_,_) -> compile_constr reloc c sz cont
 
   | Rel i -> pos_rel i reloc sz :: cont
   | Var id -> pos_named id reloc :: cont
   | Const kn -> compile_const reloc kn [||] sz cont
-  | Sort _  | Ind _ | Construct _ ->
+  | Sort _  | Ind _ | Construct _ | Ext _ ->
       compile_str_cst reloc (str_const c) sz cont
 
   | LetIn(_,xb,_,body) ->
