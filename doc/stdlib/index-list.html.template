@@ -431,6 +431,13 @@ through the <tt>Require Import</tt> command.</p>
       (theories/Vectors/Vector.v)
     </dd>
 
+  <dt> <b>Irr</b>:
+    Proof irrelevant stuff
+  </dt>
+    <dd>
+      theories/Irr/Irr.v
+    </dd>
+
   <dt> <b>Sorting</b>:
     Axiomatizations of sorts
   </dt>
