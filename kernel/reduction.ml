@@ -241,7 +241,7 @@ let in_whnf (t,stk) =
     | FConstruct _ -> no_case_available stk
     | FCoFix _ -> no_case_available stk
     | FFix(((ri,n),(_,_,_)),_) -> no_nth_arg_available ri.(n) stk
-    | (FFlex _ | FProd _ | FEvar _ | FInd _ | FAtom _ | FRel _) -> true
+    | (FFlex _ | FProd _ | FEvar _ | FInd _ | FAtom _ | FRel _ | FExt _) -> true
     | FLOCKED -> assert false
 
 let steps = ref 0
@@ -296,6 +296,12 @@ and eqappr cv_pb l2r infos (lft1,st1) (lft2,st2) cuniv =
           convert_vect l2r infos el1 el2
             (Array.map (mk_clos env1) args1)
             (Array.map (mk_clos env2) args2) u1
+        else raise NotConvertible
+
+    | (FExt (e1,args1), FExt (e2,args2)) ->
+        if Extensions.equal e1 e2 then
+          let u1 = convert_stacks l2r infos lft1 lft2 v1 v2 cuniv in
+          convert_vect l2r infos el1 el2 args1 args2 u1
         else raise NotConvertible
 
     (* 2 index known to be bound to no constant *)

@@ -330,6 +330,7 @@ and fterm =
   | FInd of inductive
   | FConstruct of constructor
   | FApp of fconstr * fconstr array
+  | FExt of Extensions.t * fconstr array
   | FFix of fixpoint * fconstr subs
   | FCoFix of cofixpoint * fconstr subs
   | FCases of case_info * fconstr * fconstr * fconstr array
@@ -562,7 +563,7 @@ let mk_clos e t =
     | Meta _ | Sort _ ->  { norm = Norm; term = FAtom t }
     | Ind kn -> { norm = Norm; term = FInd kn }
     | Construct kn -> { norm = Cstr; term = FConstruct kn }
-    | (CoFix _|Lambda _|Fix _|Prod _|Evar _|App _|Case _|Cast _|LetIn _) ->
+    | (CoFix _|Lambda _|Fix _|Prod _|Evar _|App _|Case _|Cast _|LetIn _|Ext _) ->
         {norm = Red; term = FCLOS(t,e)}
 
 let mk_clos_vect env v = CArray.Fun1.map mk_clos env v
@@ -581,6 +582,9 @@ let mk_clos_deep clos_fun env t =
     | App (f,v) ->
         { norm = Red;
 	  term = FApp (clos_fun env f, CArray.Fun1.map clos_fun env v) }
+    | Ext (e,v) ->
+        { norm = Whnf;
+	  term = FExt (e, CArray.Fun1.map clos_fun env v) }
     | Case (ci,p,c,v) ->
         { norm = Red;
 	  term = FCases (ci, clos_fun env p, clos_fun env c,
@@ -636,6 +640,8 @@ let rec to_constr constr_fun lfts v =
     | FApp (f,ve) ->
 	mkApp (constr_fun lfts f,
 	       CArray.Fun1.map constr_fun lfts ve)
+    | FExt (e,ve) ->
+	mkExt (e, CArray.Fun1.map constr_fun lfts ve)
     | FLambda _ ->
         let (na,ty,bd) = destFLambda mk_clos2 v in
 	mkLambda (na, constr_fun lfts ty,
@@ -854,7 +860,7 @@ let rec knh m stk =
            | (None, stk') -> (m,stk'))
     | FCast(t,_,_) -> knh t stk
 (* cases where knh stops *)
-    | (FFlex _|FLetIn _|FConstruct _|FEvar _|
+    | (FFlex _|FLetIn _|FConstruct _|FEvar _|FExt _|
        FCoFix _|FLambda _|FRel _|FAtom _|FInd _|FProd _) ->
         (m, stk)
 
@@ -868,7 +874,7 @@ and knht e t stk =
     | Fix _ -> knh (mk_clos2 e t) stk
     | Cast(a,_,_) -> knht e a stk
     | Rel n -> knh (clos_rel e n) stk
-    | (Lambda _|Prod _|Construct _|CoFix _|Ind _|
+    | (Lambda _|Prod _|Construct _|CoFix _|Ind _|Ext _|
        LetIn _|Const _|Var _|Evar _|Meta _|Sort _) ->
         (mk_clos2 e t, stk)
 
@@ -986,6 +992,8 @@ and norm_head info m =
           let fbds =
             CArray.Fun1.map mk_clos (subs_liftn (Array.length na) e) bds in
           mkFix(n,(na, CArray.Fun1.map kl info ftys, CArray.Fun1.map kl info fbds))
+      | FExt(e,args) ->
+          mkExt(e, CArray.Fun1.map kl info args)
       | FEvar((i,args),env) ->
           mkEvar(i, Array.map (fun a -> kl info (mk_clos env a)) args)
       | t -> term_of_fconstr m

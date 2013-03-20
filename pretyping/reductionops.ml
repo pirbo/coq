@@ -721,7 +721,7 @@ let rec whd_state_gen ?csts tactic_mode flags env sigma =
       else fold ()
 
     | Rel _ | Var _ | Const _ | LetIn _ -> fold ()
-    | Sort _ | Ind _ | Prod _ -> fold ()
+    | Sort _ | Ind _ | Prod _ | Ext _ -> fold ()
   in
   whrec (Option.default noth csts)
 

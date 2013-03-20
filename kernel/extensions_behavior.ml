@@ -49,7 +49,7 @@ let execute_extension conv_leq env e args_j =
       let c = conv_c args_j.(0).uj_type args_j.(1).uj_type in
       (* eq : iJMEq a b *)
       let c' = conv_c args_j.(2).uj_type
-	(Term.mkExt (ijmeq, [|args_j.(0).uj_val; args_j.(1).uj_val|])) in
+	(Term.mkExt (iprf,[|Term.mkExt (ijmeq, [|args_j.(0).uj_val; args_j.(1).uj_val|])|])) in
       (* TODO : args_j.[3].type == forall x: args_j.[0].uj_type. Sort ? *)
       (* h : P a *)
       let c'' = conv_c args_j.(4).uj_type

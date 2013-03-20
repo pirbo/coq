@@ -107,6 +107,7 @@ type fterm =
   | FInd of inductive
   | FConstruct of constructor
   | FApp of fconstr * fconstr array
+  | FExt of Extensions.t * fconstr array
   | FFix of fixpoint * fconstr subs
   | FCoFix of cofixpoint * fconstr subs
   | FCases of case_info * fconstr * fconstr * fconstr array
