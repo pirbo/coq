@@ -220,7 +220,7 @@ let rec execute env evdref cstr =
     | Ext (e, args) ->
       let args_j = execute_array env evdref args in
       fst
-	(Extensions_behavior.execute_extensions
+	(Extensions_behavior.execute_extension
 	   (fun x y ->
 	     if Evarconv.e_cumul env evdref x y
 	     then Univ.empty_constraint

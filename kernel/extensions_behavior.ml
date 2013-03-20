@@ -13,7 +13,7 @@ let make_irr_judge e args =
   let args_val = Array.map (fun x -> x.uj_val) args in
   make_judge (Term.mkExt (e,args_val)) (retype e args_val)
 
-let execute_extensions conv_leq env e args_j =
+let execute_extension conv_leq env e args_j =
   if equal e irr then
     let ans = make_irr_judge e args_j in
     if CArray.is_empty args_j

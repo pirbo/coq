@@ -428,8 +428,11 @@ let rec pretype resolve_tc (tycon : type_constraint) env evdref lvar t =
 	inh_conv_coerce_to_tycon loc env evdref j tycon
 
   | GExt (loc,e,args) ->
-    (* mkExt(e,List.map (pretype empty_tycon env evdref lvar) args) *)
-    assert false
+    let args_j = Array.of_list (List.map (pretype None env evdref lvar) args) in
+    fst (Extensions_behavior.execute_extension (fun a b ->
+      if e_conv env evdref a b then Univ.empty_constraint
+      else raise Reduction.NotConvertible)
+	   env e args_j)
 
   | GApp (loc,f,args) ->
       let fj = pretype empty_tycon env evdref lvar f in

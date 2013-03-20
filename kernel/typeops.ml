@@ -453,7 +453,7 @@ let rec execute env cstr cu =
     | Ext (e, args) ->
       let args_j,cu' = execute_array env args cu in
       univ_combinator cu'
-	(Extensions_behavior.execute_extensions (conv_leq false env) env e args_j)
+	(Extensions_behavior.execute_extension (conv_leq false env) env e args_j)
 
     (* Partial proofs: unsupported by the kernel *)
     | Meta _ ->
