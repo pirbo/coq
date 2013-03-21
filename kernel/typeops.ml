@@ -485,6 +485,10 @@ let infer env constr =
   assert (eq_constr j.uj_val constr);
   (j, cst)
 
+let () =
+  Closure.nasty_infer :=
+    (fun env constr -> ((fst (infer env constr)).uj_type))
+
 let infer_type env constr =
   let (j,(cst,_)) =
     execute_type env constr (empty_constraint, universes env) in

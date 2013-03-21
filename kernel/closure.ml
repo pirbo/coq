@@ -265,6 +265,10 @@ let ref_value_cache info ref =
     | NotEvaluableConst _ (* Const *)
       -> None
 
+let nasty_infer =
+    ref (fun env term ->
+      Errors.anomaly (str "conversion does not know how to typecheck"))
+
 let evar_value info ev =
   info.i_sigma ev
 
@@ -859,8 +863,9 @@ let rec knh m stk =
              (Some(pars,arg),stk') -> knh arg (Zfix(m,pars)::stk')
            | (None, stk') -> (m,stk'))
     | FCast(t,_,_) -> knh t stk
+    | FExt _ -> (m, stk)
 (* cases where knh stops *)
-    | (FFlex _|FLetIn _|FConstruct _|FEvar _|FExt _|
+    | (FFlex _|FLetIn _|FConstruct _|FEvar _|
        FCoFix _|FLambda _|FRel _|FAtom _|FInd _|FProd _) ->
         (m, stk)
 
