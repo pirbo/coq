@@ -879,6 +879,7 @@ and knht e t stk =
     | Fix _ -> knh (mk_clos2 e t) stk
     | Cast(a,_,_) -> knht e a stk
     | Rel n -> knh (clos_rel e n) stk
+    | FExt _ -> (mk_clos2 e t, stk)
     | (Lambda _|Prod _|Construct _|CoFix _|Ind _|Ext _|
        LetIn _|Const _|Var _|Evar _|Meta _|Sort _) ->
         (mk_clos2 e t, stk)

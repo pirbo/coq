@@ -58,3 +58,8 @@ let execute_extension conv_leq env e args_j =
       (ans, c_o)
     else Errors.anomaly (Pp.str "not correctly applied isubst")
   else Errors.anomaly (Pp.str ("missing typechecking rule for"^(to_string e)))
+
+let reduce_extension conv_test e args =
+  if equal e isubst then
+    if conv_test args.(2) args.(3) then Some args.(6) else None
+  else None
