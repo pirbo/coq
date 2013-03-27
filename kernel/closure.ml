@@ -267,7 +267,7 @@ let ref_value_cache info ref =
 
 let nasty_infer =
     ref (fun env term ->
-      Errors.anomaly (str "conversion does not know how to typecheck"))
+      Errors.anomaly (str "reduction does not know how to typecheck"))
 
 let evar_value info ev =
   info.i_sigma ev
@@ -821,6 +821,11 @@ let rec drop_parameters depth n argstk =
     | _ -> assert false
 	(* strip_update_shift_app only produces Zapp and Zshift items *)
 
+let reduce_extensions conv_test e args =
+  if Extensions.equal e Extensions.isubst then
+    if conv_test args.(0) args.(1) then Some args.(4) else None
+  else None
+
 (* Iota reduction: expansion of a fixpoint.
  * Given a fixpoint and a substitution, returns the corresponding
  * fixpoint body, and the substitution in which it should be
@@ -845,6 +850,9 @@ let contract_fix_vect fix =
   in
   (subs_cons(Array.init nfix make_body, env), thisbody)
 
+let nasty_conv =
+    ref (fun env info s1 s2 ->
+      Errors.anomaly (str "reduction does not know how to test conversion"))
 
 (*********************************************************************)
 (* A machine that inspects the head of a term until it finds an
@@ -879,8 +887,8 @@ and knht e t stk =
     | Fix _ -> knh (mk_clos2 e t) stk
     | Cast(a,_,_) -> knht e a stk
     | Rel n -> knh (clos_rel e n) stk
-    | FExt _ -> (mk_clos2 e t, stk)
-    | (Lambda _|Prod _|Construct _|CoFix _|Ind _|Ext _|
+    | Ext _ -> (mk_clos2 e t, stk)
+    | (Lambda _|Prod _|Construct _|CoFix _|Ind _|
        LetIn _|Const _|Var _|Evar _|Meta _|Sort _) ->
         (mk_clos2 e t, stk)
 
@@ -930,6 +938,9 @@ let rec knr info m stk =
       (match evar_value info ev with
           Some c -> knit info env c stk
         | None -> (m,stk))
+  | FExt (e,args) ->
+    Option.cata (fun x -> kni info x stk) (m,stk)
+      (reduce_extensions (!nasty_conv info.i_env info) e args)
   | _ -> (m,stk)
 
 (* Computes the weak head normal form of a term *)
@@ -999,7 +1010,7 @@ and norm_head info m =
             CArray.Fun1.map mk_clos (subs_liftn (Array.length na) e) bds in
           mkFix(n,(na, CArray.Fun1.map kl info ftys, CArray.Fun1.map kl info fbds))
       | FExt(e,args) ->
-          mkExt(e, CArray.Fun1.map kl info args)
+         mkExt(e, CArray.Fun1.map kl info args)
       | FEvar((i,args),env) ->
           mkEvar(i, Array.map (fun a -> kl info (mk_clos env a)) args)
       | t -> term_of_fconstr m

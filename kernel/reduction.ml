@@ -494,6 +494,14 @@ let conv_cmp ?(l2r=false) cv_pb = fconv cv_pb l2r (fun _->None)
 let conv ?(l2r=false) ?(evars=fun _->None) = fconv CONV l2r evars
 let conv_leq ?(l2r=false) ?(evars=fun _->None) = fconv CUMUL l2r evars
 
+let () = Closure.nasty_conv :=
+  (fun env info s1 s2 ->
+    try
+      let _ = ccnv CONV false env ((Id.Pred.full, Cpred.full),info)
+	el_id el_id s1 s2 empty_constraint in
+      true
+    with NotConvertible -> false)
+
 let conv_leq_vecti ?(l2r=false) ?(evars=fun _->None) env v1 v2 =
   Array.fold_left2_i
     (fun i c t1 t2 ->

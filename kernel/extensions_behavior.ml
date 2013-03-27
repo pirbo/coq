@@ -51,6 +51,7 @@ let execute_extension conv_leq env e args_j =
       let c' = conv_c args_j.(2).uj_type
 	(Term.mkExt (iprf,[|Term.mkExt (ijmeq, [|args_j.(0).uj_val; args_j.(1).uj_val|])|])) in
       (* TODO : args_j.[3].type == forall x: args_j.[0].uj_type. Sort ? *)
+
       (* h : P a *)
       let c'' = conv_c args_j.(4).uj_type
 	(Term.mkApp (args_j.(3).uj_val, [|args_j.(0).uj_val|])) in
@@ -58,8 +59,3 @@ let execute_extension conv_leq env e args_j =
       (ans, c_o)
     else Errors.anomaly (Pp.str "not correctly applied isubst")
   else Errors.anomaly (Pp.str ("missing typechecking rule for"^(to_string e)))
-
-let reduce_extension conv_test e args =
-  if equal e isubst then
-    if conv_test args.(2) args.(3) then Some args.(6) else None
-  else None

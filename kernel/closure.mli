@@ -23,8 +23,6 @@ val with_stats: 'a Lazy.t -> 'a
   Rem: reduction of a Rel/Var bound to a term is Delta, but reduction of
   a LetIn expression is Letin reduction *)
 
-val nasty_infer : (Environ.env -> Term.constr -> Term.types) ref
-
 val all_opaque      : transparent_state
 val all_transparent : transparent_state
 
@@ -164,6 +162,9 @@ type clos_infos
 val create_clos_infos :
   ?evars:(existential->constr option) -> reds -> env -> clos_infos
 val oracle_of_infos : clos_infos -> Conv_oracle.oracle
+
+val nasty_infer : (Environ.env -> Term.constr -> Term.types) ref
+val nasty_conv : (Environ.env -> clos_infos -> fconstr -> fconstr -> bool) ref
 
 (** Reduction function *)
 
