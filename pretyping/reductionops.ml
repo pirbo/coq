@@ -689,6 +689,12 @@ let rec whd_state_gen ?csts tactic_mode flags env sigma =
 	| _ -> fold ())
       | _ -> fold ())
 
+    | Ext (e, args) ->
+      let norm x =(Stack.zip ~refold:tactic_mode (fst (whrec noth (x,Stack.empty)))) in
+      (match Closure.reduce_extensions
+	  (fun x y -> Term.eq_constr (norm x) (norm y)) e args
+       with Some t -> whrec cst_l (t, stack) | None -> fold ())
+
     | Case (ci,p,d,lf) ->
       whrec noth (d, Stack.Case (ci,p,lf,Cst_stack.best_cst cst_l) :: stack)
 
@@ -721,7 +727,7 @@ let rec whd_state_gen ?csts tactic_mode flags env sigma =
       else fold ()
 
     | Rel _ | Var _ | Const _ | LetIn _ -> fold ()
-    | Sort _ | Ind _ | Prod _ | Ext _ -> fold ()
+    | Sort _ | Ind _ | Prod _ -> fold ()
   in
   whrec (Option.default noth csts)
 

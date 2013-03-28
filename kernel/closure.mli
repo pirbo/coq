@@ -165,7 +165,8 @@ val oracle_of_infos : clos_infos -> Conv_oracle.oracle
 
 val nasty_infer : (Environ.env -> Term.constr -> Term.types) ref
 val nasty_conv : (Environ.env -> clos_infos -> fconstr -> fconstr -> bool) ref
-
+val reduce_extensions :
+  ('a -> 'a -> bool) -> Extensions.t -> 'a array -> 'a option
 (** Reduction function *)
 
 (** [norm_val] is for strong normalization *)
