@@ -259,7 +259,9 @@ let rec ccnv cv_pb l2r env infos lft1 lft2 term1 term2 cuniv =
     eqappr cv_pb l2r env infos (lft1, (term1,[])) (lft2, (term2,[])) cuniv
   with NotConvertible as ex ->
     let rec aux ty =
-      let ty = whd_val (snd infos) (inject ty) in
+      let ty = whd_val
+	(create_clos_infos (RedFlags.red_add_transparent betaiotazeta (fst infos)) env)
+	(inject ty) in
       match kind_of_term ty with
       | Cast(_,_,ty) -> aux ty
       | Prod (_,a,b) -> aux b
