@@ -28,7 +28,7 @@ let constr_kw =
     "end"; "as"; "let"; "if"; "then"; "else"; "return";
     "Prop"; "Set"; "Type"; ".("; "_"; "..";
     "`{"; "`("; "{|"; "|}";
-    "Irr"; "iPrf"; "iJMeq"; "isubst" ]
+    "Irr_prim"; "iPrf_prim"; "iJMeq_prim"; "isubst_prim" ]
 
 let _ = List.iter Lexer.add_keyword constr_kw
 
@@ -455,10 +455,10 @@ GEXTEND Gram
     ] ]
   ;
   extensions:
-    [ [ "Irr" -> Extensions.irr
-      | "iPrf" -> Extensions.iprf
-      | "iJMeq" -> Extensions.ijmeq
-      | "isubst" -> Extensions.isubst
+    [ [ "Irr_prim" -> Extensions.irr
+      | "iPrf_prim" -> Extensions.iprf
+      | "iJMeq_prim" -> Extensions.ijmeq
+      | "isubst_prim" -> Extensions.isubst
       ] ]
   ;
   type_cstr:
