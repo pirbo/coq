@@ -38,9 +38,6 @@ val try_convert : string -> string
 val try_export : string -> string -> bool
 val stock_to_widget :  ?size:Gtk.Tags.icon_size -> GtkStock.id -> GObj.widget
 
-open Format
-val print_list : (formatter -> 'a -> unit) -> formatter -> 'a list -> unit
-
 val custom_coqtop : string option ref
 (* @return command to call coqtop
    - custom_coqtop if set

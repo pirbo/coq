@@ -569,11 +569,11 @@ let get_current_word term =
 
 let print_branch c l =
   Format.fprintf c " | @[<hov 1>%a@]=> _@\n"
-    (print_list (fun c s -> Format.fprintf c "%s@ " s)) l
+    (Minilib.print_list (fun c s -> Format.fprintf c "%s@ " s)) l
 
 let print_branches c cases =
   Format.fprintf c "@[match var with@\n%aend@]@."
-    (print_list print_branch) cases
+    (Minilib.print_list print_branch) cases
 
 let display_match sn = function
   |Interface.Fail _ ->
@@ -1328,6 +1328,9 @@ let read_coqide_args argv =
     |"-debug"::args ->
       Minilib.debug := true;
       filter_coqtop coqtop project_files ("-debug"::out) args
+    |arg::args when out = [] && Minilib.is_prefix_of "-psn_" arg ->
+      (* argument added by MacOS during .app launch *)
+      filter_coqtop coqtop project_files out args
     |arg::args -> filter_coqtop coqtop project_files (arg::out) args
     |[] -> (coqtop,List.rev project_files,List.rev out)
   in
