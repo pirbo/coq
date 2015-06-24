@@ -302,7 +302,7 @@ open Coqlib
 let project_hint pri l2r r =
   let gr = Smartlocate.global_with_alias r in
   let env = Global.env() in
-  let c = Globnames.constr_of_global gr in
+  let c = Universes.constr_of_global gr in
   let t = Retyping.get_type_of env Evd.empty c in
   let is_iff iff =
     match Coqlib.search_logic (fun l -> eq_constr l.log_iff iff) with

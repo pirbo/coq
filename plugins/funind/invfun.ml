@@ -101,16 +101,6 @@ let nf_zeta =
 (*     raise (UserError ("",str "Cannot find " ++ Ppconstr.pr_id id)) *)
 
 
-let make_eq () =
-  try
-    Universes.constr_of_global (Coqlib.build_coq_eq ())
-  with _ -> assert false 
-let make_eq_refl () =
-  try
-    Universes.constr_of_global (Coqlib.build_coq_eq_refl ())
-  with _ -> assert false
-
-	  
 (* [generate_type g_to_f f graph i] build the completeness (resp. correctness) lemma type if [g_to_f = true]
    (resp. g_to_f = false) where [graph]  is the graph of [f] and is the [i]th function in the block.
 
@@ -815,7 +805,7 @@ let derive_correctness make_scheme functional_induction (funs: pconstant list) (
 	   (Decl_kinds.Global,Flags.is_universe_polymorphism (),((Decl_kinds.Proof Decl_kinds.Theorem)))
            !evd
 	   typ
-           (Lemmas.mk_hook (fun _ _ -> ()));
+           (oLemmas.mk_hook (fun _ _ -> ()));
 	 ignore (Pfedit.by
 		   (Proofview.V82.tactic (observe_tac ("prove correctness ("^(Id.to_string f_id)^")")
 						      (proving_tac i))));

@@ -59,6 +59,12 @@ val e_new_Type : ?rigid:rigid -> env -> evar_map ref -> constr
 val restrict_evar : evar_map -> existential_key -> Filter.t ->
   constr list option -> evar_map * existential_key
 
+(** Given a context, creates a list of fresh evars and returns the list of evars (as an
+    array of argument), and a subtitution to be applied to terms in the original context. *)
+val evar_instance_of_context :
+  evar_map -> named_context_val -> rel_context ->
+  evar_map * constr array * constr list
+
 (** Polymorphic constants *)
 
 val new_global : evar_map -> Globnames.global_reference -> evar_map * constr

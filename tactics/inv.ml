@@ -347,7 +347,6 @@ let projectAndApply eqd thin id eqname names depids gls =
     | Var id1, _ -> generalizeRewriteIntros as_mode (subst_hyp true id) depids id1
     | _, Var id2 -> generalizeRewriteIntros as_mode (subst_hyp false id) depids id2
     | _ -> tac id
-    end
   in
   let deq_trailer id clear_flag _ neqns =
     assert (clear_flag == None);

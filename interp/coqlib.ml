@@ -15,7 +15,20 @@ open Libnames
 open Globnames
 open Nametab
 open Smartlocate
-open Summary
+
+module SortOp =
+  struct
+    type t = Sorts.t option
+    let compare = Option.compare Sorts.compare
+  end
+module Smap = CMap.Make(SortOp)
+
+module ConstrOp =
+  struct
+    type t = Constr.t option
+    let compare = Option.compare Constr.compare
+  end
+module Cmap = CMap.Make(ConstrOp)
 
 let coq = Nameops.coq_string (* "Coq" *)
 
@@ -97,21 +110,21 @@ let check_required_library d =
     whether the value for a given input has changed. Returns function f cached,
     and a cache reinit function *)
 let create_cache ~cache ~upd f () =
-  let c = ref Gmap.empty in
+  let c = ref (Smap.empty) in
   let eval_and_cache x =
     (* failures are not recorded *)
     let v = f x in
-    c := Gmap.add x v !c;
+    c := Smap.add x v !c;
     v in
   let cached_fun x =
     if cache x then
       if upd x then eval_and_cache x
       else
-	(try Gmap.find x !c
+	(try Smap.find x !c
 	 with Not_found -> eval_and_cache x)
     else
       f x in
-  cached_fun, (fun () -> c:=Gmap.empty)
+  cached_fun, (fun () -> c:=Smap.empty)
 
 let has_changed check () =
   let oldv = ref None in
@@ -167,7 +180,7 @@ type logic_id = sorts
 let pos_in_ctxt label ctxt =
   let na = Name(id_of_string label) in
   let ids (id,bd,_) = match bd with None -> Some id | _ -> None in
-  List.index0 na (List.rev (CList.map_filter ids ctxt))
+  List.index0 Name.equal na (List.rev (CList.map_filter ids ctxt))
 
 (** This definition is related to LogicClasses.full_logic *)
 let build_logic_record args =
@@ -196,7 +209,7 @@ let build_logic_record args =
 let full_logic_info = lazy
   (let cls = coq_reference "find_equality" ["Init";"LogicClasses"] "full_logic" in
    let cl = Typeclasses.class_info cls in
-   let cl_ctxt = snd cl.cl_context in
+   let cl_ctxt = snd cl.Typeclasses.cl_context in
    (* Position of the kind in the vector of args *)
    let kind_pos =
      try pos_in_ctxt "X" cl_ctxt
@@ -220,25 +233,22 @@ let find_all_logics () =
   let inst = Typeclasses.instances cls in
   let env = Global.env() in
   let build i =
-    let ty = Retyping.get_type_of env Evd.empty (constr_of_global (instance_impl i)) in
+    let ty =
+      Retyping.get_type_of env Evd.empty (Universes.constr_of_global
+					    (Typeclasses.instance_impl i)) in
     if isApp ty then Some (build_record (snd (destApp ty)))
     else None in
-  List.fold_right (fun log_ins ll -> match build log_ins with Some l -> l::ll | None -> ll) 
+  List.fold_right (fun log_ins ll -> match build log_ins with Some l -> l::ll | None -> ll)
     inst []
-
-let search_logic found =
-  CList.map_filter
-    (fun (_,l) -> if found l then Some l else None)
-    !logic_table
 
 let find_logic env eid =
   (* Retrieve data about the 'full_logic' class *)
   let (cls,cl_ctxt,build_record,kind_pos) = Lazy.force full_logic_info in
   (* Generate pattern (full_logic _ _ ... _) *)
   let (evd,inst,_) =
-    evar_instance_of_context
+    Evarutil.evar_instance_of_context
       Evd.empty (Environ.named_context_val env) cl_ctxt in
-  let pb = mkApp(constr_of_global cls,inst) in
+  let pb = mkApp(Universes.constr_of_global cls,inst) in
   (* If given, try to define the evar corresponding to the 'X' arg *)
   let evd =
     match eid with
@@ -251,19 +261,19 @@ let find_logic env eid =
   (* Perform the proof search. We drop the solution (which contains no
      information anyway).
      We are only interested in solving the evars argument of full_eq_logic. *)
-  let (evd,_sol) = resolve_one_typeclass env evd pb in
+  let (evd,_sol) = Typeclasses.resolve_one_typeclass env evd pb in
   (* If some evars remained unsolved, then fail. (Otherwise we may return an eq structure
      containing evars refering to evd, but this evd is not returned to the caller.) *)
   if Evd.has_undefined evd then raise Not_found;
   (* Building the structure out of the raw array of arguments. *)
-  build_record (Array.map (nf_evar evd) inst)
+  build_record (Array.map (Evarutil.nf_evar evd) inst)
 
 let find_logic =
-  let c = ref Gmap.empty in
+  let c = ref Smap.empty in
   let eval_and_cache env lid =
     (* failures are not recorded *)
     let v = find_logic env lid in
-    c := Gmap.add lid v !c;
+    c := Smap.add lid v !c;
     v in
   let outdated =
     has_changed(instances_of logic_instances)() in
@@ -271,7 +281,7 @@ let find_logic =
     if outdated lid then
       eval_and_cache env lid
     else
-      (try Gmap.find lid !c
+      (try Smap.find lid !c
        with Not_found ->
 	 eval_and_cache env lid) in
   cached_fun
@@ -316,13 +326,11 @@ let find_equality eid =
       (try List.assoc eid !equality_table
        with Not_found -> error "Could not find the specified equality")
 *)
-open Evarutil
-open Typeclasses
 
 let logic_info = lazy
   (let cls = coq_reference "find_equality" ["Init";"LogicClasses"] "full_logic" in
    let cl = Typeclasses.class_info cls in
-  let cl_ctxt = snd cl.cl_context in
+  let cl_ctxt = snd cl.Typeclasses.cl_context in
   (cls,cl_ctxt))
 
 let find_logic env eid =
@@ -330,9 +338,9 @@ let find_logic env eid =
   let (cls,cl_ctxt) = Lazy.force logic_info in
   (* Generate pattern (full_logic _ _ ... _) *)
   let (evd,inst,_) =
-    evar_instance_of_context
+    Evarutil.evar_instance_of_context
       Evd.empty (Environ.named_context_val env) cl_ctxt in
-  let pb = mkApp(constr_of_global cls,inst) in
+  let pb = mkApp(Universes.constr_of_global cls,inst) in
   (* If given, try to define the evar corresponding to the 'X' arg *)
   let evd =
     match eid with
@@ -342,23 +350,28 @@ let find_logic env eid =
       | None -> evd in
   (* Perform the proof search. We drop the solution (which contains no information).
      We are only interested in solving the evars argument of full_eq_logic. *)
-  let (evd,_sol) = resolve_one_typeclass env evd pb in
+  let (evd,_sol) = Typeclasses.resolve_one_typeclass env evd pb in
   (* If some evars remained unsolved, then fail. Is it necessary ? *)
   if Evd.has_undefined evd then raise Not_found;
-  let args = Array.map (nf_evar evd) inst in
+  let args = Array.map (Evarutil.nf_evar evd) inst in
   (* Building the structure out of the raw array of arguments. *)
   match args with
       [|kind; _logic;
-	tr; fa; tkind; iff; conj; disj; neg; i; ifflr; iffrl; conjI; _propositional;
-        ex; _fo_logic |] ->
+        and_; andI; andE1; andE2; _And;
+	or_; orI1; orI2; orE; _Or;
+	neg;
+	iff; iffI; iffE1; iffE2; _Iff;
+	tr; trI; _True; fa; faE; _False; tkind; _propositional;
+	ex; exI; exE; _fologic |] ->
       let tkind =
 	if isSort tkind then destSort tkind else
 	  error "Instance of coq_full_logic expects a sort at field trivial_kind." in
-      {log_False=fa;log_True=tr;log_I=i;
-       log_bottom_sort=tkind; log_not=neg; log_and=conj; log_conj=conjI;
-       log_iff=iff; log_iff_left=ifflr; log_iff_right=iffrl; log_or=disj;
-       log_ex=ex }
-    | _ -> anomaly "Coqlib.find_logic: typeclass coq_full_logic has wrong arity"
+      {log_False=fa;log_FalseE=faE;log_True=tr;log_TrueI=trI;
+       log_bottom_sort=tkind; log_not=neg; log_and=and_; log_andI=andI;
+       log_andE1=andE1;log_andE2=andE2;log_or=or_;log_orI1=orI1;log_orI2=orI2;
+       log_iff=iff; log_iffI=iffI;log_iffE1=iffE1; log_iffE2=iffE2; 
+       log_ex=ex; log_exI=exI;log_exE=exE }
+    | _ -> anomaly (Pp.str "Coqlib.find_logic: typeclass coq_full_logic has wrong arity")
 
 
 (*
@@ -396,11 +409,11 @@ let build_eq_record args =
 let full_eq_logic_info = lazy
   (let cls = coq_reference "find_equality" ["Init";"LogicClasses"] "full_eq_logic" in
    let cl = Typeclasses.class_info cls in
-   let cl_ctxt = snd cl.cl_context in
+   let cl_ctxt = snd cl.Typeclasses.cl_context in
    (* Position of 'eq' within the argument list *)
    let eqpos =
      try pos_in_ctxt "eq" cl_ctxt
-     with Not_found -> anomaly "Class full_eq_logic should have an argument named 'eq'." in
+     with Not_found -> anomaly (Pp.str "Class full_eq_logic should have an argument named 'eq'.") in
    (cls,cl_ctxt,build_eq_record,eqpos))
 (*
 let (lookup_equality, clear_equality_cache) =
@@ -421,19 +434,19 @@ let find_all_equalities () =
   let (cls,cl_ctxt,build_record,eqpos) = Lazy.force full_eq_logic_info in
   let inst = Typeclasses.instances cls in
   let build i =
-    build_eq_from_instance (constr_of_global (instance_impl i)) in
+    build_eq_from_instance (Universes.constr_of_global (Typeclasses.instance_impl i)) in
   List.fold_right
     (fun eq_ins ll -> try build eq_ins :: ll with Not_found -> ll)
     inst []
 
 let find_equality env eid =
   (* Find data about the 'full_eq_logic' class *)
-  let (cls,cl_ctxt,eqpos) = Lazy.force full_eq_logic_info in
+  let (cls,cl_ctxt,build_record,eqpos) = Lazy.force full_eq_logic_info in
   (* Generate pattern (full_eq_logic _ _ ... _) *)
   let (evd,inst,_) =
-    evar_instance_of_context
+    Evarutil.evar_instance_of_context
       Evd.empty (Environ.named_context_val env) cl_ctxt in
-  let pb = mkApp(constr_of_global cls,inst) in
+  let pb = mkApp(Universes.constr_of_global cls,inst) in
   (* If given, try to define the evar corresponding to the 'eq' arg
      (position 16) *)
   let evd =
@@ -446,22 +459,21 @@ let find_equality env eid =
       | None -> evd in
   (* Perform the proof search. We drop the solution (which contains no information).
      We are only interested in solving the evars argument of full_eq_logic. *)
-  let (evd,_sol) = resolve_one_typeclass env evd pb in
+  let (evd,_sol) = Typeclasses.resolve_one_typeclass env evd pb in
   (* If some evars remained unsolved, then fail. Is it necessary ? *)
   if Evd.has_undefined evd then raise Not_found;
-  let args = Array.map (nf_evar evd) inst in
   (* Building the structure out of the raw array of arguments. *)
-  build_record (Array.map (nf_evar evd) inst)
+  build_record (Array.map (Evarutil.nf_evar evd) inst)
 
 let eq_instances =
   lazy(let (cls,_,_,_)=Lazy.force full_logic_info in cls)
 
 let find_equality =
-  let c = ref Gmap.empty in
+  let c = ref Cmap.empty in
   let eval_and_cache env eid =
     (* failures are not recorded *)
     let v = find_equality env eid in
-    c := Gmap.add eid v !c;
+    c := Cmap.add eid v !c;
     v in
   let outdated =
     has_changed(instances_of eq_instances)() in
@@ -469,7 +481,7 @@ let find_equality =
     if outdated eid then
       eval_and_cache env eid
     else
-      (try Gmap.find eid !c
+      (try Cmap.find eid !c
        with Not_found ->
 	 eval_and_cache env eid) in
   cached_fun
@@ -490,7 +502,9 @@ let find_equality_alt eid =
     match l with
 	[] -> raise Not_found
       | i::l ->
-	let ty = Retyping.get_type_of env Evd.empty (constr_of_global (instance_impl i)) in
+	 let ty =
+	   Retyping.get_type_of
+	     env Evd.empty (Universes.constr_of_global (Typeclasses.instance_impl i)) in
 	let args = snd (destApp ty) in
 	if found args then build_record args else find l in
   find inst
@@ -499,20 +513,6 @@ let search_equality found =
   CList.map_filter
     (fun (_,e) -> if found e then Some e else None)
     !equality_table
-
-(* TODO declare object *)
-
-let _ =
-  declare_summary "Coqlib configuration" {
-    freeze_function = (fun () ->
-      (!logic_table, !default_logic, !equality_table, !default_equality));
-    unfreeze_function = (fun (lt,dl,et,de) ->
-      logic_table:=lt; default_logic:=dl;
-      equality_table:=et; default_equality:=de);
-    init_function = (fun () ->
-      logic_table:=[]; default_logic:=None;
-      equality_table:=[]; default_equality:=None) }
-
 
 (************************************************************************)
 (* Specific Coq objects *)
@@ -525,9 +525,9 @@ let init_constant dir s =
   let d = "Init"::dir in
   check_required_library (coq::d); gen_constant "Coqlib" d s
 
-let logic_reference dir s =
+let logic_constant dir s =
   let d = "Logic"::dir in
-  check_required_library ("Coq"::d); gen_reference "Coqlib" d s
+  check_required_library ("Coq"::d); gen_constant "Coqlib" d s
 
 let arith_dir = [coq;"Arith"]
 let arith_modules = [arith_dir]
@@ -552,9 +552,6 @@ let init_modules = [
 
 let prelude_module_name = init_dir@["Prelude"]
 let prelude_module = make_dir prelude_module_name
-
-let logic_module_name = init_dir@["Logic"]
-let logic_module = make_dir logic_module_name
 
 let logic_type_module_name = init_dir@["Logic_Type"]
 let logic_type_module = make_dir logic_type_module_name
@@ -630,7 +627,7 @@ let build_prod () =
     typ = init_reference ["Datatypes"] "prod" }
 
 let lazy_init_constant dir id = lazy (init_constant dir id)
-let lazy_logic_reference dir id = lazy (logic_reference dir id)
+let lazy_logic_constant dir id = lazy (logic_constant dir id)
 
 
 (* Specif *)
@@ -651,20 +648,20 @@ let logic_module = make_dir logic_module_name
 let jmeq_module_name = ["Coq";"Logic";"JMeq"]
 let jmeq_module = make_dir jmeq_module_name
 
-let build_sigma_set () = anomaly "Use build_sigma_type"
+let build_sigma_set () = anomaly (Pp.str "Use build_sigma_type")
 
 let build_sigma () =
-  { proj1 = init_constant ["Specif"] "proj1_sig";
-    proj2 = init_constant ["Specif"] "proj2_sig";
-    elim = init_constant ["Specif"] "sig_rect";
-    intro = init_constant ["Specif"] "exist";
-    typ = init_constant ["Specif"] "sig" }
+  { proj1 = init_reference ["Specif"] "proj1_sig";
+    proj2 = init_reference ["Specif"] "proj2_sig";
+    elim = init_reference ["Specif"] "sig_rect";
+    intro = init_reference ["Specif"] "exist";
+    typ = init_reference ["Specif"] "sig" }
 
 let coq_eq_ref      = lazy (init_reference ["Logic"] "eq")
 let coq_identity_ref = lazy (init_reference ["Datatypes"] "identity")
 let coq_jmeq_ref     = lazy (gen_reference "Coqlib" ["Logic";"JMeq"] "JMeq")
 let coq_eq_true_ref = lazy (gen_reference "Coqlib" ["Init";"Datatypes"] "eq_true")
-let coq_existS_ref  = lazy (anomaly "use coq_existT_ref")
+let coq_existS_ref  = lazy (anomaly (Pp.str "use coq_existT_ref"))
 let coq_exist_ref  = lazy (init_reference ["Specif"] "exist")
 let coq_not_ref     = lazy (init_reference ["Logic"] "not")
 let coq_False_ref   = lazy (init_reference ["Logic"] "False")
@@ -675,13 +672,13 @@ let coq_iff_ref    = lazy (init_reference ["Logic"] "iff")
 
 
 (** Equality *)
-let eq_kn = make_kn logic_module (id_of_string "eq")
+let eq_kn = make_ind logic_module "eq"
 let glob_eq = IndRef (eq_kn,0)
 
-let identity_kn = make_kn datatypes_module (id_of_string "identity")
+let identity_kn = make_ind datatypes_module "identity"
 let glob_identity = IndRef (identity_kn,0)
 
-let jmeq_kn = make_kn jmeq_module (id_of_string "JMeq")
+let jmeq_kn = make_ind jmeq_module "JMeq"
 let glob_jmeq = IndRef (jmeq_kn,0)
 
 (* Leibniz equality on Type *)
@@ -690,7 +687,7 @@ let coq_eq_eq = lazy_init_constant ["Logic"] "eq"
 let coq_eq_ind = lazy_init_constant ["Logic"] "eq_ind"
 let coq_f_equal2 = lazy_init_constant ["Logic"] "f_equal2"
 let coq_eq_congr_canonical =
-  lazy_init_reference ["Logic"] "f_equal_canonical_form"
+  lazy_init_constant ["Logic"] "f_equal_canonical_form"
 
 let build_coq_eq () = Lazy.force coq_eq_eq
 let build_coq_f_equal2 () = Lazy.force coq_f_equal2
@@ -745,15 +742,14 @@ let build_coq_identity_full () =
 
 (* Heterogenous equality on Type *)
 
-let coq_jmeq_eq = lazy_logic_reference ["JMeq"] "JMeq"
-let coq_jmeq_hom = lazy_logic_reference ["JMeq"] "JMeq_hom"
-let coq_jmeq_refl = lazy_logic_reference ["JMeq"] "JMeq_refl"
-let coq_jmeq_ind = lazy_logic_reference ["JMeq"] "JMeq_ind"
-let coq_jmeq_sym  = lazy_logic_reference ["JMeq"] "JMeq_sym"
-let coq_jmeq_congr  = lazy_logic_reference ["JMeq"] "JMeq_congr"
-let coq_jmeq_trans  = lazy_logic_reference ["JMeq"] "JMeq_trans"
+let coq_jmeq_eq = lazy_logic_constant ["JMeq"] "JMeq"
+let coq_jmeq_refl = lazy_logic_constant ["JMeq"] "JMeq_refl"
+let coq_jmeq_ind = lazy_logic_constant ["JMeq"] "JMeq_ind"
+let coq_jmeq_sym  = lazy_logic_constant ["JMeq"] "JMeq_sym"
+let coq_jmeq_congr  = lazy_logic_constant ["JMeq"] "JMeq_congr"
+let coq_jmeq_trans  = lazy_logic_constant ["JMeq"] "JMeq_trans"
 let coq_jmeq_congr_canonical =
-  lazy_logic_reference ["JMeq"] "JMeq_congr_canonical_form"
+  lazy_logic_constant ["JMeq"] "JMeq_congr_canonical_form"
 
 let build_coq_jmeq_data () =
   let _ = check_required_library jmeq_module_name in {
@@ -764,9 +760,14 @@ let build_coq_jmeq_data () =
   trans = Lazy.force coq_jmeq_trans;
   congr = Lazy.force coq_jmeq_congr }
 
+let join_jmeq_types eq =
+  mkLambda(Name (id_of_string "A"),Termops.new_Type(),
+	   mkLambda(Name (id_of_string "x"),mkRel 1,
+		    mkApp (eq,[|mkRel 2;mkRel 1; mkRel 2|])))
+
 let build_coq_inversion_jmeq_data () =
   let _ = check_required_library logic_module_name in {
-  inv_eq = Lazy.force coq_jmeq_hom;
+  inv_eq = join_jmeq_types (Lazy.force coq_jmeq_eq);
   inv_ind = Lazy.force coq_jmeq_ind;
   inv_congr = Lazy.force coq_jmeq_congr_canonical }
 
@@ -776,9 +777,9 @@ let build_coq_jmeq_full () =
     eq_inv = build_coq_inversion_jmeq_data }
 
 (* Equality to true *)
-let coq_eq_true_eq = lazy_init_reference ["Datatypes"] "eq_true"
-let coq_eq_true_ind = lazy_init_reference ["Datatypes"] "eq_true_ind"
-let coq_eq_true_congr = lazy_init_reference ["Logic"] "eq_true_congr"
+let coq_eq_true_eq = lazy_init_constant ["Datatypes"] "eq_true"
+let coq_eq_true_ind = lazy_init_constant ["Datatypes"] "eq_true_ind"
+let coq_eq_true_congr = lazy_init_constant ["Logic"] "eq_true_congr"
 
 let build_coq_inversion_eq_true_data () =
   let _ = check_required_library datatypes_module_name in
@@ -806,7 +807,7 @@ let prop_logic = lazy{
 }
 
 end
-
+ *)
 (***********************************)
 (* Disable lookup *)
 (*

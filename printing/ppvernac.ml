@@ -920,7 +920,7 @@ module Make
               keyword "Context" ++ spc () ++ pr_and_type_binders_arg l)
           )
 
-        | VernacDeclareInstances (ids, pri) ->
+        | VernacDeclareInstances (_, ids, pri) ->
           return (
             hov 1 (keyword "Existing" ++ spc () ++
                      keyword(String.plural (List.length ids) "Instance") ++

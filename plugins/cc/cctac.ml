@@ -412,7 +412,7 @@ let build_term_to_complete uf meta pac =
 
 let cc_tactic depth additionnal_terms =
   Proofview.Goal.nf_enter begin fun gl ->
-    Coqlib.check_required_library Coqlib.logic_module_name;
+    Coqlib.check_required_library Coqlib.Std.logic_module_name;
     let _ = debug (Pp.str "Reading subgoal ...") in
     let state = Tacmach.New.of_old (fun gls -> make_prb gls depth additionnal_terms) gl in
     let _ = debug (Pp.str "Problem built, solving ...") in

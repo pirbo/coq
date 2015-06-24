@@ -1835,7 +1835,6 @@ let destructure_hyps =
 let destructure_goal =
   Proofview.Goal.nf_enter begin fun gl ->
     let concl = Proofview.Goal.concl gl in
-    let log = find_logic (pf_env gl) None in
     let decidability = Tacmach.New.of_old decidability gl in
     let rec loop t =
       match destructurate_prop t with
@@ -1853,7 +1852,7 @@ let destructure_goal =
                 (Proofview.V82.tactic (Tactics.refine
 		                         (mkApp (Lazy.force coq_dec_not_not, [| t; dec; mkNewMeta () |]))))
 	        intro
-	    with Undecidable -> Tactics.elim_type (Std.build_coq_False ())
+	    with Undecidable -> Tactics.elim_type (Coqlib.Std.build_coq_False ())
 	  in
 	  Tacticals.New.tclTHEN goal_tac destructure_hyps
     in

@@ -219,6 +219,8 @@ val glob_eq : global_reference
 val glob_identity : global_reference
 val glob_jmeq : global_reference
 
+val jmeq_module_name : string list
+
 val build_coq_identity_data : coq_eq_data delayed
 val build_coq_jmeq_data : coq_eq_data delayed
 val build_coq_jmeq_full : coq_equality delayed

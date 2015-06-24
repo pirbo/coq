@@ -433,6 +433,20 @@ let generalize_evar_over_rels sigma (ev,args) =
       if isRel a then (mkNamedProd_or_LetIn d c,a::inst) else x)
      (evi.evar_concl,[]) (Array.to_list args) sign
 
+let evar_instance_of_context evd hyps ctxt =
+  let evinst = Array.of_list
+	         (List.map (fun (id,_,_) -> mkVar id) (named_context_of_val hyps)) in
+  let push (na,bd,ty) (evd,subst,inst) =
+    match bd with
+      Some b -> (evd,substl subst b::subst, inst)
+    | None ->
+       let (evd',ev) = new_pure_evar hyps evd (substl subst ty) in
+       let ev = mkEvar(ev,evinst) in
+       (evd',ev::subst, ev::inst) in
+  let (evd,subst,inst) =
+    Context.fold_rel_context push ctxt ~init:(evd,[],[]) in
+  (evd, Array.of_list(List.rev inst), subst)
+
 (************************************)
 (* Removing a dependency in an evar *)
 (************************************)
