@@ -4,8 +4,10 @@ authors: "The Coq Development Team"
 version: "trunk"
 maintainer: "coqdev@inria.fr"
 homepage: "http://coq.inria.fr/"
+dev-repo: "https://scm.gforge.inria.fr/anonscm/git/coq/coq.git"
 bug-reports: "https://coq.inria.fr/bugs/"
 license: "LGPL 2"
+
 build: [
   [
     "./configure"
@@ -25,11 +27,11 @@ build: [
   ]
   [make "-j%{jobs}%"]
 ]
-install: [make "install-library" "install-coq-info" "install-devfiles"]
+install: [make "install-library"]
 remove: ["rm" "-rf" "%{lib}%/coq"]
 build-test: [
   [make "test-suite"]
 #  [make "validate]
 ]
 depends: ["ocamlfind" "camlp5"]
-flags: [verbose]
+tags: ["flags:verbose"]
