@@ -189,6 +189,7 @@ indepclean:
 	rm -f test-suite/check.log
 	rm -f glob.dump
 	rm -f config/revision.ml revision
+	rm -f coq.install
 	$(MAKE) -C test-suite clean
 
 docclean:

@@ -730,6 +730,7 @@ endif
 .PHONY: install-coq install-coqlight install-binaries install-byte install-opt
 .PHONY: install-tools install-library install-library-light install-devfiles
 .PHONY: install-coq-info install-coq-manpages install-emacs install-latex
+.PHONY: coq.install
 
 install-coq: install-binaries install-library install-coq-info install-devfiles
 install-coqlight: install-binaries install-library-light
@@ -815,8 +816,43 @@ install-emacs:
 
 install-latex:
 	$(MKDIR) $(FULLCOQDOCDIR)
-	$(INSTALLLIB) tools/coqdoc/coqdoc.sty $(FULLCOQDOCDIR)	
+	$(INSTALLLIB) tools/coqdoc/coqdoc.sty $(FULLCOQDOCDIR)
 #	-$(UPDATETEX)
+
+coq.install:
+	@echo Generate $@
+	@echo "bin: [" > $@
+	@for i in $(COQTOPBYTE) $(COQTOPEXE) $(CHICKEN) $(COQMKTOP) $(TOOLS); do echo "  \"$${i}\"" >> $@; done
+	@echo "]" >> $@
+	@echo "" >> $@
+	@echo "man: [" >> $@
+	@for i in $(MANPAGES); do echo "  \"$${i}\"" >> $@; done
+	@echo "]" >> $@
+	@echo "" >> $@
+	@echo "lib: [" >> $@
+	@echo '  "tools/coqdoc/coqdoc.css" {"tools/coqdoc/coqdoc.css"}' >> $@
+	@echo '  "tools/coqdoc/coqdoc.sty" {"tools/coqdoc/coqdoc.sty"}' >> $@
+	@for i in $(TOPLOOPCMA); do echo "  \"$${i}\" {\"toploop/$${i}\"}" >> $@ ; done
+	@for i in $(IDETOPLOOPCMA); do echo "  \"$${i}\" {\"toploop/$${i}\"}" >> $@ ; done
+	@for i in $(PLUGINS); do echo "  \"$${i}\" {\"$${i}\"}" >> $@ ; done
+	@for i in $(ALLVO) $(VFILES) $(ALLVO:.vo=.glob) $(call vo_to_obj,$(ALLVO)); do echo "  \"$${i}\" {\"$${i}\"}" >> $@ ; done
+ifndef CUSTOM
+	@echo '  "$(DLLCOQRUN)" {"$(DLLCOQRUN)"}' >> $@
+endif
+ifeq ($(BEST),opt)
+	@echo '  "$(LIBCOQRUN)" {"$(LIBCOQRUN)"}' >> $@
+endif
+	@echo '  "?revision"' >> $@
+	@echo "]" >> $@
+	@echo "libexec: [" >> $@
+	@echo "  \"plugins/micromega/csdpcert\" {\"plugins/micromega/csdpcert\"}" >> $@
+ifeq ($(BEST),opt)
+	@for i in $(TOPLOOPCMA:.cma=.cmxs); do echo "  \"$${i}\" {\"toploop/$${i}\"}" >> $@ ; done
+	@for i in $(IDETOPLOOPCMA:.cma=.cmxs); do echo "  \"$${i}\" {\"toploop/$${i}\"}" >> $@ ; done
+	@for i in $(PLUGINSOPT); do echo "  \"$${i}\" {\"$${i}\"}" >> $@ ; done
+endif
+	@for i in $(call vo_to_cm,$(ALLVO)); do echo "  \"$${i}\" {\"$${i}\"}" >> $@ ; done
+	@echo "]" >> $@
 
 ###########################################################################
 # Documentation of the source code (using ocamldoc)

@@ -39,6 +39,7 @@
 *.stamp
 *.native
 revision
+coq.install
 TAGS
 .DS_Store
 .pc

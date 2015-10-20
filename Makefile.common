@@ -348,17 +348,14 @@ vo_to_mod = $(subst /,.,$(patsubst theories/%,Coq.%,$(patsubst plugins/%,Coq.%,$
 
 # Converting a stdlib filename into native compiler filenames
 # Used for install targets
-vo_to_cm = $(foreach vo,$(1),$(dir $(vo)).coq-native/$(subst /,_,$(patsubst theories/%,NCoq_%,$(patsubst plugins/%,NCoq_%,$(vo:.vo=.cm*)))))
+vo_to_cm = $(foreach vo,$(1),$(wildcard $(dir $(vo)).coq-native/$(subst /,_,$(patsubst theories/%,NCoq_%,$(patsubst plugins/%,NCoq_%,$(vo:.vo=.cm*))))))
 
 vo_to_obj = $(foreach vo,$(1),$(dir $(vo)).coq-native/$(subst /,_,$(patsubst theories/%,NCoq_%,$(patsubst plugins/%,NCoq_%,$(vo:.vo=.o)))))
 
 ALLMODS:=$(call vo_to_mod,$(ALLVO))
 
-LIBFILES:=$(THEORIESVO) $(PLUGINSVO) $(call vo_to_cm,$(THEORIESVO)) \
-	    $(call vo_to_cm,$(PLUGINSVO)) $(call vo_to_obj,$(THEORIESVO)) \
-	    $(call vo_to_obj,$(PLUGINSVO)) \
-	    $(PLUGINSVO:.vo=.v) $(THEORIESVO:.vo=.v) \
-	    $(PLUGINSVO:.vo=.glob) $(THEORIESVO:.vo=.glob)
+LIBFILES:= $(ALLVO) $(call vo_to_cm,$(ALLVO)) $(call vo_to_obj,$(ALLVO)) \
+	   $(VFILES) $(ALLVO:.vo=.glob)
 
 LIBFILESLIGHT:=$(THEORIESLIGHTVO)
 

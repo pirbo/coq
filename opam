@@ -25,13 +25,10 @@ build: [
     "no"
     "-debug"
   ]
-  [make "-j%{jobs}%"]
+  [make "-j%{jobs}%" "world" "coq.install"]
 ]
-install: [make "install-library"]
-remove: ["rm" "-rf" "%{lib}%/coq"]
 build-test: [
   [make "test-suite"]
 #  [make "validate]
 ]
 depends: ["ocamlfind" "camlp5"]
-tags: ["flags:verbose"]
