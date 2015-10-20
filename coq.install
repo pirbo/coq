@@ -1,0 +1,14 @@
+bin: [
+  "bin/coqdep"
+  "bin/coqtop"
+  "bin/coqc"
+  "bin/coqchk"
+  "bin/coqdoc"
+  "bin/coqmktop"
+  "bin/coqworkmgr"
+  "bin/coq_makefile"
+  "bin/coq-tex"
+  "bin/gallina"
+  "bin/coqwc"
+#  "bin/csdpcert"
+]

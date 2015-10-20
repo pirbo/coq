@@ -1,0 +1,35 @@
+opam-version: "1.2"
+name: "coq"
+authors: "The Coq Development Team"
+version: "trunk"
+maintainer: "coqdev@inria.fr"
+homepage: "http://coq.inria.fr/"
+bug-reports: "https://coq.inria.fr/bugs/"
+license: "LGPL 2"
+build: [
+  [
+    "./configure"
+    "-configdir"
+    "%{lib}%/coq/config"
+    "-mandir"
+    man
+    "-nodoc"
+    "-prefix"
+    prefix
+    "-usecamlp5"
+    "-camlp5dir"
+    "%{lib}%/camlp5"
+    "-coqide"
+    "no"
+    "-debug"
+  ]
+  [make "-j%{jobs}%"]
+]
+install: [make "install-library" "install-coq-info" "install-devfiles"]
+remove: ["rm" "-rf" "%{lib}%/coq"]
+build-test: [
+  [make "test-suite"]
+#  [make "validate]
+]
+depends: ["ocamlfind" "camlp5"]
+flags: [verbose]
