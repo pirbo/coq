@@ -29,6 +29,8 @@ build: [
 ]
 build-test: [
   [make "test-suite"]
-#  [make "validate]
+#  [make "validate"]
 ]
+install: [make "install-findlib"]
+remove: ["ocamlfind" "remove" "coq"]
 depends: ["ocamlfind" "camlp5"]

@@ -730,7 +730,7 @@ endif
 .PHONY: install-coq install-coqlight install-binaries install-byte install-opt
 .PHONY: install-tools install-library install-library-light install-devfiles
 .PHONY: install-coq-info install-coq-manpages install-emacs install-latex
-.PHONY: coq.install
+.PHONY: coq.install META
 
 install-coq: install-binaries install-library install-coq-info install-devfiles
 install-coqlight: install-binaries install-library-light
@@ -769,6 +769,9 @@ install-devfiles:
 ifeq ($(BEST),opt)
 	$(INSTALLSH)  $(FULLCOQLIB) $(LINKCMX) $(CORECMA:.cma=.a) $(STATICPLUGINS:.cma=.a)
 endif
+
+install-findlib: META
+	$(OCAMLFIND) install coq $^ $(LINKCMO) $(GRAMMARCMA) $(INSTALLCMI) -optional $(LINKCMX) $(CORECMA:.cma=.a) $(STATICPLUGINS:.cma=.a)
 
 install-library:
 	$(MKDIR) $(FULLCOQLIB)
@@ -853,6 +856,16 @@ ifeq ($(BEST),opt)
 endif
 	@for i in $(call vo_to_cm,$(ALLVO)); do echo "  \"$${i}\" {\"$${i}\"}" >> $@ ; done
 	@echo "]" >> $@
+
+META:
+	@echo Generate $@
+	@echo "description = \"The Coq proof assistant development files\"" > $@
+	@echo "requires = \"camlp5\"" >> $@
+	@echo "version = \"$(VERSION)\"" >> $@
+	@for i in $(LINKCMO) $(GRAMMARCMA); do echo "archive(byte) += \"$${i}\"" >> $@ ; done
+ifeq ($(BEST),opt)
+	@for i in $(LINKCMX); do echo "archive(native) += \"$${i}\"" >> $@ ; done
+endif
 
 ###########################################################################
 # Documentation of the source code (using ocamldoc)
